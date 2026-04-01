@@ -1,0 +1,9 @@
+name=Water Pipes
+id=waterpipes
+author=Daniel
+description=Experimental Build 42.15.x foundation for constructible water pipe networks connecting world containers.
+modversion=0.1.0
+versionMin=42.15
+category=features
+tiledef=waterpipes 1000
+pack=waterpipes
