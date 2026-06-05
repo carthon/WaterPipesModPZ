@@ -42,6 +42,30 @@ function PipeObjectUtils.getPipePlacement(worldObject)
     }
 end
 
+function PipeObjectUtils.isWallCover(worldObject)
+    if not PipeObjectUtils.isPipeObject(worldObject) then
+        return false
+    end
+    local modData = getPipeModData(worldObject)
+    return modData and modData[Constants.PIPE_RISER_MODDATA_KEY] == true or false
+end
+
+-- A vertical pipe (wall cover) on the square authorises a vertical network link upward.
+function PipeObjectUtils.hasWallCoverOnSquare(square)
+    if not square or not square.getObjects then
+        return false
+    end
+
+    local objects = square:getObjects()
+    for index = 0, objects:size() - 1 do
+        if PipeObjectUtils.isWallCover(objects:get(index)) then
+            return true
+        end
+    end
+
+    return false
+end
+
 function PipeObjectUtils.getPipeObjectsOnSquare(square, excludeObject)
     if not square or not square.getObjects then
         return {}

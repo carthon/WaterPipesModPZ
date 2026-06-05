@@ -6,19 +6,21 @@ require "WaterPipes/Logger"
 require "WaterPipes/State"
 require "WaterPipes/ContainerAdapter"
 require "WaterPipes/EndpointAdapterSource"
+require "WaterPipes/EndpointFluidSource"
 require "WaterPipes/EndpointPlumbing"
 require "WaterPipes/EndpointObjects"
-require "WaterPipes/NetworkAccess"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/PipeAutotile"
 
 local Adapter = WaterPipes.ContainerAdapter
 local Constants = WaterPipes.Constants
 local AdapterSource = WaterPipes.EndpointAdapterSource
+local FluidSource = WaterPipes.EndpointFluidSource
 local EndpointPlumbing = WaterPipes.EndpointPlumbing
 local EndpointObjects = WaterPipes.EndpointObjects
 local Logger = WaterPipes.Logger
-local NetworkAccess = WaterPipes.NetworkAccess
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local PipeAutotile = WaterPipes.PipeAutotile
 local State = WaterPipes.State
 local System = WaterPipes.System
 
@@ -192,6 +194,7 @@ function System.tick()
         System.rebuild()
         System.redistributeWater()
         System.refreshPlumbedEndpoints()
+        PipeAutotile.refreshList(State.ensure().pipes)
     end)
 
     if not ok then
@@ -203,6 +206,7 @@ function System.registerPipeAt(x, y, z)
     State.registerPipe(x, y, z)
     System.rebuild()
     System.refreshPlumbedEndpoints()
+    PipeAutotile.refreshAround(x, y, z)
 end
 
 function System.unregisterPipeAt(x, y, z)
@@ -223,6 +227,7 @@ function System.unregisterPipeAt(x, y, z)
     System.rebuild()
 
     refreshPlumbedEndpointsNearCoordinates(coordinates)
+    PipeAutotile.refreshAround(x, y, z)
 end
 
 function System.forceGlobalWaterShutoff()
@@ -247,15 +252,14 @@ local function onInitGlobalModData()
     State.ensure()
     System.rebuild()
     System.refreshPlumbedEndpoints()
+    PipeAutotile.refreshList(State.ensure().pipes)
     Logger.log("Server state initialized")
 end
 
 local function onDestroyIsoThumpable(thump, player)
     if AdapterSource.isAdapterObject(thump) then
-        local ok, err = pcall(AdapterSource.onAdapterDestroyed, thump)
-        if not ok then
-            Logger.error("Adapter destroy recovery failed: " .. tostring(err))
-        end
+        -- Legacy phantom adapter from older saves: let it be removed, never recreate it.
+        -- Plumbed endpoints now carry their own FluidContainer (see EndpointFluidSource).
         return
     end
 
@@ -283,9 +287,25 @@ local function onEveryOneMinute()
 end
 
 local function onWaterAmountChange(object, prevAmount)
-    local ok, err = pcall(AdapterSource.onAdapterWaterAmountChange, object, prevAmount)
-    if not ok then
-        Logger.error("Adapter water change handler failed: " .. tostring(err))
+    if not object then
+        return
+    end
+
+    -- Legacy hidden adapter objects from older saves (handled until cleaned up).
+    if AdapterSource.isAdapterObject(object) then
+        local ok, err = pcall(AdapterSource.onAdapterWaterAmountChange, object, prevAmount)
+        if not ok then
+            Logger.error("Adapter water change handler failed: " .. tostring(err))
+        end
+        return
+    end
+
+    -- A plumbed endpoint's own FluidContainer changed: reconcile consumption to the network.
+    if EndpointPlumbing.isPlumbed(object) then
+        local ok, err = pcall(FluidSource.onEndpointWaterAmountChange, object, prevAmount)
+        if not ok then
+            Logger.error("Endpoint water change handler failed: " .. tostring(err))
+        end
     end
 end
 
@@ -316,18 +336,17 @@ if Events then
         Events.EveryTenMinutes.Add(onEveryTenMinutes)
     end
 
-if Events.EveryOneMinute then
-    Events.EveryOneMinute.Add(onEveryOneMinute)
-end
+    if Events.EveryOneMinute then
+        Events.EveryOneMinute.Add(onEveryOneMinute)
+    end
 
-if Events.OnDestroyIsoThumpable then
-    Events.OnDestroyIsoThumpable.Add(onDestroyIsoThumpable)
-end
+    if Events.OnDestroyIsoThumpable then
+        Events.OnDestroyIsoThumpable.Add(onDestroyIsoThumpable)
+    end
 
-if Events.OnWaterAmountChange then
-    Events.OnWaterAmountChange.Add(onWaterAmountChange)
-end
-
+    if Events.OnWaterAmountChange then
+        Events.OnWaterAmountChange.Add(onWaterAmountChange)
+    end
 
     if Events.OnClientCommand then
         Events.OnClientCommand.Add(onClientCommand)

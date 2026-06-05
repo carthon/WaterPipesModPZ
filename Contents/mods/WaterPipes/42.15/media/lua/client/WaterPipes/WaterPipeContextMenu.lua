@@ -76,11 +76,9 @@ function ContextMenu.unplumbEndpoint(playerObj, endpointObject)
 end
 
 function ContextMenu.onVanillaPlumbItem(worldobjects, player, itemToPipe)
-    local networkSummary = itemToPipe and NetworkAccess.getSummary(itemToPipe) or nil
     if itemToPipe
         and EndpointObjects.isEndpointCandidate(itemToPipe)
         and EndpointPlumbing.hasPipeOnEndpointSquare(itemToPipe)
-        and networkSummary
     then
         local playerObj = getSpecificPlayer(player)
         if not playerObj then
@@ -178,15 +176,6 @@ local function addDebugRootMenu(context, playerObj, endpointObject)
     addDebugMenu(context, subMenu, playerObj, endpointObject)
 end
 
-local function getVanillaPlumbOptionName(endpointObject)
-    local objectName = endpointObject and endpointObject.getName and endpointObject:getName() or nil
-    if objectName and objectName ~= "" then
-        return getText("ContextMenu_PlumbItem", objectName)
-    end
-
-    return nil
-end
-
 local function optionTargetsEndpoint(option, endpointObject)
     if not option or not endpointObject then
         return false
@@ -248,13 +237,26 @@ local function addTopLevelUnplumbOption(context, playerObj, endpointObject)
         return
     end
 
-    local option = nil
     local plumbOption = findExistingPlumbOption(context, endpointObject)
     if plumbOption and plumbOption.name then
-        option = context:insertOptionAfter(plumbOption.name, ContextMenu.UNPLUMB_OPTION_NAME, playerObj, ContextMenu.unplumbEndpoint, endpointObject)
+        context:insertOptionAfter(plumbOption.name, ContextMenu.UNPLUMB_OPTION_NAME, playerObj, ContextMenu.unplumbEndpoint, endpointObject)
     else
-        option = context:addOption(ContextMenu.UNPLUMB_OPTION_NAME, playerObj, ContextMenu.unplumbEndpoint, endpointObject)
+        context:addOption(ContextMenu.UNPLUMB_OPTION_NAME, playerObj, ContextMenu.unplumbEndpoint, endpointObject)
     end
+end
+
+local function addTopLevelPlumbOption(context, playerObj, endpointObject, worldobjects)
+    if not endpointObject or not playerHasPipeWrench(playerObj) or not EndpointPlumbing.canPlumb(endpointObject) then
+        return
+    end
+
+    if findExistingPlumbOption(context, endpointObject) then
+        return
+    end
+
+    local objectName = endpointObject.getName and endpointObject:getName() or ""
+    local optionName = getText("ContextMenu_PlumbItem", objectName)
+    context:addOption(optionName, worldobjects, ISWorldObjectContextMenu.onPlumbItem, playerObj:getPlayerNum(), endpointObject)
 end
 
 local function onServerCommand(module, command, args)
@@ -286,22 +288,30 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         return false
     end
 
-    local square = PipeObjectUtils.getSquareFromWorldObjects(worldobjects)
-    if not square then
+    if not PipeObjectUtils.getSquareFromWorldObjects(worldobjects) then
         return false
     end
 
     local endpointObject = EndpointObjects.findInWorldObjects(worldobjects)
+    -- Plumbing only needs the endpoint joined to the pipe network (a pipe on its square);
+    -- water containers are NOT required -- you can plumb an empty network and add a source later.
+    local hasPlumbOption = endpointObject
+        and playerHasPipeWrench(playerObj)
+        and EndpointPlumbing.canPlumb(endpointObject)
     local hasUnplumbOption = endpointObject
         and playerHasPipeWrench(playerObj)
         and EndpointPlumbing.canUnplumb(endpointObject)
 
-    if not hasUnplumbOption and not isDebugActive() then
+    if not hasPlumbOption and not hasUnplumbOption and not isDebugActive() then
         return false
     end
 
     if test then
         return ISWorldObjectContextMenu.setTest()
+    end
+
+    if hasPlumbOption then
+        addTopLevelPlumbOption(context, playerObj, endpointObject, worldobjects)
     end
 
     if hasUnplumbOption then

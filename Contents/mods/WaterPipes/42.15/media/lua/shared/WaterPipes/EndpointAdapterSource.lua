@@ -24,25 +24,57 @@ local function isAuthoritative()
     return not (isClient and isClient())
 end
 
-local function getModData(worldObject)
-    if not worldObject or not worldObject.getModData then
+local function safeField(object, fieldName)
+    if not object or not fieldName or type(object) ~= "table" then
         return nil
     end
 
-    return worldObject:getModData()
+    return object[fieldName]
+end
+
+local function isIsoObjectUserdata(object)
+    if type(object) ~= "userdata" or not instanceof then
+        return false
+    end
+
+    local ok, result = pcall(instanceof, object, "IsoObject")
+    return ok and result or false
+end
+
+local function getModData(worldObject)
+    if not isIsoObjectUserdata(worldObject) and type(worldObject) ~= "table" then
+        return nil
+    end
+
+    local getModDataMethod = safeField(worldObject, "getModData")
+        or (isIsoObjectUserdata(worldObject) and worldObject.getModData)
+    if not getModDataMethod then
+        return nil
+    end
+
+    local ok, modData = pcall(getModDataMethod, worldObject)
+    return ok and modData or nil
 end
 
 local function getSpriteName(worldObject)
-    if not worldObject or not worldObject.getSprite then
+    if not isIsoObjectUserdata(worldObject) and type(worldObject) ~= "table" then
         return nil
     end
 
-    local sprite = worldObject:getSprite()
-    if not sprite or not sprite.getName then
+    local getSpriteMethod = safeField(worldObject, "getSprite")
+        or (isIsoObjectUserdata(worldObject) and worldObject.getSprite)
+    if not getSpriteMethod then
         return nil
     end
 
-    return sprite:getName()
+    local ok, sprite = pcall(getSpriteMethod, worldObject)
+    local getNameMethod = ok and sprite and (safeField(sprite, "getName") or (type(sprite) == "userdata" and sprite.getName)) or nil
+    if not getNameMethod then
+        return nil
+    end
+
+    local okName, spriteName = pcall(getNameMethod, sprite)
+    return okName and spriteName or nil
 end
 
 local function getSquare(x, y, z)
@@ -128,9 +160,23 @@ local function applyHiddenAdapterFlags(worldObject)
     if worldObject.setHighlighted then
         pcall(worldObject.setHighlighted, worldObject, false)
     end
+    if worldObject.setAlphaAndTarget then
+        pcall(worldObject.setAlphaAndTarget, worldObject, 0.0)
+    else
+        if worldObject.setAlpha then
+            pcall(worldObject.setAlpha, worldObject, 0.0)
+        end
+        if worldObject.setTargetAlpha then
+            pcall(worldObject.setTargetAlpha, worldObject, 0.0)
+        end
+    end
 end
 
 function AdapterSource.isAdapterObject(worldObject)
+    if not isIsoObjectUserdata(worldObject) and type(worldObject) ~= "table" then
+        return false
+    end
+
     local modData = getModData(worldObject)
     if modData and modData[Constants.ADAPTER_SOURCE_MODDATA_KEY] == true then
         return true
@@ -230,6 +276,64 @@ local function setAdapterCapacity(adapterObject, capacity)
     return ok
 end
 
+local function isCompetingWorldSource(candidate)
+    if not candidate or AdapterSource.isAdapterObject(candidate) or EndpointObjects.isEndpointCandidate(candidate) then
+        return false
+    end
+
+    return Adapter.getWorldFluidKind(candidate) == "worldFluid"
+end
+
+local function prioritizeAdapterOnSquare(adapterObject)
+    local square = adapterObject and adapterObject.getSquare and adapterObject:getSquare() or nil
+    local objects = square and square.getObjects and square:getObjects() or nil
+    if not objects or not objects.size then
+        return false
+    end
+
+    local currentIndex = nil
+    local targetIndex = nil
+    for index = 0, objects:size() - 1 do
+        local candidate = objects:get(index)
+        if candidate == adapterObject then
+            currentIndex = index
+        elseif targetIndex == nil and isCompetingWorldSource(candidate) then
+            targetIndex = index
+        end
+    end
+
+    if currentIndex == nil or targetIndex == nil or currentIndex < targetIndex then
+        return false
+    end
+
+    local removed = pcall(function()
+        objects:remove(currentIndex)
+    end)
+    if not removed then
+        return false
+    end
+
+    local insertIndex = math.max(math.min(targetIndex, objects:size()), 0)
+    local inserted = pcall(function()
+        objects:add(insertIndex, adapterObject)
+    end)
+    if not inserted then
+        pcall(function()
+            objects:add(adapterObject)
+        end)
+        return false
+    end
+
+    if square.RecalcProperties then
+        square:RecalcProperties()
+    end
+    if square.RecalcAllWithNeighbours then
+        square:RecalcAllWithNeighbours(true)
+    end
+
+    return true
+end
+
 local function createAdapterObject(endpointObject)
     if not isAuthoritative() then
         return nil
@@ -285,12 +389,6 @@ local function createAdapterObject(endpointObject)
         pcall(GameEntityFactory.CreateIsoObjectEntity, javaObject, gameEntityScript, true)
     end
 
-    if javaObject.setSprite and getSprite and Constants.ADAPTER_SOURCE_HIDDEN_SPRITE then
-        local hiddenSprite = getSprite(Constants.ADAPTER_SOURCE_HIDDEN_SPRITE)
-        if hiddenSprite then
-            pcall(javaObject.setSprite, javaObject, hiddenSprite)
-        end
-    end
     applyHiddenAdapterFlags(javaObject)
 
     squareAbove:AddSpecialObject(javaObject)
@@ -298,6 +396,7 @@ local function createAdapterObject(endpointObject)
     if not ensureFluidContainerComponent(javaObject) then
         Logger.error("Failed to attach FluidContainer to adapter source " .. describeObject(javaObject))
     end
+    prioritizeAdapterOnSquare(javaObject)
     if javaObject.transmitCompleteItemToClients then
         pcall(javaObject.transmitCompleteItemToClients, javaObject)
     end
@@ -356,7 +455,7 @@ local function setAdapterLastSyncAmount(adapterObject, amount)
 end
 
 local function writeAdapterSnapshot(adapterObject, totalAmount, totalCapacity, fluidTypeName)
-    local effectiveCapacity = math.max(math.min(totalCapacity or 0, Constants.ADAPTER_SOURCE_MAX_CAPACITY), 0)
+    local effectiveCapacity = math.max(totalCapacity or 0, 0)
     local effectiveAmount = math.max(math.min(totalAmount or 0, effectiveCapacity), 0)
     local modData = getModData(adapterObject)
     if modData then
@@ -451,12 +550,14 @@ function AdapterSource.syncForEndpoint(endpointObject)
         return nil
     end
 
+    prioritizeAdapterOnSquare(adapterObject)
+
     if summary.isMixed or not summary.isWater then
         writeAdapterSnapshot(adapterObject, 0, summary.totalCapacity, nil)
         return adapterObject
     end
 
-    local reserveCapacity = math.min(summary.totalCapacity or 0, Constants.ADAPTER_SOURCE_MAX_CAPACITY)
+    local reserveCapacity = math.max(summary.totalCapacity or 0, 0)
     local visibleAmount = math.min(summary.totalAmount or 0, reserveCapacity)
     if reserveCapacity <= 0 or visibleAmount <= 0 then
         writeAdapterSnapshot(adapterObject, 0, reserveCapacity, nil)

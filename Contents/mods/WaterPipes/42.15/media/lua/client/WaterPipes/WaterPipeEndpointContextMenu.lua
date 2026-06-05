@@ -70,15 +70,50 @@ local function valueContainsAdapterReference(value, depth)
         return true
     end
 
-    if value.getGameEntity then
-        local ok, entity = pcall(value.getGameEntity, value)
+    local canInspectMethods = valueType == "table"
+    if not canInspectMethods and valueType == "userdata" and instanceof then
+        local okFluid, isFluidContainer = pcall(instanceof, value, "FluidContainer")
+        local okItem, isInventoryItem = pcall(instanceof, value, "InventoryItem")
+        canInspectMethods = (okFluid and isFluidContainer) or (okItem and isInventoryItem)
+    end
+
+    if not canInspectMethods then
+        return false
+    end
+
+    local getGameEntity = nil
+    if valueType == "table" then
+        getGameEntity = value.getGameEntity
+    else
+        local okGetGameEntity, maybeGetGameEntity = pcall(function()
+            return value.getGameEntity
+        end)
+        if okGetGameEntity then
+            getGameEntity = maybeGetGameEntity
+        end
+    end
+
+    if getGameEntity then
+        local ok, entity = pcall(getGameEntity, value)
         if ok and entity and AdapterSource.isAdapterObject(entity) then
             return true
         end
     end
 
-    if value.getOwner then
-        local ok, owner = pcall(value.getOwner, value)
+    local getOwner = nil
+    if valueType == "table" then
+        getOwner = value.getOwner
+    else
+        local okGetOwner, maybeGetOwner = pcall(function()
+            return value.getOwner
+        end)
+        if okGetOwner then
+            getOwner = maybeGetOwner
+        end
+    end
+
+    if getOwner then
+        local ok, owner = pcall(getOwner, value)
         if ok and owner and AdapterSource.isAdapterObject(owner) then
             return true
         end

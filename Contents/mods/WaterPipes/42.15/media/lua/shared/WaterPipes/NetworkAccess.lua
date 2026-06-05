@@ -69,6 +69,29 @@ local function getNeighborSquares(square)
     return neighbors
 end
 
+-- Containers connect to pipes on the SAME floor (the square itself + cardinal neighbours).
+local function getHorizontalNeighborSquares(square)
+    local neighbors = { square }
+    for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
+        local neighbor = getCellSquare(square:getX() + offset.x, square:getY() + offset.y, square:getZ())
+        if neighbor then
+            neighbors[#neighbors + 1] = neighbor
+        end
+    end
+    return neighbors
+end
+
+-- A vertical step is only allowed when a wall cover bridges the floors (it sits on the lower
+-- square and climbs up). Keeps two stacked networks separate unless a vertical pipe links them.
+local function verticalStepAllowed(x, y, z, offsetZ)
+    if offsetZ == 0 then
+        return true
+    end
+    local lowerZ = (offsetZ < 0) and (z + offsetZ) or z
+    local square = getCellSquare(x, y, lowerZ)
+    return square ~= nil and PipeObjectUtils.hasWallCoverOnSquare(square)
+end
+
 local function getFluidTypeByName(fluidTypeName)
     if fluidTypeName == "Water" then
         return Fluid and Fluid.Water or (FluidType and FluidType.Water)
@@ -111,10 +134,19 @@ local function collectConnectedPipeSquares(endpointObject)
     local queue = {}
     local pipeSquares = {}
 
-    for _, candidate in ipairs(getNeighborSquares(originSquare)) do
-        if hasPipeOnSquare(candidate) and addSquare(visited, candidate) then
-            queue[#queue + 1] = candidate
-            pipeSquares[#pipeSquares + 1] = candidate
+    local function tryAdd(square)
+        if square and hasPipeOnSquare(square) and addSquare(visited, square) then
+            queue[#queue + 1] = square
+            pipeSquares[#pipeSquares + 1] = square
+        end
+    end
+
+    -- Seed from the endpoint's square + neighbours; vertical neighbours need a wall cover.
+    tryAdd(originSquare)
+    local ox, oy, oz = originSquare:getX(), originSquare:getY(), originSquare:getZ()
+    for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
+        if verticalStepAllowed(ox, oy, oz, offset.z) then
+            tryAdd(getCellSquare(ox + offset.x, oy + offset.y, oz + offset.z))
         end
     end
 
@@ -122,12 +154,11 @@ local function collectConnectedPipeSquares(endpointObject)
     while index <= #queue do
         local current = queue[index]
         index = index + 1
+        local cx, cy, cz = current:getX(), current:getY(), current:getZ()
 
         for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-            local neighbor = getCellSquare(current:getX() + offset.x, current:getY() + offset.y, current:getZ() + offset.z)
-            if neighbor and hasPipeOnSquare(neighbor) and addSquare(visited, neighbor) then
-                queue[#queue + 1] = neighbor
-                pipeSquares[#pipeSquares + 1] = neighbor
+            if verticalStepAllowed(cx, cy, cz, offset.z) then
+                tryAdd(getCellSquare(cx + offset.x, cy + offset.y, cz + offset.z))
             end
         end
     end
@@ -140,7 +171,7 @@ local function collectStorageDescriptors(pipeSquares)
     local descriptors = {}
 
     for _, pipeSquare in ipairs(pipeSquares) do
-        for _, nearbySquare in ipairs(getNeighborSquares(pipeSquare)) do
+        for _, nearbySquare in ipairs(getHorizontalNeighborSquares(pipeSquare)) do
             if addSquare(scannedSquares, nearbySquare) then
                 local squareDescriptors = Adapter.collectSquareContainers(nearbySquare)
                 for key, descriptor in pairs(squareDescriptors) do

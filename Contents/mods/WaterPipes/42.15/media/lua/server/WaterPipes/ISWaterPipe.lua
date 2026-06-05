@@ -16,34 +16,31 @@ local function copyPlacementData(placement)
         axis = placement.axis,
         north = placement.north,
         sprite = placement.sprite,
+        riser = placement.riser,
+        edge = placement.edge,
     }
 end
 
-function ISWaterPipe:getPlacementMode()
-    if self.nSprite == 2 then
-        return {
-            surface = Constants.PIPE_SURFACE_FLOOR,
-            axis = Constants.PIPE_AXIS_NS,
-            north = true,
-            sprite = Constants.PIPE_FLOOR_NORTH_SPRITE,
-        }
-    end
+-- Cursor states: 1 = floor (auto-connects), 2 = North-wall riser, 3 = West-wall riser.
+-- (PZ tiles only have N and W walls; use the neighbour tile's wall for S/E.)
+local RISER_MODES = {
+    [2] = { edge = "N", sprite = Constants.PIPE_WALL_RISER_N_SPRITE },
+    [3] = { edge = "W", sprite = Constants.PIPE_WALL_RISER_W_SPRITE },
+}
+local MAX_NSPRITE = 3
 
-    if self.nSprite == 3 then
+function ISWaterPipe:getPlacementMode()
+    local riser = RISER_MODES[self.nSprite]
+    if riser then
+        -- Wall cover: a separate decorative vertical drawn on the wall. It does NOT replace
+        -- the floor pipe; the floor pipe on the same tile extends an arm toward this edge.
         return {
-            surface = Constants.PIPE_SURFACE_WALL,
+            surface = Constants.PIPE_SURFACE_WALLCOVER,
             axis = Constants.PIPE_AXIS_EW,
             north = false,
-            sprite = Constants.PIPE_WALL_WEST_SPRITE,
-        }
-    end
-
-    if self.nSprite == 4 then
-        return {
-            surface = Constants.PIPE_SURFACE_WALL,
-            axis = Constants.PIPE_AXIS_NS,
-            north = true,
-            sprite = Constants.PIPE_WALL_NORTH_SPRITE,
+            sprite = riser.sprite,
+            riser = true,
+            edge = riser.edge,
         }
     end
 
@@ -52,6 +49,7 @@ function ISWaterPipe:getPlacementMode()
         axis = Constants.PIPE_AXIS_EW,
         north = false,
         sprite = Constants.PIPE_FLOOR_WEST_SPRITE,
+        riser = false,
     }
 end
 
@@ -64,13 +62,29 @@ function ISWaterPipe:applyPlacementMode()
     self.east = false
     self.west = not placement.north
     self.chosenSprite = placement.sprite
-    self.isWallLike = placement.surface == Constants.PIPE_SURFACE_WALL
-    self.buildLow = not self.isWallLike
+    self.isWallLike = placement.riser or false
+    self.buildLow = not placement.riser            -- risers are tall (climb the wall)
     self.modData[Constants.PIPE_MODDATA_KEY] = true
     self.modData[Constants.PIPE_SURFACE_MODDATA_KEY] = placement.surface
     self.modData[Constants.PIPE_AXIS_MODDATA_KEY] = placement.axis
+    self.modData[Constants.PIPE_RISER_MODDATA_KEY] = placement.riser and true or nil
+    self.modData[Constants.PIPE_RISER_EDGE_MODDATA_KEY] = placement.edge or nil
 
     return placement
+end
+
+-- Keyboard rotation cycles all 5 states (base class only supports 4).
+function ISWaterPipe:rotateKey(key)
+    if getCore():isKey("Rotate building", key) then
+        self.nSprite = self.nSprite + 1
+        if self.nSprite > MAX_NSPRITE then
+            self.nSprite = 1
+        end
+    end
+end
+
+-- Pipes rotate with the keyboard only; ignore mouse-direction rotation.
+function ISWaterPipe:rotateMouse(x, y)
 end
 
 function ISWaterPipe:getSprite()
@@ -80,6 +94,17 @@ end
 
 function ISWaterPipe:canPlaceOnSquare(square)
     local placement = self:applyPlacementMode()
+
+    -- Floor pipes auto-connect, so only one is allowed per square (any axis).
+    if placement.surface == Constants.PIPE_SURFACE_FLOOR then
+        for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+            if PipeObjectUtils.getPipePlacement(worldObject).surface == Constants.PIPE_SURFACE_FLOOR then
+                return false
+            end
+        end
+        return true
+    end
+
     return not PipeObjectUtils.findPipeOnSquare(square, placement.surface, placement.axis)
 end
 

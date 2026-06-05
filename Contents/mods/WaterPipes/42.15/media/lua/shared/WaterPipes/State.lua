@@ -4,11 +4,32 @@ WaterPipes.State = WaterPipes.State or {}
 require "WaterPipes/Constants"
 require "WaterPipes/Logger"
 require "WaterPipes/NetworkGraph"
+require "WaterPipes/PipeObjectUtils"
 
 local Constants = WaterPipes.Constants
 local Graph = WaterPipes.NetworkGraph
 local Logger = WaterPipes.Logger
+local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local State = WaterPipes.State
+
+local function getSquareAt(x, y, z)
+    if not getCell then
+        return nil
+    end
+    local cell = getCell()
+    return cell and cell.getGridSquare and cell:getGridSquare(x, y, z) or nil
+end
+
+-- Vertical network links only exist where a vertical pipe (wall cover) bridges the floors:
+-- the cover sits on the LOWER square and climbs up to the floor above.
+local function verticalLinkAllowed(x, y, z, offsetZ)
+    if offsetZ == 0 then
+        return true
+    end
+    local lowerZ = (offsetZ < 0) and (z + offsetZ) or z
+    local square = getSquareAt(x, y, lowerZ)
+    return square ~= nil and PipeObjectUtils.hasWallCoverOnSquare(square)
+end
 
 local fallbackState = nil
 
@@ -123,8 +144,10 @@ function State.rebuildGraph()
         local pipeNodeId = State.pipeNodeId(pipeData.x, pipeData.y, pipeData.z)
 
         for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-            local neighborNodeId = State.pipeNodeId(pipeData.x + offset.x, pipeData.y + offset.y, pipeData.z + offset.z)
-            Graph.connect(state.graph, pipeNodeId, neighborNodeId)
+            if verticalLinkAllowed(pipeData.x, pipeData.y, pipeData.z, offset.z) then
+                local neighborNodeId = State.pipeNodeId(pipeData.x + offset.x, pipeData.y + offset.y, pipeData.z + offset.z)
+                Graph.connect(state.graph, pipeNodeId, neighborNodeId)
+            end
         end
     end
 
@@ -134,8 +157,10 @@ function State.rebuildGraph()
         Graph.connect(state.graph, containerNodeId, squareNodeId)
 
         for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-            local adjacentPipeId = State.pipeNodeId(containerData.x + offset.x, containerData.y + offset.y, containerData.z + offset.z)
-            Graph.connect(state.graph, containerNodeId, adjacentPipeId)
+            if verticalLinkAllowed(containerData.x, containerData.y, containerData.z, offset.z) then
+                local adjacentPipeId = State.pipeNodeId(containerData.x + offset.x, containerData.y + offset.y, containerData.z + offset.z)
+                Graph.connect(state.graph, containerNodeId, adjacentPipeId)
+            end
         end
     end
 

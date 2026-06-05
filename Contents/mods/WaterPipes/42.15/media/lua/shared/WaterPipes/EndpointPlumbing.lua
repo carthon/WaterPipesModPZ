@@ -3,12 +3,15 @@ WaterPipes.EndpointPlumbing = WaterPipes.EndpointPlumbing or {}
 
 require "WaterPipes/Constants"
 require "WaterPipes/EndpointAdapterSource"
+require "WaterPipes/EndpointFluidSource"
 require "WaterPipes/EndpointObjects"
 require "WaterPipes/Logger"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/PipeObjectUtils"
 
+-- AdapterSource is kept only to clean up the legacy hidden adapter object from older saves.
 local AdapterSource = WaterPipes.EndpointAdapterSource
+local FluidSource = WaterPipes.EndpointFluidSource
 local Constants = WaterPipes.Constants
 local EndpointObjects = WaterPipes.EndpointObjects
 local EndpointPlumbing = WaterPipes.EndpointPlumbing
@@ -182,7 +185,16 @@ function EndpointPlumbing.dumpDiagnostics(worldObject)
         return
     end
 
-    Logger.log("Diagnostics network summary: totalAmount=" .. tostring(summary.totalAmount) .. " totalCapacity=" .. tostring(summary.totalCapacity) .. " descriptorCount=" .. tostring(summary.descriptorCount) .. " mixed=" .. tostring(summary.isMixedFluids))
+    Logger.log(
+        "Diagnostics network summary: totalAmount="
+            .. tostring(summary.totalAmount)
+            .. " totalCapacity="
+            .. tostring(summary.totalCapacity)
+            .. " descriptorCount="
+            .. tostring(summary.descriptors and #summary.descriptors or 0)
+            .. " mixed="
+            .. tostring(summary.isMixed)
+    )
     for index, descriptor in ipairs(summary.descriptors or {}) do
         local objectText = describeObject(descriptor.object)
         Logger.log("Diagnostics descriptor[" .. tostring(index) .. "]: object=" .. objectText .. " fluidType=" .. tostring(descriptor.fluidType) .. " amount=" .. tostring(descriptor.waterAmount) .. " capacity=" .. tostring(descriptor.capacity) .. " tainted=" .. tostring(descriptor.tainted))
@@ -267,22 +279,19 @@ function EndpointPlumbing.refreshEndpointSource(worldObject)
         modData[Constants.PLUMBED_ENDPOINT_SOURCE_MODDATA_KEY] = nil
     end
 
+    -- Legacy cleanup: remove the hidden adapter object created by older mod versions.
+    AdapterSource.removeForEndpoint(worldObject, "migrateToFluidSource")
+
     if not EndpointPlumbing.hasPipeOnEndpointSquare(worldObject) then
-        AdapterSource.returnReservation(worldObject)
-        AdapterSource.removeForEndpoint(worldObject, "noPipeOnEndpointSquare")
+        FluidSource.clearForEndpoint(worldObject)
         setUsesExternalWaterSource(worldObject, false)
         return false
     end
 
     setCanBeWaterPiped(worldObject, false)
-    local adapterObject = AdapterSource.syncForEndpoint(worldObject)
-    local adapterSquare = adapterObject and adapterObject.getSquare and adapterObject:getSquare() or nil
-    if modData and adapterSquare then
-        modData[Constants.PLUMBED_ENDPOINT_SOURCE_MODDATA_KEY] = tostring(adapterSquare:getX()) .. ":" .. tostring(adapterSquare:getY()) .. ":" .. tostring(adapterSquare:getZ())
-    end
-
-    setUsesExternalWaterSource(worldObject, adapterObject ~= nil)
-    return adapterObject ~= nil
+    -- Own-container path: the engine reads water from the endpoint's own FluidContainer.
+    setUsesExternalWaterSource(worldObject, false)
+    return FluidSource.syncForEndpoint(worldObject)
 end
 
 function EndpointPlumbing.releaseReservation(worldObject)
@@ -290,7 +299,8 @@ function EndpointPlumbing.releaseReservation(worldObject)
         return 0
     end
 
-    return AdapterSource.returnReservation(worldObject)
+    FluidSource.clearForEndpoint(worldObject)
+    return 0
 end
 
 function EndpointPlumbing.plumb(worldObject)
@@ -307,6 +317,7 @@ function EndpointPlumbing.plumb(worldObject)
     Logger.log("Plumbing endpoint to pipe network: " .. describeObject(worldObject))
     Logger.log("Plumbing diagnostics: " .. describePlumbingDiagnostics(worldObject))
     setCanBeWaterPiped(worldObject, false)
+    setUsesExternalWaterSource(worldObject, false)
     EndpointPlumbing.refreshEndpointSource(worldObject)
 
     if buildUtil and buildUtil.setHaveConstruction and worldObject.getSquare then
@@ -330,7 +341,7 @@ function EndpointPlumbing.unplumb(worldObject)
     end
 
     setCanBeWaterPiped(worldObject, true)
-    AdapterSource.returnReservation(worldObject)
+    FluidSource.clearForEndpoint(worldObject)
     AdapterSource.removeForEndpoint(worldObject, "unplumb")
     setUsesExternalWaterSource(worldObject, false)
     Logger.log("Unplumbed endpoint from pipe network: " .. describeObject(worldObject))
