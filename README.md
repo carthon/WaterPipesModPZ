@@ -1,110 +1,116 @@
-﻿# WaterPipes
+# Water Pipes
 
-Mod experimental para Project Zomboid Build 42.15.x orientado a redes de agua construibles.
+Experimental mod for Project Zomboid Build 42.15.x that adds buildable water networks.
 
-## Objetivo
+## Goal
 
-Permitir colocar tuberias en el mundo y enlazar recipientes placeables con fluidos para que compartan una misma red. La version actual busca una base estable antes de meterse en bombas, valvulas, presion o filtrado.
+Project Zomboid has no real way to move or distribute water. This mod lets you lay pipes in the
+world and link placeable fluid containers and fixtures so they share a single network. The
+current version focuses on a solid, stable base before tackling pumps, valves, pressure or
+filtering.
 
-## Estado actual
+## Current features
 
-El mod ya incluye:
+- Valid Build 42.15 structure (`mod.info`, `tiledef=waterpipes 1000`, `pack=waterpipes`).
+- Buildable pipe from the vanilla build menu, category `Piping`.
+- **Auto-connecting floor pipes**: straights, corners, T-junctions, crosses and end caps are
+  chosen automatically from neighbouring pipes.
+- **Wall risers** (vertical covers on North/West walls) that connect floor pipes on both sides
+  of the wall and link different floors.
+- Own tileset (`waterpipes_01_*`), produced by a procedural sprite generator.
+- Generic detection of world fluid containers with a finite `FluidContainer` (rain collectors,
+  barrels, vessels, etc.).
+- Single-fluid redistribution per network; networks mixing different fluids are skipped for safety.
+- **Plumbing without a phantom object**: a plumbed fixture (sink, shower, toilet…) gets its own
+  `FluidContainer` mirroring the network, so vanilla Drink / Fill / Wash work directly from it.
+- The tap **purifies** like vanilla: rain (tainted) water is stored tainted but served clean.
+- "Transfer Fluids" is reconciled back to the network (no free water / no loss).
+- You can plumb an **empty** network; water starts flowing once a source is connected.
+- **Vertical separation**: two stacked networks only merge through a vertical pipe (wall cover);
+  otherwise they stay independent.
+- Debug menu (force global water shutoff, force network tick, diagnostics) when the game runs in
+  debug mode.
 
-- Estructura valida para Build 42.15 con `mod.info`, `tiledef=waterpipes 1000` y `pack=waterpipes`.
-- Pipe construible desde el menu de construccion vanilla en la categoria `Piping`.
-- Cursor de colocacion con 4 modos: suelo E/O, suelo N/S, pared E/O y pared N/S.
-- Tiles propios del mod (`waterpipes_01_*`) para las pipes visibles.
-- Deteccion generica de contenedores del mundo con `FluidContainer` finito.
-- Redistribucion de un unico fluido por red. Si una red mezcla fluidos distintos, se omite por seguridad.
-- Conectividad horizontal y vertical entre pipes, incluyendo `z+1 / z-1`.
-- Integracion con plumbing vanilla: al usar `Plumb` sobre un endpoint conectado a una pipe del mod, el flujo se redirige a la red del mod; si no, se mantiene el comportamiento vanilla.
-- Fuente adaptadora oculta sobre el endpoint para que el motor acepte la red como `external water source`.
-- Filtro del menu contextual para que el adaptador oculto no exponga sus propias opciones de agua.
-- Opcion `Unplumb` propia del mod para soltar el endpoint de la red.
-- Debug menu para forzar corte global de agua, tick de red y dumps de diagnostico cuando el juego esta en debug.
+## Current limitations
 
-## Limitaciones actuales
+- Focused on water and tainted water. Other fluids redistribute between containers, but
+  consumption integration is water-oriented.
+- No pressure, loss, priority, pumps or filtering yet.
+- Not fully validated in multiplayer.
 
-- El adaptador oculto sigue siendo una solucion tecnica para encajar con el plumbing vanilla interno del motor.
-- El mod esta orientado a agua y agua contaminada. Otros fluidos se redistribuyen entre contenedores, pero la integracion con endpoints de consumo esta pensada para agua.
-- No hay todavia sistemas de presion, perdida, prioridad, bombas o filtrado.
-- No esta validado a fondo en multijugador.
+## Structure
 
-## Estructura
+- `Contents/mods/WaterPipes/42.15`: code and metadata for Build 42.15.x.
+- `docs/architecture.md`: technical overview of the system.
+- `docs/texturepack.md`: tileset and packaging notes (sprite generator + `.tiles` editor).
+- `tools/texturepack`: procedural sprite generator (`gen_pipes.py`) and a binary `.tiles` editor
+  (`edit_tiles.py`).
 
-- `Contents/mods/WaterPipes/42.15`: codigo y metadatos para Build 42.15.x.
-- `docs/architecture.md`: resumen tecnico del sistema actual.
-- `docs/texturepack.md`: notas del tileset y del empaquetado.
-- `tools/`: recursos auxiliares para trabajo con Modding Tools.
+## Local install
 
-## Instalacion local
-
-La carpeta que debe leer Project Zomboid es:
+Project Zomboid must read this folder:
 
 ```text
 Contents/mods/WaterPipes
 ```
 
-Para pruebas locales, monta esa carpeta en:
+For local testing, link it into:
 
 ```text
-C:\Users\<tu_usuario>\Zomboid\mods\WaterPipes
+C:\Users\<your_user>\Zomboid\mods\WaterPipes
 ```
 
-Lo mas practico es usar una junction de Windows apuntando a:
+The most convenient option is a Windows junction/symlink pointing at
+`<workspace>\Contents\mods\WaterPipes`.
 
-```text
-<workspace>\Contents\mods\WaterPipes
-```
+## Building
 
-## Construccion
+Use the vanilla build panel:
 
-La construccion ya no va por clic derecho sobre el suelo. Ahora usa el flujo vanilla del panel de construccion:
+- Category: `Piping`
+- Recipe: `Water Pipe`
+- Requirements: `Base.Pipe` and `Base.PipeWrench` (kept, not consumed)
 
-- Categoria: `Piping`
-- Receta: `Water Pipe`
-- Requisitos:
-  - `Base.Pipe`
-  - `Base.PipeWrench` en modo `keep`
+While placing, rotation cycles through:
 
-Durante la colocacion, la rotacion recorre:
+- Floor pipe (orientation resolves automatically once connected)
+- Wall riser — North wall
+- Wall riser — West wall
 
-- Suelo E/O
-- Suelo N/S
-- Pared E/O
-- Pared N/S
+## Plumbing and consumption
 
-Sprites usados ahora:
+- `Plumb` a sink/shower/toilet (or equivalent) that has a mod pipe on its tile to join it to the
+  network. No water source is required to plumb — water flows once a container is connected.
+- Vanilla Drink / Fill / Wash are served from the fixture's own `FluidContainer`.
+- Tainted (rain) water comes out of the tap as clean water, matching vanilla plumbing.
+- Use `Unplumb` to disconnect a fixture from the network.
 
-- Suelo E/O: `waterpipes_01_24`
-- Suelo N/S: `waterpipes_01_25`
-- Pared E/O: `waterpipes_01_11`
-- Pared N/S: `waterpipes_01_26`
+## Quick test flow
 
-## Plumbing y consumo
+1. Place pipes from `Piping -> Water Pipe`.
+2. Place water containers (e.g. rain collectors) adjacent to the pipes on the same floor.
+3. Plumb a sink or equivalent that sits on a pipe tile.
+4. Drink / fill / wash from it; the source level should drop.
+5. To test without map water, use the mod's debug menu to force the global water shutoff.
 
-Los endpoints vanilla compatibles con plumbing se integran asi:
+## Roadmap
 
-- Si haces `Plumb` sobre un sink, ducha, water source o equivalente y hay una pipe del mod en su misma casilla con una red valida, el mod intercepta esa accion y lo conecta a la red.
-- Si no hay red valida del mod en la casilla, `Plumb` sigue el comportamiento vanilla.
-- El endpoint usa las acciones vanilla de beber, llenar y lavar.
-- El mod no parchea esas acciones para cambiar menus; lo que hace es proporcionar una `external water source` compatible con el motor.
+### Sprites / art
 
-Prioridad actual:
+The current pipe and riser sprites are **procedurally generated placeholders**. The plan is to
+replace them with proper, hand-finished art that matches Project Zomboid's style:
 
-- Si el endpoint se plumba a una casilla con pipe del mod y red activa, la red del mod tiene prioridad.
-- La coexistencia con un `rain barrel` real encima se resuelve manteniendo el barrel real visible e interactuable y ocultando el proxy del mod.
+- Higher-quality metal pipe sprites and cleaner isometric shading.
+- More connection variants and better-looking wall risers (improved depth/sorting).
+- Distinct pipe materials/states (e.g. galvanised metal vs PVC, rust/wear).
 
-## Flujo de prueba rapido
+### Beyond art
 
-1. Coloca una o varias pipes desde `Piping -> Water Pipe`.
-2. Coloca contenedores placeables con agua en la red.
-3. Conecta un sink o endpoint equivalente a una casilla con pipe.
-4. Usa `Plumb`.
-5. Si quieres probar sin agua del mapa, usa el debug menu del mod para forzar el corte global.
+- Pumps, valves, pressure and filtering.
+- Broader multiplayer validation.
 
-## Siguiente trabajo razonable
+### Contributing
 
-- Refinar sprites y variantes de conexion automaticas.
-- Mejorar casos de esquina con multiples fuentes vanilla alrededor del endpoint.
-- Validar la conservacion de agua en mas configuraciones complejas y en multijugador.
+This mod is experimental and actively evolving. If you'd like to help — **especially with
+sprite/tile art** — please get in touch with the author through the Steam Workshop page
+(comments or Discussions). Feedback and bug reports are very welcome too.
