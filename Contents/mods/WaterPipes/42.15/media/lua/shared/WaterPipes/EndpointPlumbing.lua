@@ -283,8 +283,10 @@ function EndpointPlumbing.refreshEndpointSource(worldObject)
     AdapterSource.removeForEndpoint(worldObject, "migrateToFluidSource")
 
     if not EndpointPlumbing.hasPipeOnEndpointSquare(worldObject) then
-        FluidSource.clearForEndpoint(worldObject)
-        setUsesExternalWaterSource(worldObject, false)
+        -- Hybrid disconnect: losing the pipe on the fixture's OWN tile fully unplumbs it and
+        -- restores its original fluid state. (A break further down the chain, while a pipe is still
+        -- on this tile, instead leaves it connected-but-dry below and reconnects automatically.)
+        EndpointPlumbing.unplumb(worldObject)
         return false
     end
 
@@ -316,6 +318,8 @@ function EndpointPlumbing.plumb(worldObject)
 
     Logger.log("Plumbing endpoint to pipe network: " .. describeObject(worldObject))
     Logger.log("Plumbing diagnostics: " .. describePlumbingDiagnostics(worldObject))
+    -- Snapshot the fixture's own fluid state before the network mirror overwrites it.
+    FluidSource.captureOriginalState(worldObject)
     setCanBeWaterPiped(worldObject, false)
     setUsesExternalWaterSource(worldObject, false)
     EndpointPlumbing.refreshEndpointSource(worldObject)
@@ -341,7 +345,9 @@ function EndpointPlumbing.unplumb(worldObject)
     end
 
     setCanBeWaterPiped(worldObject, true)
-    FluidSource.clearForEndpoint(worldObject)
+    -- Restore the fixture's pre-plumb fluid state (capacity/contents) instead of leaving the
+    -- network mirror behind.
+    FluidSource.restoreOriginalState(worldObject)
     AdapterSource.removeForEndpoint(worldObject, "unplumb")
     setUsesExternalWaterSource(worldObject, false)
     Logger.log("Unplumbed endpoint from pipe network: " .. describeObject(worldObject))

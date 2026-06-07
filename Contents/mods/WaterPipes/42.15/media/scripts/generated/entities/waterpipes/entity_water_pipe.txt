@@ -2,22 +2,16 @@ module WaterPipes
 {
     entity WaterPipe
     {
-        component UiConfig
-        {
-            xuiSkin = default,
-            icon = Pipe,
-            uiEnabled = false,
-        }
         component SpriteConfig
         {
-            face W
+            face N
             {
                 layer
                 {
-                    row = waterpipes_01_24,
+                    row = waterpipes_01_18,
                 }
             }
-            face N
+            face W
             {
                 layer
                 {
@@ -43,6 +37,7 @@ module WaterPipes
         {
             time = 10,
             category = Piping,
+            Tooltip = Tooltip_craft_WaterPipeDesc,
             inputs
             {
                 item 1 [Base.PipeWrench] mode:keep,

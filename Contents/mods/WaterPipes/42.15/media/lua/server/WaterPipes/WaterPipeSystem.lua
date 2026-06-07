@@ -9,6 +9,7 @@ require "WaterPipes/EndpointAdapterSource"
 require "WaterPipes/EndpointFluidSource"
 require "WaterPipes/EndpointPlumbing"
 require "WaterPipes/EndpointObjects"
+require "WaterPipes/GeneratorFuel"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/PipeAutotile"
 
@@ -18,6 +19,7 @@ local AdapterSource = WaterPipes.EndpointAdapterSource
 local FluidSource = WaterPipes.EndpointFluidSource
 local EndpointPlumbing = WaterPipes.EndpointPlumbing
 local EndpointObjects = WaterPipes.EndpointObjects
+local GeneratorFuel = WaterPipes.GeneratorFuel
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local PipeAutotile = WaterPipes.PipeAutotile
@@ -54,6 +56,27 @@ local function refreshPlumbedEndpointsNearCoordinates(coordinates)
                 if not visited[key] and EndpointPlumbing.isPlumbed(endpointObject) then
                     visited[key] = true
                     EndpointPlumbing.refreshEndpointSource(endpointObject)
+                end
+            end
+        end
+    end
+end
+
+local function refreshPlumbedGeneratorsNearCoordinates(coordinates)
+    local visited = {}
+
+    for _, position in ipairs(coordinates or {}) do
+        local square = getSquare(position.x, position.y, position.z)
+        if square and square.getObjects then
+            local objects = square:getObjects()
+            for i = 0, objects:size() - 1 do
+                local worldObject = objects:get(i)
+                if GeneratorFuel.isGenerator(worldObject) and GeneratorFuel.isPlumbed(worldObject) then
+                    local key = tostring(square:getX()) .. ":" .. tostring(square:getY()) .. ":" .. tostring(square:getZ()) .. ":" .. tostring(worldObject:getObjectIndex())
+                    if not visited[key] then
+                        visited[key] = true
+                        GeneratorFuel.refresh(worldObject)
+                    end
                 end
             end
         end
@@ -182,6 +205,7 @@ function System.refreshPlumbedEndpoints()
     end
 
     refreshPlumbedEndpointsNearCoordinates(coordinates)
+    refreshPlumbedGeneratorsNearCoordinates(coordinates)
 end
 
 function System.rebuild()
@@ -226,7 +250,13 @@ function System.unregisterPipeAt(x, y, z)
     State.unregisterPipe(x, y, z)
     System.rebuild()
 
+    -- Catch the object that just lost the pipe on its OWN square (it is no longer adjacent to any
+    -- remaining pipe, so the full scan below would miss it)...
     refreshPlumbedEndpointsNearCoordinates(coordinates)
+    refreshPlumbedGeneratorsNearCoordinates(coordinates)
+    -- ...and immediately refresh every object still attached anywhere in the (now smaller) network,
+    -- so a break far down a long pipe chain is reflected at once (no stale "phantom water").
+    System.refreshPlumbedEndpoints()
     PipeAutotile.refreshAround(x, y, z)
 end
 
@@ -256,23 +286,62 @@ local function onInitGlobalModData()
     Logger.log("Server state initialized")
 end
 
+-- Pipe removal (sledgehammer destroy, moveable "Pick Up", erosion, etc.) is processed ONE TICK
+-- later: some removal events (notably OnObjectAboutToBeRemoved, used by the moveable pickup) fire
+-- BEFORE the object actually leaves the square, so a synchronous re-check would still "see" the
+-- pipe. Deferring a frame lets us read the true post-removal world state. The next-tick guard
+-- (no pipe left on the square) also handles multi-pipe squares and cancelled removals uniformly.
+local pendingPipeRemovals = {}
+local pendingRemovalScheduled = false
+
+local function processPendingPipeRemovals()
+    pendingRemovalScheduled = false
+    if Events and Events.OnTick then
+        Events.OnTick.Remove(processPendingPipeRemovals)
+    end
+
+    local toProcess = pendingPipeRemovals
+    pendingPipeRemovals = {}
+
+    for _, position in pairs(toProcess) do
+        local square = getSquare(position.x, position.y, position.z)
+        -- Only unregister once the square is loaded and no pipe remains there.
+        if square and PipeObjectUtils.getPipeOnSquare(square) == nil then
+            System.unregisterPipeAt(position.x, position.y, position.z)
+        end
+    end
+end
+
+local function schedulePipeRemoval(object)
+    if not object or not PipeObjectUtils.isPipeObject(object) then
+        return
+    end
+
+    local square = object.getSquare and object:getSquare() or nil
+    if not square then
+        return
+    end
+
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    pendingPipeRemovals[tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)] = { x = x, y = y, z = z }
+
+    if not pendingRemovalScheduled and Events and Events.OnTick then
+        pendingRemovalScheduled = true
+        Events.OnTick.Add(processPendingPipeRemovals)
+    elseif not (Events and Events.OnTick) then
+        -- Fallback (no OnTick): process immediately.
+        processPendingPipeRemovals()
+    end
+end
+
 local function onDestroyIsoThumpable(thump, player)
-    if AdapterSource.isAdapterObject(thump) then
-        -- Legacy phantom adapter from older saves: let it be removed, never recreate it.
-        -- Plumbed endpoints now carry their own FluidContainer (see EndpointFluidSource).
-        return
-    end
+    schedulePipeRemoval(thump)
+end
 
-    if not PipeObjectUtils.isPipeObject(thump) then
-        return
-    end
-
-    local square = thump.getSquare and thump:getSquare() or nil
-    if square and #PipeObjectUtils.getPipeObjectsOnSquare(square, thump) > 0 then
-        return
-    end
-
-    System.unregisterPipeAt(thump:getX(), thump:getY(), thump:getZ())
+-- Fires for moveable "Pick Up" and other lua-driven removals (the pickup feature we added on the
+-- pipe tiles would otherwise leave a phantom pipe registered + endpoints falsely connected).
+local function onObjectAboutToBeRemoved(object)
+    schedulePipeRemoval(object)
 end
 
 local function onEveryTenMinutes()
@@ -342,6 +411,10 @@ if Events then
 
     if Events.OnDestroyIsoThumpable then
         Events.OnDestroyIsoThumpable.Add(onDestroyIsoThumpable)
+    end
+
+    if Events.OnObjectAboutToBeRemoved then
+        Events.OnObjectAboutToBeRemoved.Add(onObjectAboutToBeRemoved)
     end
 
     if Events.OnWaterAmountChange then

@@ -257,6 +257,106 @@ function FluidSource.syncForEndpoint(endpoint)
     return true
 end
 
+local function readContainerState(fluidContainer)
+    local state = { capacity = 0, amount = 0, fluidType = nil, inputLocked = false }
+    if not fluidContainer then
+        return state
+    end
+
+    if fluidContainer.getCapacity then
+        local ok, value = pcall(fluidContainer.getCapacity, fluidContainer)
+        if ok and type(value) == "number" then state.capacity = value end
+    end
+    if fluidContainer.getAmount then
+        local ok, value = pcall(fluidContainer.getAmount, fluidContainer)
+        if ok and type(value) == "number" then state.amount = value end
+    end
+    if fluidContainer.getPrimaryFluid then
+        local ok, fluid = pcall(fluidContainer.getPrimaryFluid, fluidContainer)
+        if ok and fluid and fluid.getFluidTypeString then
+            local ok2, typeString = pcall(fluid.getFluidTypeString, fluid)
+            if ok2 and type(typeString) == "string" then state.fluidType = typeString end
+        end
+    end
+    if fluidContainer.isInputLocked then
+        local ok, value = pcall(fluidContainer.isInputLocked, fluidContainer)
+        if ok then state.inputLocked = value and true or false end
+    end
+
+    return state
+end
+
+-- Remember the fixture's own FluidContainer state BEFORE we overwrite it with the network mirror.
+-- Called once when plumbing; restored verbatim on unplumb.
+function FluidSource.captureOriginalState(endpoint)
+    if not isAuthoritative() or not endpoint then
+        return
+    end
+
+    local modData = getModData(endpoint)
+    if not modData or modData[Constants.ENDPOINT_ORIGINAL_FLUID_KEY] ~= nil then
+        return
+    end
+
+    modData[Constants.ENDPOINT_ORIGINAL_FLUID_KEY] = readContainerState(getFluidContainer(endpoint))
+    if endpoint.transmitModData then
+        pcall(endpoint.transmitModData, endpoint)
+    end
+end
+
+-- Restore the fixture's own FluidContainer to the captured pre-plumb state (used on unplumb), so
+-- it no longer shows the network's capacity/mirror.
+function FluidSource.restoreOriginalState(endpoint)
+    if not isAuthoritative() or not endpoint then
+        return
+    end
+
+    local modData = getModData(endpoint)
+    local state = modData and modData[Constants.ENDPOINT_ORIGINAL_FLUID_KEY] or nil
+    local fluidContainer = getFluidContainer(endpoint)
+
+    if fluidContainer then
+        setSyncing(endpoint, true)
+
+        if fluidContainer.setInputLocked then
+            pcall(fluidContainer.setInputLocked, fluidContainer, false)
+        end
+        if fluidContainer.Empty then
+            pcall(fluidContainer.Empty, fluidContainer)
+        elseif fluidContainer.removeFluid then
+            pcall(fluidContainer.removeFluid, fluidContainer)
+        end
+
+        local capacity = state and state.capacity or 0
+        if fluidContainer.setCapacity then
+            pcall(fluidContainer.setCapacity, fluidContainer, math.max(capacity, 0))
+        end
+        if state and (state.amount or 0) > 0 and state.fluidType and fluidContainer.addFluid then
+            local fluidType = getFluidTypeByName(state.fluidType)
+            if fluidType then
+                pcall(fluidContainer.addFluid, fluidContainer, fluidType, state.amount)
+            end
+        end
+        if fluidContainer.setInputLocked then
+            pcall(fluidContainer.setInputLocked, fluidContainer, (state and state.inputLocked) and true or false)
+        end
+
+        if endpoint.sync then
+            pcall(endpoint.sync, endpoint)
+        end
+        if endpoint.transmitModData then
+            pcall(endpoint.transmitModData, endpoint)
+        end
+
+        setSyncing(endpoint, false)
+    end
+
+    if modData then
+        modData[Constants.ENDPOINT_ORIGINAL_FLUID_KEY] = nil
+    end
+    setLastSync(endpoint, 0)
+end
+
 -- Empties the mirror and unlocks input (used on unplumb / pipe removal).
 function FluidSource.clearForEndpoint(endpoint)
     if not isAuthoritative() or not endpoint then

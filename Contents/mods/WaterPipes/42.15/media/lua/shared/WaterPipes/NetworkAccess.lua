@@ -120,12 +120,7 @@ local function hasPipeOnSquare(square)
     return square and PipeObjectUtils.getPipeOnSquare(square) ~= nil
 end
 
-local function collectConnectedPipeSquares(endpointObject)
-    if not endpointObject or not endpointObject.getSquare then
-        return {}
-    end
-
-    local originSquare = endpointObject:getSquare()
+local function collectPipeSquaresFromSquare(originSquare)
     if not originSquare then
         return {}
     end
@@ -166,6 +161,13 @@ local function collectConnectedPipeSquares(endpointObject)
     return pipeSquares
 end
 
+local function collectConnectedPipeSquares(endpointObject)
+    if not endpointObject or not endpointObject.getSquare then
+        return {}
+    end
+    return collectPipeSquaresFromSquare(endpointObject:getSquare())
+end
+
 local function collectStorageDescriptors(pipeSquares)
     local scannedSquares = {}
     local descriptors = {}
@@ -198,12 +200,12 @@ local function normalizeDescriptorList(descriptorMap)
     return descriptors
 end
 
-local function buildSummary(endpointObject)
-    if not EndpointObjects.isEndpointCandidate(endpointObject) then
+local function buildSummaryFromSquare(originSquare)
+    if not originSquare then
         return nil
     end
 
-    local pipeSquares = collectConnectedPipeSquares(endpointObject)
+    local pipeSquares = collectPipeSquaresFromSquare(originSquare)
     if #pipeSquares == 0 then
         return nil
     end
@@ -237,7 +239,7 @@ local function buildSummary(endpointObject)
     end
 
     return {
-        endpoint = endpointObject,
+        square = originSquare,
         pipeSquares = pipeSquares,
         descriptors = descriptors,
         totalAmount = totalAmount,
@@ -248,6 +250,27 @@ local function buildSummary(endpointObject)
         isWater = fluidTypeName == "Water" or fluidTypeName == "TaintedWater",
         isTainted = fluidTypeName == "TaintedWater",
     }
+end
+
+-- Endpoint summaries are gated on being a real plumbable fixture (sink/shower/toilet).
+local function buildSummary(endpointObject)
+    if not EndpointObjects.isEndpointCandidate(endpointObject) then
+        return nil
+    end
+
+    local originSquare = endpointObject.getSquare and endpointObject:getSquare() or nil
+    local summary = buildSummaryFromSquare(originSquare)
+    if summary then
+        summary.endpoint = endpointObject
+    end
+    return summary
+end
+
+local function fluidNameMatches(actual, required)
+    if not actual or not required then
+        return false
+    end
+    return string.lower(actual) == string.lower(required)
 end
 
 local function rebalanceSummary(summary, remainingAmount)
@@ -263,6 +286,33 @@ end
 
 function NetworkAccess.getSummary(endpointObject)
     return buildSummary(endpointObject)
+end
+
+-- Square-based access for non-endpoint consumers (e.g. generators pulling Petrol).
+function NetworkAccess.getFluidSummaryAtSquare(originSquare)
+    return buildSummaryFromSquare(originSquare)
+end
+
+-- Draw up to `amount` of `requiredFluidType` from the network reachable from `originSquare`.
+-- Only works on a single-fluid network whose fluid matches requiredFluidType. Returns the
+-- amount actually drawn (rebalanced out of the network's containers).
+function NetworkAccess.drawFluidAtSquare(originSquare, requiredFluidType, amount)
+    local summary = buildSummaryFromSquare(originSquare)
+    if not summary or summary.isMixed or (summary.totalAmount or 0) <= 0 then
+        return 0
+    end
+
+    if not fluidNameMatches(summary.fluidTypeName, requiredFluidType) then
+        return 0
+    end
+
+    local drawn = math.min(math.max(amount or 0, 0), summary.totalAmount)
+    if drawn <= 0 then
+        return 0
+    end
+
+    rebalanceSummary(summary, summary.totalAmount - drawn)
+    return drawn
 end
 
 function NetworkAccess.isNetworkBackedEndpoint(endpointObject)
