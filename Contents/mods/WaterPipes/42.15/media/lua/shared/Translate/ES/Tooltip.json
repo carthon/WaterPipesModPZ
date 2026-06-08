@@ -1,3 +1,4 @@
 {
-    "Tooltip_craft_WaterPipeDesc": "Las tuberías se conectan automáticamente formando una red. Conecta fregaderos, duchas e inodoros, y enlaza recolectores de lluvia, barriles y vasijas para compartir agua. Necesita una Llave para tubos."
+    "Tooltip_craft_WaterPipeDesc": "Las tuberías se conectan automáticamente formando una red. Conecta fregaderos, duchas e inodoros, y enlaza recolectores de lluvia, barriles y vasijas para compartir agua. Necesita una Llave para tubos.",
+    "Tooltip_craft_WaterPipeRiserDesc": "Cubierta de tubería vertical para una pared. Conecta las tuberías de suelo a ambos lados del muro y enlaza distintas plantas. Necesita una Llave para tubos."
 }

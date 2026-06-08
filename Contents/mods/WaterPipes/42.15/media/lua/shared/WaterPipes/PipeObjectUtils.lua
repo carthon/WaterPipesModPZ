@@ -98,6 +98,70 @@ function PipeObjectUtils.getPipeOnSquare(square)
     return PipeObjectUtils.getPipeObjectsOnSquare(square)[1]
 end
 
+local function squareAt(x, y, z)
+    if not getCell then
+        return nil
+    end
+    local cell = getCell()
+    return cell and cell.getGridSquare and cell:getGridSquare(x, y, z) or nil
+end
+
+-- Which wall edges have a riser (vertical pipe) on square (x,y,z).
+local function riserEdgesAt(x, y, z)
+    local edges = { N = false, W = false }
+    local square = squareAt(x, y, z)
+    if not square then
+        return edges
+    end
+    for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+        if PipeObjectUtils.isWallCover(worldObject) then
+            local modData = getPipeModData(worldObject)
+            local edge = modData and modData[Constants.PIPE_RISER_EDGE_MODDATA_KEY]
+            if edge == "W" then
+                edges.W = true
+            else
+                edges.N = true
+            end
+        end
+    end
+    return edges
+end
+
+-- Coordinates connected to (x,y,z) through a vertical pipe (wall riser). A riser sits on the LOWER
+-- floor and climbs its wall to the floor above on BOTH sides of that wall:
+--   N riser at (rx,ry,rz) links (rx,ry,rz) <-> (rx,ry,rz+1) and (rx,ry-1,rz+1)
+--   W riser at (rx,ry,rz) links (rx,ry,rz) <-> (rx,ry,rz+1) and (rx-1,ry,rz+1)
+-- Returns both the upward links (risers on this square) and the downward links (risers on the
+-- floor below whose climb reaches this square), so traversal works in both directions.
+function PipeObjectUtils.getRiserVerticalNeighborCoords(x, y, z)
+    local coords = {}
+    local function add(nx, ny, nz)
+        coords[#coords + 1] = { x = nx, y = ny, z = nz }
+    end
+
+    local here = riserEdgesAt(x, y, z)
+    if here.N then
+        add(x, y, z + 1)
+        add(x, y - 1, z + 1)
+    end
+    if here.W then
+        add(x, y, z + 1)
+        add(x - 1, y, z + 1)
+    end
+
+    if riserEdgesAt(x, y, z - 1).N or riserEdgesAt(x, y, z - 1).W then
+        add(x, y, z - 1)
+    end
+    if riserEdgesAt(x, y + 1, z - 1).N then
+        add(x, y + 1, z - 1)
+    end
+    if riserEdgesAt(x + 1, y, z - 1).W then
+        add(x + 1, y, z - 1)
+    end
+
+    return coords
+end
+
 function PipeObjectUtils.getSquareFromWorldObjects(worldobjects)
     if not worldobjects then
         return nil

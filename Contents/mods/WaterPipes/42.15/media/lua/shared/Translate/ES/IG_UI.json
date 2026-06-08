@@ -1,4 +1,5 @@
 {
     "IGUI_WaterPipesGenerator": "Generador",
-    "IGUI_WaterPipesFixture": "Punto de agua"
+    "IGUI_WaterPipesFixture": "Punto de agua",
+    "IGUI_CraftCategory_Piping": "Tuberías"
 }

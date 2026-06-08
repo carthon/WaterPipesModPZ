@@ -81,17 +81,6 @@ local function getHorizontalNeighborSquares(square)
     return neighbors
 end
 
--- A vertical step is only allowed when a wall cover bridges the floors (it sits on the lower
--- square and climbs up). Keeps two stacked networks separate unless a vertical pipe links them.
-local function verticalStepAllowed(x, y, z, offsetZ)
-    if offsetZ == 0 then
-        return true
-    end
-    local lowerZ = (offsetZ < 0) and (z + offsetZ) or z
-    local square = getCellSquare(x, y, lowerZ)
-    return square ~= nil and PipeObjectUtils.hasWallCoverOnSquare(square)
-end
-
 local function getFluidTypeByName(fluidTypeName)
     if fluidTypeName == "Water" then
         return Fluid and Fluid.Water or (FluidType and FluidType.Water)
@@ -136,26 +125,24 @@ local function collectPipeSquaresFromSquare(originSquare)
         end
     end
 
-    -- Seed from the endpoint's square + neighbours; vertical neighbours need a wall cover.
-    tryAdd(originSquare)
-    local ox, oy, oz = originSquare:getX(), originSquare:getY(), originSquare:getZ()
-    for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-        if verticalStepAllowed(ox, oy, oz, offset.z) then
-            tryAdd(getCellSquare(ox + offset.x, oy + offset.y, oz + offset.z))
+    -- Same-floor cardinal neighbours + cross-floor neighbours through wall risers.
+    local function addNeighborsOf(x, y, z)
+        for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
+            tryAdd(getCellSquare(x + offset.x, y + offset.y, z))
+        end
+        for _, coord in ipairs(PipeObjectUtils.getRiserVerticalNeighborCoords(x, y, z)) do
+            tryAdd(getCellSquare(coord.x, coord.y, coord.z))
         end
     end
+
+    tryAdd(originSquare)
+    addNeighborsOf(originSquare:getX(), originSquare:getY(), originSquare:getZ())
 
     local index = 1
     while index <= #queue do
         local current = queue[index]
         index = index + 1
-        local cx, cy, cz = current:getX(), current:getY(), current:getZ()
-
-        for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-            if verticalStepAllowed(cx, cy, cz, offset.z) then
-                tryAdd(getCellSquare(cx + offset.x, cy + offset.y, cz + offset.z))
-            end
-        end
+        addNeighborsOf(current:getX(), current:getY(), current:getZ())
     end
 
     return pipeSquares
@@ -172,13 +159,12 @@ local function collectStorageDescriptors(pipeSquares)
     local scannedSquares = {}
     local descriptors = {}
 
+    -- A container counts only when it shares its tile with a pipe (same square), not by adjacency.
     for _, pipeSquare in ipairs(pipeSquares) do
-        for _, nearbySquare in ipairs(getHorizontalNeighborSquares(pipeSquare)) do
-            if addSquare(scannedSquares, nearbySquare) then
-                local squareDescriptors = Adapter.collectSquareContainers(nearbySquare)
-                for key, descriptor in pairs(squareDescriptors) do
-                    descriptors[key] = descriptor
-                end
+        if addSquare(scannedSquares, pipeSquare) then
+            local squareDescriptors = Adapter.collectSquareContainers(pipeSquare)
+            for key, descriptor in pairs(squareDescriptors) do
+                descriptors[key] = descriptor
             end
         end
     end
@@ -293,6 +279,14 @@ function NetworkAccess.getFluidSummaryAtSquare(originSquare)
     return buildSummaryFromSquare(originSquare)
 end
 
+-- For visualization: the pipe squares reachable from a square + the container descriptors on them.
+-- Unlike getFluidSummaryAtSquare it returns the pipe squares even when there are no containers.
+function NetworkAccess.getNetworkFromSquare(originSquare)
+    local pipeSquares = collectPipeSquaresFromSquare(originSquare)
+    local descriptors = normalizeDescriptorList(collectStorageDescriptors(pipeSquares))
+    return pipeSquares, descriptors
+end
+
 -- Draw up to `amount` of `requiredFluidType` from the network reachable from `originSquare`.
 -- Only works on a single-fluid network whose fluid matches requiredFluidType. Returns the
 -- amount actually drawn (rebalanced out of the network's containers).
@@ -319,9 +313,11 @@ function NetworkAccess.isNetworkBackedEndpoint(endpointObject)
     return buildSummary(endpointObject) ~= nil
 end
 
+-- Any single (non-mixed) fluid is usable at a tap now -- not only water. Taps purify TaintedWater
+-- into Water at the point of use (see EndpointFluidSource), but any other liquid is drawn as-is.
 function NetworkAccess.getUsableWaterSummary(endpointObject)
     local summary = buildSummary(endpointObject)
-    if not summary or summary.isMixed or not summary.isWater or summary.totalAmount <= 0 then
+    if not summary or summary.isMixed or summary.totalAmount <= 0 then
         return nil
     end
     return summary

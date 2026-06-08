@@ -1,3 +1,4 @@
 {
-    "Tooltip_craft_WaterPipeDesc": "Pipes auto-connect into a network. Plumb sinks, showers and toilets, and link rain collectors, barrels and vessels to share water. Needs a Pipe Wrench."
+    "Tooltip_craft_WaterPipeDesc": "Pipes auto-connect into a network. Plumb sinks, showers and toilets, and link rain collectors, barrels and vessels to share water. Needs a Pipe Wrench.",
+    "Tooltip_craft_WaterPipeRiserDesc": "A vertical pipe cover for a wall. Connects floor pipes on both sides of the wall and links different floors. Needs a Pipe Wrench."
 }

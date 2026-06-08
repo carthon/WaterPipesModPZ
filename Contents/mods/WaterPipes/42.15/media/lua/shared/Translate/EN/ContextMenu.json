@@ -1,3 +1,5 @@
 {
-    "ContextMenu_WaterPipesUnplumbItem": "Unplumb %1"
+    "ContextMenu_WaterPipesUnplumbItem": "Unplumb %1",
+    "ContextMenu_WaterPipesShowNetwork": "Show pipe network",
+    "ContextMenu_WaterPipesHideNetwork": "Hide pipe network"
 }

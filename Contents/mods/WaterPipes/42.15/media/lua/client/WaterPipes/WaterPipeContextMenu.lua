@@ -61,6 +61,135 @@ local function isDebugActive()
     return getDebug and getDebug()
 end
 
+-- ===== Network visualization (right-click a pipe) =====
+-- red = pipes, green = fluid-providing objects (containers), blue = consumers (sinks/generators).
+ContextMenu.highlightedObjects = ContextMenu.highlightedObjects or {}
+local HIGHLIGHT_TICKS = 480 -- ~8s at 60fps; auto-clears the highlight
+local COLOR_PIPE = { r = 0.95, g = 0.20, b = 0.20, a = 1.0 }      -- red
+local COLOR_SOURCE = { r = 0.20, g = 0.95, b = 0.30, a = 1.0 }    -- green: provides fluid
+local COLOR_CONSUMER = { r = 0.30, g = 0.60, b = 1.00, a = 1.0 }  -- blue: draws fluid (out-network)
+
+local function findPipeInWorldObjects(worldobjects)
+    if not worldobjects then
+        return nil
+    end
+    for _, worldObject in ipairs(worldobjects) do
+        if PipeObjectUtils.isPipeObject(worldObject) then
+            return worldObject
+        end
+        if worldObject and worldObject.getSquare and worldObject:getSquare() then
+            local pipe = PipeObjectUtils.getPipeOnSquare(worldObject:getSquare())
+            if pipe then
+                return pipe
+            end
+        end
+    end
+    return nil
+end
+
+local function setHighlight(worldObject, playerNum, on, color)
+    if not worldObject or not worldObject.setHighlighted then
+        return
+    end
+    pcall(function()
+        worldObject:setHighlighted(playerNum, on, false)
+        if on and color then
+            worldObject:setHighlightColor(playerNum, color.r, color.g, color.b, color.a)
+        end
+        if worldObject.setOutlineHighlight then
+            worldObject:setOutlineHighlight(playerNum, on)
+            if on and color and worldObject.setOutlineHighlightCol then
+                worldObject:setOutlineHighlightCol(playerNum, color.r, color.g, color.b, color.a)
+            end
+        end
+    end)
+end
+
+local function clearNetworkHighlight()
+    for _, entry in ipairs(ContextMenu.highlightedObjects) do
+        setHighlight(entry.object, entry.player, false, nil)
+    end
+    ContextMenu.highlightedObjects = {}
+    ContextMenu.highlightTicksLeft = 0
+end
+ContextMenu.clearNetworkHighlight = clearNetworkHighlight
+
+local function onHighlightTick()
+    ContextMenu.highlightTicksLeft = (ContextMenu.highlightTicksLeft or 0) - 1
+    if ContextMenu.highlightTicksLeft <= 0 then
+        clearNetworkHighlight()
+        if Events and Events.OnTick then
+            Events.OnTick.Remove(onHighlightTick)
+        end
+    end
+end
+
+local function trackAndHighlight(worldObject, playerNum, color)
+    setHighlight(worldObject, playerNum, true, color)
+    ContextMenu.highlightedObjects[#ContextMenu.highlightedObjects + 1] = { object = worldObject, player = playerNum }
+end
+
+function ContextMenu.showNetwork(playerObj, pipeObject)
+    if not playerObj or not pipeObject or not pipeObject.getSquare then
+        return
+    end
+    local square = pipeObject:getSquare()
+    if not square then
+        return
+    end
+
+    clearNetworkHighlight()
+
+    local playerNum = playerObj:getPlayerNum()
+
+    local pipeSquares, descriptors = NetworkAccess.getNetworkFromSquare(square)
+
+    -- Pipes (red).
+    for _, sq in ipairs(pipeSquares or {}) do
+        for _, pipe in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(sq)) do
+            trackAndHighlight(pipe, playerNum, COLOR_PIPE)
+        end
+    end
+
+    -- Fluid-providing objects / containers (green).
+    for _, descriptor in ipairs(descriptors or {}) do
+        if descriptor.object then
+            trackAndHighlight(descriptor.object, playerNum, COLOR_SOURCE)
+        end
+    end
+
+    -- Consumers that draw from the network (blue): plumbed sinks/showers/toilets + generators.
+    for _, sq in ipairs(pipeSquares or {}) do
+        for _, endpoint in ipairs(EndpointObjects.collectOnSquare(sq)) do
+            if EndpointPlumbing.isPlumbed(endpoint) then
+                trackAndHighlight(endpoint, playerNum, COLOR_CONSUMER)
+            end
+        end
+        if sq.getObjects then
+            local objects = sq:getObjects()
+            for i = 0, objects:size() - 1 do
+                local obj = objects:get(i)
+                if GeneratorFuel.isGenerator(obj) and GeneratorFuel.isPlumbed(obj) then
+                    trackAndHighlight(obj, playerNum, COLOR_CONSUMER)
+                end
+            end
+        end
+    end
+
+    ContextMenu.highlightTicksLeft = HIGHLIGHT_TICKS
+    if Events and Events.OnTick then
+        Events.OnTick.Remove(onHighlightTick)
+        Events.OnTick.Add(onHighlightTick)
+    end
+end
+
+function ContextMenu.hideNetwork(playerObj)
+    clearNetworkHighlight()
+    if Events and Events.OnTick then
+        Events.OnTick.Remove(onHighlightTick)
+    end
+end
+
 local function playerHasPipeWrench(playerObj)
     local inventory = playerObj and playerObj:getInventory()
     if not inventory then
@@ -443,8 +572,14 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         and playerHasPipeWrench(playerObj)
         and GeneratorFuel.canUnplumb(generatorObject)
 
+    -- Network visualization: available on any pipe, no tool required (helps players + debugging).
+    local pipeObject = findPipeInWorldObjects(worldobjects)
+    local hasShowNetworkOption = pipeObject ~= nil
+    local hasHideNetworkOption = #ContextMenu.highlightedObjects > 0
+
     if not hasUnplumbOption and not hasModPlumbOption
         and not hasGeneratorPlumbOption and not hasGeneratorUnplumbOption
+        and not hasShowNetworkOption and not hasHideNetworkOption
         and not isDebugActive() then
         return false
     end
@@ -468,6 +603,14 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     if hasGeneratorUnplumbOption then
         local optionName = getText("ContextMenu_WaterPipesUnplumbItem", getGeneratorDisplayName())
         applyPlumbOptionIcon(context:addOption(optionName, playerObj, ContextMenu.unplumbGenerator, generatorObject))
+    end
+
+    if hasShowNetworkOption then
+        context:addOption(getText("ContextMenu_WaterPipesShowNetwork"), playerObj, ContextMenu.showNetwork, pipeObject)
+    end
+
+    if hasHideNetworkOption then
+        context:addOption(getText("ContextMenu_WaterPipesHideNetwork"), playerObj, ContextMenu.hideNetwork)
     end
 
     if isDebugActive() then

@@ -4,11 +4,42 @@ module WaterPipes
     {
         component SpriteConfig
         {
-            face N
+            isThumpable = false,
+            OnCreate = WaterPipesBuild.floorOnCreate,
+            OnIsValid = WaterPipesBuild.floorOnIsValid,
+            face S
             {
                 layer
                 {
                     row = waterpipes_01_18,
+                }
+            }
+        }
+        component CraftRecipe
+        {
+            time = 10,
+            category = Piping,
+            Tooltip = Tooltip_craft_WaterPipeDesc,
+            inputs
+            {
+                item 1 [Base.PipeWrench] mode:keep,
+                item 1 [Base.Pipe],
+            }
+        }
+    }
+
+    entity WaterPipeRiser
+    {
+        component SpriteConfig
+        {
+            isThumpable = false,
+            OnCreate = WaterPipesBuild.riserOnCreate,
+            OnIsValid = WaterPipesBuild.riserOnIsValid,
+            face N
+            {
+                layer
+                {
+                    row = waterpipes_01_24,
                 }
             }
             face W
@@ -18,26 +49,12 @@ module WaterPipes
                     row = waterpipes_01_25,
                 }
             }
-            face E
-            {
-                layer
-                {
-                    row = waterpipes_01_11,
-                }
-            }
-            face S
-            {
-                layer
-                {
-                    row = waterpipes_01_26,
-                }
-            }
         }
         component CraftRecipe
         {
             time = 10,
             category = Piping,
-            Tooltip = Tooltip_craft_WaterPipeDesc,
+            Tooltip = Tooltip_craft_WaterPipeRiserDesc,
             inputs
             {
                 item 1 [Base.PipeWrench] mode:keep,

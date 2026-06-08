@@ -1,4 +1,5 @@
 {
     "IGUI_WaterPipesGenerator": "Generator",
-    "IGUI_WaterPipesFixture": "Water Fixture"
+    "IGUI_WaterPipesFixture": "Water Fixture",
+    "IGUI_CraftCategory_Piping": "Piping"
 }

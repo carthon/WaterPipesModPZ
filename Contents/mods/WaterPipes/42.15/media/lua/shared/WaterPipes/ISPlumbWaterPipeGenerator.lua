@@ -26,7 +26,13 @@ end
 function ISPlumbWaterPipeGenerator:perform()
     self.character:stopOrTriggerSound(self.sound)
 
-    if self.shouldPlumb then
+    local square = self.generator and self.generator.getSquare and self.generator:getSquare()
+    if isClient() and square then
+        -- MP: mutate the generator authoritatively on the server (avoids client/server desync).
+        sendClientCommand(self.character, "WaterPipes",
+            self.shouldPlumb and "plumbGenerator" or "unplumbGenerator",
+            { x = square:getX(), y = square:getY(), z = square:getZ() })
+    elseif self.shouldPlumb then
         WaterPipes.GeneratorFuel.plumb(self.generator)
     else
         WaterPipes.GeneratorFuel.unplumb(self.generator)

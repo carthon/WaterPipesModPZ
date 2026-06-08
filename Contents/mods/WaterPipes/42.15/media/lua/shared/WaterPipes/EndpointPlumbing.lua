@@ -290,7 +290,10 @@ function EndpointPlumbing.refreshEndpointSource(worldObject)
         return false
     end
 
-    setCanBeWaterPiped(worldObject, false)
+    -- canBeWaterPiped=true keeps the engine's infinite city-mains water OFF, so the fixture serves
+    -- our network mirror. refreshEndpointSource runs every server tick for plumbed fixtures, so it
+    -- must re-assert this (otherwise mains water would creep back when the water service is on).
+    setCanBeWaterPiped(worldObject, true)
     -- Own-container path: the engine reads water from the endpoint's own FluidContainer.
     setUsesExternalWaterSource(worldObject, false)
     return FluidSource.syncForEndpoint(worldObject)
@@ -318,9 +321,12 @@ function EndpointPlumbing.plumb(worldObject)
 
     Logger.log("Plumbing endpoint to pipe network: " .. describeObject(worldObject))
     Logger.log("Plumbing diagnostics: " .. describePlumbingDiagnostics(worldObject))
-    -- Snapshot the fixture's own fluid state before the network mirror overwrites it.
+    -- Snapshot the fixture's own fluid state + water-source flags before we take it over.
     FluidSource.captureOriginalState(worldObject)
-    setCanBeWaterPiped(worldObject, false)
+    -- IMPORTANT: canBeWaterPiped=true DISABLES the engine's infinite city-mains water for this
+    -- fixture (isWaterInfinite() is true only when canBeWaterPiped is nil/false). We want the sink
+    -- to serve OUR network's FluidContainer mirror, not free mains water, so it must be true.
+    setCanBeWaterPiped(worldObject, true)
     setUsesExternalWaterSource(worldObject, false)
     EndpointPlumbing.refreshEndpointSource(worldObject)
 
@@ -344,12 +350,11 @@ function EndpointPlumbing.unplumb(worldObject)
         modData[Constants.PLUMBED_ENDPOINT_SOURCE_MODDATA_KEY] = nil
     end
 
-    setCanBeWaterPiped(worldObject, true)
-    -- Restore the fixture's pre-plumb fluid state (capacity/contents) instead of leaving the
-    -- network mirror behind.
+    -- Restore the fixture's pre-plumb fluid state AND water-source flags (capacity/contents +
+    -- canBeWaterPiped/usesExternalWaterSource). This is what makes a former city-mains tap go back
+    -- to infinite water if the water service is still on, instead of staying dry.
     FluidSource.restoreOriginalState(worldObject)
     AdapterSource.removeForEndpoint(worldObject, "unplumb")
-    setUsesExternalWaterSource(worldObject, false)
     Logger.log("Unplumbed endpoint from pipe network: " .. describeObject(worldObject))
 
     if buildUtil and buildUtil.setHaveConstruction and worldObject.getSquare then

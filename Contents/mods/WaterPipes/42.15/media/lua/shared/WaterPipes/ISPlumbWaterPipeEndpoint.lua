@@ -26,7 +26,14 @@ end
 function ISPlumbWaterPipeEndpoint:perform()
     self.character:stopOrTriggerSound(self.sound)
 
-    if self.shouldPlumb then
+    local square = self.endpointObject and self.endpointObject.getSquare and self.endpointObject:getSquare()
+    if isClient() and square then
+        -- MP: the fixture must be mutated authoritatively on the server, otherwise the client
+        -- diverges (sendObjectChange errors + duplicated objects). Request it from the server.
+        sendClientCommand(self.character, "WaterPipes",
+            self.shouldPlumb and "plumbEndpoint" or "unplumbEndpoint",
+            { x = square:getX(), y = square:getY(), z = square:getZ() })
+    elseif self.shouldPlumb then
         WaterPipes.EndpointPlumbing.plumb(self.endpointObject)
     else
         WaterPipes.EndpointPlumbing.unplumb(self.endpointObject)

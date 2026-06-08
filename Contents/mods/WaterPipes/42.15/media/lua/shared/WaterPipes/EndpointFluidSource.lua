@@ -242,18 +242,22 @@ function FluidSource.syncForEndpoint(endpoint)
         return false
     end
 
-    -- Mixed-fluid or non-water networks: expose capacity but no usable water.
-    if summary.isMixed or not summary.isWater then
+    -- Mixed-fluid networks: expose capacity but nothing usable (don't serve a random fluid).
+    if summary.isMixed then
         writeSnapshot(endpoint, 0, summary.totalCapacity, nil)
         return true
     end
 
     local capacity = math.max(summary.totalCapacity or 0, 0)
     local visibleAmount = math.min(summary.totalAmount or 0, capacity)
-    -- Vanilla plumbed taps purify: water served at the endpoint is always clean, even when
-    -- the network stores tainted rain water. The stored water itself stays tainted; only what
-    -- comes out of the tap is purified.
-    writeSnapshot(endpoint, visibleAmount, capacity, "Water")
+    -- Any single fluid in the network can be drawn from the tap. The tap purifies rain water:
+    -- TaintedWater is served as clean Water (the stored water stays tainted; only what comes out
+    -- of the tap is purified). Every other fluid (Water, Petrol, ...) is served as-is.
+    local servedType = summary.fluidTypeName
+    if servedType == "TaintedWater" then
+        servedType = "Water"
+    end
+    writeSnapshot(endpoint, visibleAmount, capacity, servedType)
     return true
 end
 
@@ -298,7 +302,20 @@ function FluidSource.captureOriginalState(endpoint)
         return
     end
 
-    modData[Constants.ENDPOINT_ORIGINAL_FLUID_KEY] = readContainerState(getFluidContainer(endpoint))
+    local state = readContainerState(getFluidContainer(endpoint))
+    -- Remember the fixture's pre-plumb water-source flags too, so unplumb can put them back: a
+    -- kitchen sink that was an infinite city-mains tap (canBeWaterPiped absent) must become one
+    -- again, and a fixture using a rain barrel must keep using it.
+    state.canBeWaterPiped = modData.canBeWaterPiped
+    state.usesExternalWaterSource = false
+    if endpoint.getUsesExternalWaterSource then
+        local ok, value = pcall(endpoint.getUsesExternalWaterSource, endpoint)
+        if ok then
+            state.usesExternalWaterSource = value and true or false
+        end
+    end
+
+    modData[Constants.ENDPOINT_ORIGINAL_FLUID_KEY] = state
     if endpoint.transmitModData then
         pcall(endpoint.transmitModData, endpoint)
     end
@@ -349,6 +366,22 @@ function FluidSource.restoreOriginalState(endpoint)
         end
 
         setSyncing(endpoint, false)
+    end
+
+    -- Restore the pre-plumb water-source flags. canBeWaterPiped governs the engine's infinite
+    -- city-mains water: leaving it nil/false makes the fixture an infinite tap again (if the water
+    -- service is on), which is exactly the pre-plumb behaviour we want back.
+    if modData then
+        modData.canBeWaterPiped = state and state.canBeWaterPiped
+    end
+    if endpoint.setUsesExternalWaterSource then
+        pcall(endpoint.setUsesExternalWaterSource, endpoint, (state and state.usesExternalWaterSource) and true or false)
+    end
+    if endpoint.transmitModData then
+        pcall(endpoint.transmitModData, endpoint)
+    end
+    if endpoint.sync then
+        pcall(endpoint.sync, endpoint)
     end
 
     if modData then

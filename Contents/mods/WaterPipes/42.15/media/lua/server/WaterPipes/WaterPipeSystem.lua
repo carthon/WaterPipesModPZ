@@ -104,24 +104,11 @@ function System.scanContainersAroundPipes()
     local state = State.ensure()
     local found = {}
 
+    -- A container connects only when a (horizontal) pipe sits on its OWN tile -- not by adjacency.
     for _, pipeData in pairs(state.pipes) do
-        local coordinates = {
-            { x = pipeData.x, y = pipeData.y, z = pipeData.z },
-        }
-
-        for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-            coordinates[#coordinates + 1] = {
-                x = pipeData.x + offset.x,
-                y = pipeData.y + offset.y,
-                z = pipeData.z + offset.z,
-            }
-        end
-
-        for _, position in ipairs(coordinates) do
-            local square = getSquare(position.x, position.y, position.z)
-            if square then
-                mergeInto(found, Adapter.collectSquareContainers(square))
-            end
+        local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
+        if square then
+            mergeInto(found, Adapter.collectSquareContainers(square))
         end
     end
 
@@ -378,8 +365,63 @@ local function onWaterAmountChange(object, prevAmount)
     end
 end
 
+local function findGeneratorOnSquare(square)
+    if not square or not square.getObjects then
+        return nil
+    end
+    local objects = square:getObjects()
+    for index = 0, objects:size() - 1 do
+        local candidate = objects:get(index)
+        if GeneratorFuel.isGenerator(candidate) then
+            return candidate
+        end
+    end
+    return nil
+end
+
+local function resolveCommandSquare(args)
+    if not args or args.x == nil or args.y == nil or args.z == nil then
+        return nil
+    end
+    return getSquare(args.x, args.y, args.z)
+end
+
 local function onClientCommand(module, command, player, args)
     if module ~= "WaterPipes" then
+        return
+    end
+
+    -- Endpoint plumb/unplumb runs authoritatively on the server (clients only request it).
+    if command == "plumbEndpoint" or command == "unplumbEndpoint" then
+        local square = resolveCommandSquare(args)
+        local endpoint = square and EndpointObjects.findOnSquare(square)
+        if not endpoint then
+            Logger.warn("Endpoint plumb command: no endpoint at "
+                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
+            return
+        end
+        if command == "plumbEndpoint" then
+            EndpointPlumbing.plumb(endpoint)
+        else
+            EndpointPlumbing.unplumb(endpoint)
+        end
+        return
+    end
+
+    -- Generator plumb/unplumb runs authoritatively on the server as well.
+    if command == "plumbGenerator" or command == "unplumbGenerator" then
+        local square = resolveCommandSquare(args)
+        local generator = square and findGeneratorOnSquare(square)
+        if not generator then
+            Logger.warn("Generator plumb command: no generator at "
+                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
+            return
+        end
+        if command == "plumbGenerator" then
+            GeneratorFuel.plumb(generator)
+        else
+            GeneratorFuel.unplumb(generator)
+        end
         return
     end
 

@@ -20,17 +20,6 @@ local function getSquareAt(x, y, z)
     return cell and cell.getGridSquare and cell:getGridSquare(x, y, z) or nil
 end
 
--- Vertical network links only exist where a vertical pipe (wall cover) bridges the floors:
--- the cover sits on the LOWER square and climbs up to the floor above.
-local function verticalLinkAllowed(x, y, z, offsetZ)
-    if offsetZ == 0 then
-        return true
-    end
-    local lowerZ = (offsetZ < 0) and (z + offsetZ) or z
-    local square = getSquareAt(x, y, lowerZ)
-    return square ~= nil and PipeObjectUtils.hasWallCoverOnSquare(square)
-end
-
 local fallbackState = nil
 
 local function getRawState()
@@ -143,25 +132,23 @@ function State.rebuildGraph()
     for _, pipeData in pairs(state.pipes) do
         local pipeNodeId = State.pipeNodeId(pipeData.x, pipeData.y, pipeData.z)
 
-        for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-            if verticalLinkAllowed(pipeData.x, pipeData.y, pipeData.z, offset.z) then
-                local neighborNodeId = State.pipeNodeId(pipeData.x + offset.x, pipeData.y + offset.y, pipeData.z + offset.z)
-                Graph.connect(state.graph, pipeNodeId, neighborNodeId)
-            end
+        -- Same-floor neighbours.
+        for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
+            Graph.connect(state.graph, pipeNodeId,
+                State.pipeNodeId(pipeData.x + offset.x, pipeData.y + offset.y, pipeData.z))
+        end
+
+        -- Cross-floor neighbours through wall risers.
+        for _, coord in ipairs(PipeObjectUtils.getRiserVerticalNeighborCoords(pipeData.x, pipeData.y, pipeData.z)) do
+            Graph.connect(state.graph, pipeNodeId, State.pipeNodeId(coord.x, coord.y, coord.z))
         end
     end
 
     for containerKey, containerData in pairs(state.containers) do
         local containerNodeId = State.containerNodeId(containerKey)
+        -- A container attaches only to the pipe on its OWN tile.
         local squareNodeId = State.pipeNodeId(containerData.x, containerData.y, containerData.z)
         Graph.connect(state.graph, containerNodeId, squareNodeId)
-
-        for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-            if verticalLinkAllowed(containerData.x, containerData.y, containerData.z, offset.z) then
-                local adjacentPipeId = State.pipeNodeId(containerData.x + offset.x, containerData.y + offset.y, containerData.z + offset.z)
-                Graph.connect(state.graph, containerNodeId, adjacentPipeId)
-            end
-        end
     end
 
     state.lastRebuild = getTimestampMs and getTimestampMs() or 0
