@@ -1,6 +1,6 @@
 name=Water Pipes
 id=waterpipes
-author=Daniel
+author=Carthon
 description=Experimental Build 42.15.x foundation for constructible water pipe networks connecting world containers.
 modversion=0.2.0
 poster=WaterPipesThumbnail.png
