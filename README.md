@@ -26,15 +26,43 @@ filtering.
 - The tap **purifies** like vanilla: rain (tainted) water is stored tainted but served clean.
 - "Transfer Fluids" is reconciled back to the network (no free water / no loss).
 - You can plumb an **empty** network; water starts flowing once a source is connected.
+- **Generators**: connect a generator to a network carrying gasoline (`Petrol`) and it refuels
+  itself from the network automatically when its tank runs low.
+- **Dismantle returns the item**: picking a pipe back up gives you the `Pipe` item again.
 - **Vertical separation**: two stacked networks only merge through a vertical pipe (wall cover);
   otherwise they stay independent.
 - Debug menu (force global water shutoff, force network tick, diagnostics) when the game runs in
   debug mode.
 
+## How to use
+
+A quick 1‑2‑3 once the mod is enabled:
+
+1. **Lay pipes.** Open the build menu → category `Piping` → `Water Pipe`. You need a `Pipe` and a
+   `Pipe Wrench` (the wrench is kept, not consumed). Place pipes on the floor — they auto-connect
+   into straights, corners, T-junctions and crosses. While placing, rotate to switch between the
+   floor pipe and **wall risers** (North / West) to run pipes up a wall and link different floors.
+2. **Add a water source.** Place a rain collector, barrel or vessel next to a pipe on the same
+   floor. Its contents are now shared across the whole connected network.
+3. **Connect a sink / shower / toilet.** Make sure a pipe sits on the fixture's own tile, then
+   right‑click it → **“Plumb <name>”** (with a Pipe Wrench in your inventory). Vanilla
+   Drink / Wash / Fill now draw straight from the network, and rain (tainted) water comes out
+   **clean**. Right‑click → **“Unplumb <name>”** to disconnect; the fixture returns to its
+   original state.
+4. **Feed a generator.** Put a pipe on the generator's tile and right‑click → **“Plumb
+   Generator”**. If the network carries gasoline (`Petrol`) — e.g. an amphora or barrel of Petrol
+   connected to it — the generator tops up its tank automatically when it drops low.
+5. **Remove / recover.** Pick a pipe back up (Pipe Wrench) to get the `Pipe` item back. Removing
+   the pipe on a fixture/generator's own tile disconnects it instantly; breaking the chain
+   somewhere else just stops the flow until you restore it, then it reconnects on its own.
+
+> **One fluid per network.** A network carries a single fluid at a time — water **or** petrol,
+> never mixed. A sink needs a water network; a generator needs a Petrol network.
+
 ## Current limitations
 
-- Focused on water and tainted water. Other fluids redistribute between containers, but
-  consumption integration is water-oriented.
+- Consumption is integrated for water fixtures (sinks/showers/toilets) and generators (`Petrol`).
+  Other fluids still redistribute between containers, but have no dedicated consumer yet.
 - No pressure, loss, priority, pumps or filtering yet.
 - Not fully validated in multiplayer.
 
