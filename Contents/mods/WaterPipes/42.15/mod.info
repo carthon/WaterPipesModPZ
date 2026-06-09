@@ -1,7 +1,7 @@
 name=Water Pipes
 id=waterpipes
 author=Carthon
-description=Experimental Build 42.15.x foundation for constructible water pipe networks connecting world containers.
+description=[EN] Build a water-pipe network: connect sinks, barrels, rain collectors and generators, and move water or fuel wherever you need it. Multiplayer-ready, bilingual (EN/ES). [ES] Red de tuberias construible: conecta lavabos, barriles, recolectores y generadores, y lleva el agua o el combustible a donde quieras. Multijugador, bilingue (EN/ES). Any request/suggestion or bug can be reported here! https://github.com/carthon/WaterPipesModPZ/issues
 modversion=0.2.0
 poster=WaterPipesThumbnail.png
 versionMin=42.15
