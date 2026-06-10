@@ -3,13 +3,11 @@ module Base
     craftRecipe WaterPipes_ForgeMetalPipe
     {
         time = 250,
-        SkillRequired = Blacksmith:2,
-        NeedToBeLearn = true,
-        AutoLearnAll = Blacksmith:2,
+        SkillRequired = Blacksmith:0,
         timedAction = HammerMetalStanding,
-        xpAward = Blacksmith:15,
+        xpAward = Blacksmith:10,
         Tags = PrimitiveForge,
-        category = Piping,
+        category = Blacksmithing,
         inputs
         {
             item 2 tags[base:charcoal],

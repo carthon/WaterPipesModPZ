@@ -21,8 +21,8 @@ C:\Users\<your_user>\Zomboid\mods\WaterPipes
 ## Usage
 
 You need a **Pipe Wrench** (kept, not consumed) and a **Metal Pipe** for each pipe placed. Metal
-pipes can be scavenged or **forged** at a blacksmith forge (Blacksmith 2 — bar stock + charcoal,
-with hammer, tongs and a punch), so the network stays renewable even in a low-loot game.
+pipes can be scavenged or **forged** at a blacksmith forge from bar stock, so the network stays
+renewable even in a low-loot game.
 
 1. **Lay pipes.** Build menu → category **Piping** → **Water Pipe**. Floor pipes auto-connect into
    straights, corners, T-junctions and crosses. While placing, rotate to switch to the **vertical
