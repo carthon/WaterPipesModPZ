@@ -20,9 +20,9 @@ C:\Users\<your_user>\Zomboid\mods\WaterPipes
 
 ## Usage
 
-You need a **Pipe Wrench** (kept, not consumed) and one building material per pipe — a **Pipe**,
-a **metal pipe**, **scrap metal** or **clay**, so there's always a renewable option in a
-low-loot game.
+You need a **Pipe Wrench** (kept, not consumed) and a **Metal Pipe** for each pipe placed. Metal
+pipes can be scavenged or **forged** at a blacksmith forge (Blacksmith 2 — bar stock + charcoal,
+with hammer, tongs and a punch), so the network stays renewable even in a low-loot game.
 
 1. **Lay pipes.** Build menu → category **Piping** → **Water Pipe**. Floor pipes auto-connect into
    straights, corners, T-junctions and crosses. While placing, rotate to switch to the **vertical
@@ -36,7 +36,7 @@ low-loot game.
    network carries gasoline (Petrol), the generator refuels itself when its tank runs low.
 5. **Inspect the network.** Right-click any pipe → **Show pipe network** to highlight it: pipes in
    red, fluid sources in green, consumers (sinks/generators) in blue.
-6. **Remove.** Pick a pipe back up to recover some **scrap metal**.
+6. **Remove.** Pick a pipe back up to recover the **Metal Pipe**.
 
 **One fluid per network** — water *or* petrol, never mixed. A sink needs a water network; a
 generator needs a Petrol network.

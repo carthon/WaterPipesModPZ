@@ -23,7 +23,7 @@ module WaterPipes
             inputs
             {
                 item 1 [Base.PipeWrench] mode:keep,
-                item 1 [Base.Pipe;Base.MetalPipe;Base.ScrapMetal;Base.Clay],
+                item 1 [Base.MetalPipe],
             }
         }
     }
@@ -58,7 +58,7 @@ module WaterPipes
             inputs
             {
                 item 1 [Base.PipeWrench] mode:keep,
-                item 1 [Base.Pipe;Base.MetalPipe;Base.ScrapMetal;Base.Clay],
+                item 1 [Base.MetalPipe],
             }
         }
     }
