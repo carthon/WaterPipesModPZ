@@ -70,9 +70,6 @@ A quick 1‑2‑3 once the mod is enabled:
 
 - `Contents/mods/WaterPipes/42.15`: code and metadata for Build 42.15.x.
 - `docs/architecture.md`: technical overview of the system.
-- `docs/texturepack.md`: tileset and packaging notes (sprite generator + `.tiles` editor).
-- `tools/texturepack`: procedural sprite generator (`gen_pipes.py`) and a binary `.tiles` editor
-  (`edit_tiles.py`).
 
 ## Local install
 

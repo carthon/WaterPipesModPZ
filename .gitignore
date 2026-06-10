@@ -1,2 +1,9 @@
-# Transient texturepack outputs — regenerate with tools/texturepack/gen_pipes.py
-tools/texturepack/generated/
+# Dev tooling & image generation (not part of the shipped mod)
+tools/
+
+# Internal/dev notes not shipped with the mod
+docs/texturepack.md
+docs/informe-revision.md
+
+# Claude Code / AI assistant artifacts
+.claude/
