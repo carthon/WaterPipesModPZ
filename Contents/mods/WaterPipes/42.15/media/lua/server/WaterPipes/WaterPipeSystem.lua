@@ -325,8 +325,8 @@ local function onDestroyIsoThumpable(thump, player)
     schedulePipeRemoval(thump)
 end
 
--- Fires for moveable "Pick Up" and other lua-driven removals (the pickup feature we added on the
--- pipe tiles would otherwise leave a phantom pipe registered + endpoints falsely connected).
+-- Fires for moveable "Pick Up" and other lua-driven removals; without it a removed pipe would
+-- stay registered and its endpoints would still read as connected.
 local function onObjectAboutToBeRemoved(object)
     schedulePipeRemoval(object)
 end

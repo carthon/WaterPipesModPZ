@@ -290,8 +290,8 @@ local function readContainerState(fluidContainer)
     return state
 end
 
--- Remember the fixture's own FluidContainer state BEFORE we overwrite it with the network mirror.
--- Called once when plumbing; restored verbatim on unplumb.
+-- Snapshot the fixture's own FluidContainer state before the network mirror overwrites it.
+-- Captured once on plumb; restored verbatim on unplumb.
 function FluidSource.captureOriginalState(endpoint)
     if not isAuthoritative() or not endpoint then
         return
@@ -303,7 +303,7 @@ function FluidSource.captureOriginalState(endpoint)
     end
 
     local state = readContainerState(getFluidContainer(endpoint))
-    -- Remember the fixture's pre-plumb water-source flags too, so unplumb can put them back: a
+    -- Also snapshot the fixture's pre-plumb water-source flags so unplumb can restore them: a
     -- kitchen sink that was an infinite city-mains tap (canBeWaterPiped absent) must become one
     -- again, and a fixture using a rain barrel must keep using it.
     state.canBeWaterPiped = modData.canBeWaterPiped
