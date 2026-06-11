@@ -36,7 +36,8 @@ renewable even in a low-loot game.
    network carries gasoline (Petrol), the generator refuels itself when its tank runs low.
 5. **Inspect the network.** Right-click any pipe → **Show pipe network** to highlight it: pipes in
    red, fluid sources in green, consumers (sinks/generators) in blue.
-6. **Remove.** Pick a pipe back up to recover the **Metal Pipe**.
+6. **Remove.** Right-click a pipe → **Disassemble** (hammer) to take it down; you get the **Metal
+   Pipe** back ~90% of the time.
 
 **One fluid per network** — water *or* petrol, never mixed. A sink needs a water network; a
 generator needs a Petrol network.

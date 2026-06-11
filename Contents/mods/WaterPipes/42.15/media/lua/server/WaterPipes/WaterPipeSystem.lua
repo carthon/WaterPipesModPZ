@@ -11,7 +11,6 @@ require "WaterPipes/EndpointPlumbing"
 require "WaterPipes/EndpointObjects"
 require "WaterPipes/GeneratorFuel"
 require "WaterPipes/PipeObjectUtils"
-require "WaterPipes/PipeAutotile"
 
 local Adapter = WaterPipes.ContainerAdapter
 local Constants = WaterPipes.Constants
@@ -22,7 +21,6 @@ local EndpointObjects = WaterPipes.EndpointObjects
 local GeneratorFuel = WaterPipes.GeneratorFuel
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
-local PipeAutotile = WaterPipes.PipeAutotile
 local State = WaterPipes.State
 local System = WaterPipes.System
 
@@ -205,7 +203,6 @@ function System.tick()
         System.rebuild()
         System.redistributeWater()
         System.refreshPlumbedEndpoints()
-        PipeAutotile.refreshList(State.ensure().pipes)
     end)
 
     if not ok then
@@ -217,7 +214,6 @@ function System.registerPipeAt(x, y, z)
     State.registerPipe(x, y, z)
     System.rebuild()
     System.refreshPlumbedEndpoints()
-    PipeAutotile.refreshAround(x, y, z)
 end
 
 function System.unregisterPipeAt(x, y, z)
@@ -244,7 +240,6 @@ function System.unregisterPipeAt(x, y, z)
     -- ...and immediately refresh every object still attached anywhere in the (now smaller) network,
     -- so a break far down a long pipe chain is reflected at once (no stale "phantom water").
     System.refreshPlumbedEndpoints()
-    PipeAutotile.refreshAround(x, y, z)
 end
 
 function System.forceGlobalWaterShutoff()
@@ -269,7 +264,6 @@ local function onInitGlobalModData()
     State.ensure()
     System.rebuild()
     System.refreshPlumbedEndpoints()
-    PipeAutotile.refreshList(State.ensure().pipes)
     Logger.log("Server state initialized")
 end
 

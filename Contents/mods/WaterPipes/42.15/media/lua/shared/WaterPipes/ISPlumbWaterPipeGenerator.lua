@@ -15,6 +15,7 @@ function ISPlumbWaterPipeGenerator:update()
 end
 
 function ISPlumbWaterPipeGenerator:start()
+    self:setActionAnim("VehicleWorkOnMid")
     self.sound = self.character:playSound("RepairWithWrench")
 end
 
