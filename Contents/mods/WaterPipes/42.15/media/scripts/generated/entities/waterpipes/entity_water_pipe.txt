@@ -17,12 +17,13 @@ module WaterPipes
         }
         component CraftRecipe
         {
-            time = 10,
+            timedAction = BuildLowNoTool,
+            time = 50,
             category = Piping,
             Tooltip = Tooltip_craft_WaterPipeDesc,
             inputs
             {
-                item 1 [Base.PipeWrench] mode:keep,
+                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
                 item 1 [Base.MetalPipe],
             }
         }
@@ -52,12 +53,13 @@ module WaterPipes
         }
         component CraftRecipe
         {
-            time = 10,
+            timedAction = BuildWallNoTool,
+            time = 50,
             category = Piping,
             Tooltip = Tooltip_craft_WaterPipeRiserDesc,
             inputs
             {
-                item 1 [Base.PipeWrench] mode:keep,
+                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
                 item 1 [Base.MetalPipe],
             }
         }

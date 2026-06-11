@@ -8,6 +8,9 @@ require "WaterPipes/GeneratorFuel"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/Logger"
+-- Client-side: loads PipeAutotile so it registers its OnObjectAdded/LoadGridsquare hooks and each
+-- client recomputes pipe connection sprites locally (the shape is never sent over the network).
+require "WaterPipes/PipeAutotile"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.ContextMenu = WaterPipes.ContextMenu or {}
@@ -222,8 +225,10 @@ function ContextMenu.plumbEndpoint(playerObj, endpointObject)
         return
     end
 
-    ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
-    ISTimedActionQueue.add(ISPlumbWaterPipeEndpoint:new(playerObj, endpointObject, wrench, true))
+    if luautils.walkAdjObject(playerObj, endpointObject, true) then
+        ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
+        ISTimedActionQueue.add(ISPlumbWaterPipeEndpoint:new(playerObj, endpointObject, wrench, true))
+    end
 end
 
 function ContextMenu.unplumbEndpoint(playerObj, endpointObject)
@@ -236,8 +241,10 @@ function ContextMenu.unplumbEndpoint(playerObj, endpointObject)
         return
     end
 
-    ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
-    ISTimedActionQueue.add(ISPlumbWaterPipeEndpoint:new(playerObj, endpointObject, wrench, false))
+    if luautils.walkAdjObject(playerObj, endpointObject, true) then
+        ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
+        ISTimedActionQueue.add(ISPlumbWaterPipeEndpoint:new(playerObj, endpointObject, wrench, false))
+    end
 end
 
 function ContextMenu.plumbGenerator(playerObj, generatorObject)
@@ -250,8 +257,10 @@ function ContextMenu.plumbGenerator(playerObj, generatorObject)
         return
     end
 
-    ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
-    ISTimedActionQueue.add(ISPlumbWaterPipeGenerator:new(playerObj, generatorObject, wrench, true))
+    if luautils.walkAdjObject(playerObj, generatorObject, true) then
+        ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
+        ISTimedActionQueue.add(ISPlumbWaterPipeGenerator:new(playerObj, generatorObject, wrench, true))
+    end
 end
 
 function ContextMenu.unplumbGenerator(playerObj, generatorObject)
@@ -264,8 +273,10 @@ function ContextMenu.unplumbGenerator(playerObj, generatorObject)
         return
     end
 
-    ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
-    ISTimedActionQueue.add(ISPlumbWaterPipeGenerator:new(playerObj, generatorObject, wrench, false))
+    if luautils.walkAdjObject(playerObj, generatorObject, true) then
+        ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
+        ISTimedActionQueue.add(ISPlumbWaterPipeGenerator:new(playerObj, generatorObject, wrench, false))
+    end
 end
 
 function ContextMenu.onVanillaPlumbItem(worldobjects, player, itemToPipe)
@@ -284,8 +295,10 @@ function ContextMenu.onVanillaPlumbItem(worldobjects, player, itemToPipe)
         end
 
         Logger.log("Vanilla plumb intercepted for pipe-network endpoint: " .. tostring(itemToPipe))
-        ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
-        ISTimedActionQueue.add(ISPlumbWaterPipeEndpoint:new(playerObj, itemToPipe, wrench, true))
+        if luautils.walkAdjObject(playerObj, itemToPipe, true) then
+            ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
+            ISTimedActionQueue.add(ISPlumbWaterPipeEndpoint:new(playerObj, itemToPipe, wrench, true))
+        end
         return
     end
 

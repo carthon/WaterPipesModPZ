@@ -15,6 +15,7 @@ function ISPlumbWaterPipeEndpoint:update()
 end
 
 function ISPlumbWaterPipeEndpoint:start()
+    self:setActionAnim("VehicleWorkOnMid")
     self.sound = self.character:playSound("RepairWithWrench")
 end
 

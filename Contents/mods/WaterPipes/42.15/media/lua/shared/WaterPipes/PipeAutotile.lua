@@ -39,11 +39,16 @@ local MASK_SPRITE = {
     [N + E + S + W] = Constants.PIPE_FLOOR_CROSS_SPRITE,
 }
 
-local function isAuthoritative()
+-- Connection sprites are purely cosmetic: each client derives them locally from the pipes it can
+-- see and they are NEVER transmitted (the server only tracks "is there a pipe on this tile"). So
+-- autotiling runs on every side that renders a screen: single-player, a remote client, AND a co-op
+-- host. A co-op host is isServer()==true but DOES render its own game, so it must autotile too --
+-- the ONLY side we skip is a headless/dedicated server (no local player to render for).
+local function isRenderingSide()
     if isServer and isServer() then
-        return true
+        return (isCoopHost and isCoopHost()) == true
     end
-    return not (isClient and isClient())
+    return true
 end
 
 local function getSquare(x, y, z)
@@ -139,7 +144,7 @@ end
 
 -- Recompute and apply the connecting sprite of the floor pipe on one square.
 function PipeAutotile.refreshFloorPipeAt(x, y, z)
-    if not isAuthoritative() then
+    if not isRenderingSide() then
         return
     end
 
@@ -172,20 +177,18 @@ function PipeAutotile.refreshFloorPipeAt(x, y, z)
         return
     end
 
+    -- LOCAL cosmetic change only -- never transmitted. Other clients recompute their own sprite.
     pcall(pipe.setSprite, pipe, sprite)
     local square2 = pipe.getSquare and pipe:getSquare() or nil
     if square2 and square2.RecalcProperties then
         pcall(square2.RecalcProperties, square2)
-    end
-    if pipe.transmitCompleteItemToClients then
-        pcall(pipe.transmitCompleteItemToClients, pipe)
     end
 end
 
 -- Refresh a square, its 4 cardinal neighbours, and the floors above/below (a wall cover can
 -- affect floor pipes on either side of its wall and on the floor it climbs to).
 function PipeAutotile.refreshAround(x, y, z)
-    if not isAuthoritative() then
+    if not isRenderingSide() then
         return
     end
     for dz = -1, 1 do
@@ -196,12 +199,69 @@ function PipeAutotile.refreshAround(x, y, z)
     end
 end
 
--- Refresh every registered pipe whose square is currently loaded (load / migration / tick).
+-- Refresh every pipe in a given list (used internally / on migration).
 function PipeAutotile.refreshList(pipes)
-    if not isAuthoritative() or not pipes then
+    if not isRenderingSide() or not pipes then
         return
     end
     for _, pipeData in pairs(pipes) do
         PipeAutotile.refreshFloorPipeAt(pipeData.x, pipeData.y, pipeData.z)
     end
+end
+
+-- ===== Client-driven triggers =====
+-- Each client recomputes pipe sprites from its OWN world view, so synced pipes (built by other
+-- players, or streamed in on chunk load) get the right connecting sprite without the shape ever
+-- crossing the network.
+
+local function squareOf(object)
+    return object and object.getSquare and object:getSquare() or nil
+end
+
+local function onPipeObjectAdded(object)
+    if not isRenderingSide() or not PipeObjectUtils.isPipeObject(object) then
+        return
+    end
+    local square = squareOf(object)
+    if square then
+        PipeAutotile.refreshAround(square:getX(), square:getY(), square:getZ())
+    end
+end
+
+-- On removal the object is still on the square, so defer the neighbour refresh one tick.
+local pendingRefresh = {}
+local function onPipeObjectRemoved(object)
+    if not isRenderingSide() or not PipeObjectUtils.isPipeObject(object) then
+        return
+    end
+    local square = squareOf(object)
+    if square then
+        pendingRefresh[#pendingRefresh + 1] = { x = square:getX(), y = square:getY(), z = square:getZ() }
+    end
+end
+
+local function onTickProcessPending()
+    if #pendingRefresh == 0 then
+        return
+    end
+    local list = pendingRefresh
+    pendingRefresh = {}
+    for _, coord in ipairs(list) do
+        PipeAutotile.refreshAround(coord.x, coord.y, coord.z)
+    end
+end
+
+-- Chunk streamed in / joined a server: repaint any pipe on the loaded square.
+local function onLoadGridsquare(square)
+    if not isRenderingSide() or not square then
+        return
+    end
+    PipeAutotile.refreshFloorPipeAt(square:getX(), square:getY(), square:getZ())
+end
+
+if Events then
+    if Events.OnObjectAdded then Events.OnObjectAdded.Add(onPipeObjectAdded) end
+    if Events.OnObjectAboutToBeRemoved then Events.OnObjectAboutToBeRemoved.Add(onPipeObjectRemoved) end
+    if Events.OnTick then Events.OnTick.Add(onTickProcessPending) end
+    if Events.LoadGridsquare then Events.LoadGridsquare.Add(onLoadGridsquare) end
 end
