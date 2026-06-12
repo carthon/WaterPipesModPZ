@@ -1,7 +1,7 @@
 name=Water Pipes
 id=waterpipes
 author=Carthon
-description=[EN] Build a water-pipe network: connect sinks, barrels, rain collectors and generators, and move water or fuel wherever you need it. Multiplayer-ready, bilingual (EN/ES). [ES] Red de tuberias construible: conecta lavabos, barriles, recolectores y generadores, y lleva el agua o el combustible a donde quieras. Multijugador, bilingue (EN/ES). Any request/suggestion or bug can be reported here! https://github.com/carthon/WaterPipesModPZ/issues
+description=[EN] Build a water-pipe network: connect sinks, barrels, rain collectors and generators, and move water or fuel wherever you need it. Multiplayer-ready, bilingual (EN/ES). [ES] Red de tuberias construible: conecta lavabos, barriles, recolectores y generadores, y lleva el agua o el combustible a donde quieras. Multijugador, bilingue (EN/ES). [EN] Heads-up: removing this mod from an existing save may cause a WorldDictionary error (common to Build 42 buildable mods) - back up your save first. Fix guide: https://steamcommunity.com/sharedfiles/filedetails/?id=3187340365 [ES] Aviso: desinstalar este mod de una partida existente puede provocar un error de WorldDictionary (comun en mods de construccion de Build 42) - haz copia de seguridad antes. Guia de solucion: https://steamcommunity.com/sharedfiles/filedetails/?id=3187340365 Any request/suggestion or bug can be reported here! https://github.com/carthon/WaterPipesModPZ/issues
 modversion=0.2.0
 poster=WaterPipesThumbnail.png
 versionMin=42.15
