@@ -34,20 +34,13 @@ module WaterPipes
         component SpriteConfig
         {
             isThumpable = false,
-            OnCreate = WaterPipesBuild.riserOnCreate,
-            OnIsValid = WaterPipesBuild.riserOnIsValid,
-            face N
+            OnCreate = WaterPipesBuild.verticalOnCreate,
+            OnIsValid = WaterPipesBuild.verticalOnIsValid,
+            face S
             {
                 layer
                 {
-                    row = waterpipes_01_24,
-                }
-            }
-            face W
-            {
-                layer
-                {
-                    row = waterpipes_01_25,
+                    row = industry_02_76,
                 }
             }
         }

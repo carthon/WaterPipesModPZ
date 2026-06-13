@@ -81,59 +81,57 @@ local function spriteName(worldObject)
     return nil
 end
 
--- Set of wall-cover edges ("N"/"W") sitting on a square. PZ walls only exist on the N and W
--- edges of a tile, so a cover always has edge N or W.
-local function getWallCoverEdgeSet(square)
-    local edges = {}
-    if not square then
-        return edges
-    end
-    for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
-        local modData = worldObject.getModData and worldObject:getModData() or nil
-        if modData and modData[Constants.PIPE_RISER_MODDATA_KEY] == true then
-            local edge = modData[Constants.PIPE_RISER_EDGE_MODDATA_KEY]
-            if edge == "N" or edge == "W" then
-                edges[edge] = true
+-- Cardinal directions with their letter, for orienting a vertical pipe toward its adjacent floor
+-- pipe (the vanilla vertical sprites carry the floor elbow in one direction).
+local VDIRS = {
+    { name = "N", dx = 0, dy = -1 },
+    { name = "E", dx = 1, dy = 0 },
+    { name = "S", dx = 0, dy = 1 },
+    { name = "W", dx = -1, dy = 0 },
+}
+
+-- A same-floor neighbour connects to a floor pipe if it holds a floor pipe OR a vertical pipe
+-- (the vertical's floor elbow joins the network on its own tile).
+local function neighbourConnects(square)
+    return square ~= nil
+        and (getFloorPipeOnSquare(square) ~= nil or PipeObjectUtils.hasVerticalOnSquare(square))
+end
+
+-- Pick out the floor pipe and the vertical pipe on a square (at most one of each).
+local function classifyOnSquare(square)
+    local floor, vertical
+    if square then
+        for _, obj in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+            if PipeObjectUtils.isVertical(obj) then
+                vertical = vertical or obj
+            elseif PipeObjectUtils.getPipePlacement(obj).surface == Constants.PIPE_SURFACE_FLOOR then
+                floor = floor or obj
             end
         end
     end
-    return edges
+    return floor, vertical
 end
 
--- A PZ wall is the N or W edge of a tile and is SHARED with the neighbour across it, so a
--- wall cover must connect floor pipes on BOTH sides of that wall. Covers on the floor below
--- (risers climbing up) connect to the floor pipe above too. Adds the proper arm bits to
--- `present` for the floor pipe at (x,y,z).
-local function addCoverArms(present, x, y, z)
-    local function take(cx, cy, cz, map)
-        local edges = getWallCoverEdgeSet(getSquare(cx, cy, cz))
-        for edge, bit in pairs(map) do
-            if edges[edge] then
-                present[bit] = true
-            end
-        end
+-- LOCAL cosmetic sprite change only -- never transmitted. Other clients recompute their own.
+local function applySprite(worldObject, sprite)
+    if not worldObject or not sprite or spriteName(worldObject) == sprite then
+        return
     end
-    -- same floor: our own N/W walls, plus the shared walls owned by S and E neighbours
-    take(x,     y,     z, { N = N, W = W })   -- own N / W wall
-    take(x,     y + 1, z, { N = S })          -- south neighbour's N wall == our S edge
-    take(x + 1, y,     z, { W = E })          -- east neighbour's W wall == our E edge
-    -- floor below (riser climbing up to this tile)
-    take(x,     y,     z - 1, { N = N, W = W })
-    take(x,     y + 1, z - 1, { N = S })
-    take(x + 1, y,     z - 1, { W = E })
+    pcall(worldObject.setSprite, worldObject, sprite)
+    local sq = worldObject.getSquare and worldObject:getSquare() or nil
+    if sq and sq.RecalcProperties then
+        pcall(sq.RecalcProperties, sq)
+    end
 end
 
--- Bitmask of connected directions: cardinal neighbours holding a floor pipe, PLUS every edge
--- where a wall cover sits (this floor or the floor below, either side of the shared wall).
+-- Bitmask of connected directions: cardinal neighbours (same floor) holding a floor or vertical pipe.
 function PipeAutotile.computeMask(x, y, z)
     local present = {}
     for _, dir in ipairs(DIRS) do
-        local neighbor = getSquare(x + dir.dx, y + dir.dy, z)
-        if neighbor and getFloorPipeOnSquare(neighbor) then
+        if neighbourConnects(getSquare(x + dir.dx, y + dir.dy, z)) then
             present[dir.bit] = true
         end
     end
-    addCoverArms(present, x, y, z)
 
     local mask = 0
     for bit in pairs(present) do
@@ -142,46 +140,42 @@ function PipeAutotile.computeMask(x, y, z)
     return mask
 end
 
--- Recompute and apply the connecting sprite of the floor pipe on one square.
+-- Recompute and apply the connecting sprite of the pipe(s) on one square: floor pipe (auto-connect
+-- mask), vertical (floor elbow oriented toward an adjacent floor pipe), or cap (fixed sprite).
 function PipeAutotile.refreshFloorPipeAt(x, y, z)
     if not isRenderingSide() then
         return
     end
 
-    local square = getSquare(x, y, z)
-    local pipe = getFloorPipeOnSquare(square)
-    if not pipe then
-        return
+    local floor, vertical = classifyOnSquare(getSquare(x, y, z))
+
+    -- Vertical: orient the floor elbow toward the first adjacent floor pipe; if there is none
+    -- (e.g. a vertical stacked on another vertical), show the plain vertical with no elbow.
+    if vertical then
+        local sprite = Constants.PIPE_VERTICAL_DEFAULT_SPRITE
+        for _, dir in ipairs(VDIRS) do
+            if getFloorPipeOnSquare(getSquare(x + dir.dx, y + dir.dy, z)) then
+                sprite = Constants.PIPE_VERTICAL_SPRITE[dir.name] or sprite
+                break
+            end
+        end
+        applySprite(vertical, sprite)
     end
 
-    -- Risers keep their fixed (manual) sprite; they still count as a floor connection
-    -- for neighbouring pipes (handled in getFloorPipeOnSquare), but we never repaint them.
-    local modData = pipe.getModData and pipe:getModData() or nil
-    if modData and modData[Constants.PIPE_RISER_MODDATA_KEY] == true then
-        return
-    end
-
-    local mask = PipeAutotile.computeMask(x, y, z)
-    local sprite
-    if mask == 0 then
-        -- Isolated: keep the orientation the player placed it in.
-        local placement = PipeObjectUtils.getPipePlacement(pipe)
-        sprite = placement.axis == Constants.PIPE_AXIS_NS
-            and Constants.PIPE_FLOOR_NORTH_SPRITE
-            or Constants.PIPE_FLOOR_WEST_SPRITE
-    else
-        sprite = MASK_SPRITE[mask]
-    end
-
-    if not sprite or spriteName(pipe) == sprite then
-        return
-    end
-
-    -- LOCAL cosmetic change only -- never transmitted. Other clients recompute their own sprite.
-    pcall(pipe.setSprite, pipe, sprite)
-    local square2 = pipe.getSquare and pipe:getSquare() or nil
-    if square2 and square2.RecalcProperties then
-        pcall(square2.RecalcProperties, square2)
+    -- Floor pipe: auto-connect mask (counts adjacent floor pipes and verticals).
+    if floor then
+        local mask = PipeAutotile.computeMask(x, y, z)
+        local sprite
+        if mask == 0 then
+            -- Isolated: keep the orientation the player placed it in.
+            local placement = PipeObjectUtils.getPipePlacement(floor)
+            sprite = placement.axis == Constants.PIPE_AXIS_NS
+                and Constants.PIPE_FLOOR_NORTH_SPRITE
+                or Constants.PIPE_FLOOR_WEST_SPRITE
+        else
+            sprite = MASK_SPRITE[mask]
+        end
+        applySprite(floor, sprite)
     end
 end
 

@@ -53,30 +53,45 @@ Constants.PIPE_AXIS_NS = "ns"
 -- floor EW, floor NS, wall EW and wall NS.
 -- Keep these IDs aligned with the sprites actually present in
 -- media/texturepacks/waterpipes.pack.
-Constants.PIPE_FLOOR_WEST_SPRITE = "waterpipes_01_8"   -- straight E/W
-Constants.PIPE_FLOOR_NORTH_SPRITE = "waterpipes_01_9"  -- straight N/S
-Constants.PIPE_WALL_WEST_SPRITE = "waterpipes_01_24"
-Constants.PIPE_WALL_NORTH_SPRITE = "waterpipes_01_25"
--- Floor auto-connect sprites (generated tileset). Directions: N=-y, E=+x, S=+y, W=-x.
-Constants.PIPE_FLOOR_CORNER_NE_SPRITE = "waterpipes_01_10"
-Constants.PIPE_FLOOR_CORNER_ES_SPRITE = "waterpipes_01_11"
-Constants.PIPE_FLOOR_CORNER_SW_SPRITE = "waterpipes_01_12"
-Constants.PIPE_FLOOR_CORNER_WN_SPRITE = "waterpipes_01_13"
-Constants.PIPE_FLOOR_T_NOW_SPRITE = "waterpipes_01_14"  -- T junction, no West arm
-Constants.PIPE_FLOOR_T_NOE_SPRITE = "waterpipes_01_15"  -- T junction, no East arm
-Constants.PIPE_FLOOR_T_NOS_SPRITE = "waterpipes_01_16"  -- T junction, no South arm
-Constants.PIPE_FLOOR_T_NON_SPRITE = "waterpipes_01_17"  -- T junction, no North arm
-Constants.PIPE_FLOOR_CROSS_SPRITE = "waterpipes_01_18"
-Constants.PIPE_FLOOR_END_W_SPRITE = "waterpipes_01_19"
-Constants.PIPE_FLOOR_END_N_SPRITE = "waterpipes_01_21"
-Constants.PIPE_FLOOR_END_E_SPRITE = "waterpipes_01_22"
-Constants.PIPE_FLOOR_END_S_SPRITE = "waterpipes_01_23"
+-- Floor connection sprites use vanilla industry_02 pipe tiles (idx 24-39, Material=Pipes).
+-- Sprite name = "industry_02_" .. index. Index->connection mapping confirmed in TileZed.
+Constants.PIPE_FLOOR_WEST_SPRITE = "industry_02_33"    -- R E/W (straight East-West)
+Constants.PIPE_FLOOR_NORTH_SPRITE = "industry_02_32"   -- R N/S (straight North-South)
+Constants.PIPE_WALL_WEST_SPRITE = "waterpipes_01_24"   -- riser still ours (vanilla vertical = idx 34, TODO)
+Constants.PIPE_WALL_NORTH_SPRITE = "waterpipes_01_25"  -- riser still ours (vanilla vertical = idx 34, TODO)
+-- Floor auto-connect sprites. Directions: N=-y, E=+x, S=+y, W=-x.
+Constants.PIPE_FLOOR_CORNER_NE_SPRITE = "industry_02_24"   -- L N/E
+Constants.PIPE_FLOOR_CORNER_ES_SPRITE = "industry_02_25"   -- L S/E
+Constants.PIPE_FLOOR_CORNER_SW_SPRITE = "industry_02_26"   -- L S/W
+Constants.PIPE_FLOOR_CORNER_WN_SPRITE = "industry_02_27"   -- L N/W
+Constants.PIPE_FLOOR_T_NOW_SPRITE = "industry_02_30"   -- T S/N/E (no West arm)
+Constants.PIPE_FLOOR_T_NOE_SPRITE = "industry_02_28"   -- T S/N/W (no East arm)
+Constants.PIPE_FLOOR_T_NOS_SPRITE = "industry_02_31"   -- T E/W/N (no South arm)
+Constants.PIPE_FLOOR_T_NON_SPRITE = "industry_02_29"   -- T S/E/W (no North arm)
+Constants.PIPE_FLOOR_CROSS_SPRITE = "industry_02_39"   -- cross
+Constants.PIPE_FLOOR_END_W_SPRITE = "industry_02_36"   -- R W (short, West cap)
+Constants.PIPE_FLOOR_END_N_SPRITE = "industry_02_35"   -- R N (short, North cap)
+Constants.PIPE_FLOOR_END_E_SPRITE = "industry_02_37"   -- R E (short, East cap)
+Constants.PIPE_FLOOR_END_S_SPRITE = "industry_02_38"   -- R S (short, South cap)
 -- Wall risers: floor stub toward an edge + vertical climb. PZ tiles only have N and W walls
 -- (S/E walls belong to the neighbouring tile), so risers exist only for the North and West walls.
 Constants.PIPE_WALL_RISER_N_SPRITE = "waterpipes_01_24"
 Constants.PIPE_WALL_RISER_W_SPRITE = "waterpipes_01_25"
 Constants.PIPE_RISER_MODDATA_KEY = "waterpipesRiser"
 Constants.PIPE_RISER_EDGE_MODDATA_KEY = "waterpipesRiserEdge"
+-- Vertical pipe (vanilla industry_02): a vertical run with a floor elbow, keyed by the direction
+-- of that floor connection. Occupies a whole tile (exclusive with floor pipes) and links the floor
+-- network to the tile directly above. The connecting direction is auto-chosen from the adjacent
+-- floor pipe; the sprite below is picked to match.
+Constants.PIPE_VERTICAL_SPRITE = {
+    E = "industry_02_76",
+    S = "industry_02_77",
+    N = "industry_02_78",
+    W = "industry_02_79",
+}
+-- A vertical with no adjacent floor pipe (e.g. two verticals stacked) shows the plain vertical pipe
+-- with no floor elbow.
+Constants.PIPE_VERTICAL_DEFAULT_SPRITE = "industry_02_34"
 Constants.ADAPTER_SOURCE_SPRITE = "carpentry_02_54"
 Constants.ADAPTER_SOURCE_HIDDEN_SPRITE = "waterpipes_01_20"
 Constants.MAX_FINITE_FLUID_CAPACITY = 9999
