@@ -11,6 +11,7 @@ require "WaterPipes/EndpointPlumbing"
 require "WaterPipes/EndpointObjects"
 require "WaterPipes/GeneratorFuel"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/PipeAutotile"
 
 local Adapter = WaterPipes.ContainerAdapter
 local Constants = WaterPipes.Constants
@@ -21,8 +22,17 @@ local EndpointObjects = WaterPipes.EndpointObjects
 local GeneratorFuel = WaterPipes.GeneratorFuel
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local PipeAutotile = WaterPipes.PipeAutotile
 local State = WaterPipes.State
 local System = WaterPipes.System
+
+-- Single-player has no client/server split. PipeAutotile is otherwise driven by client-side events
+-- (OnObjectAdded etc.), but those don't reliably fire on a freshly-built entity in SP, so the build
+-- path repaints directly -- only in SP. A dedicated/host server must NEVER change & sync the sprite
+-- (MP clients and the co-op host autotile locally via PipeAutotile's own events).
+local function isSinglePlayer()
+    return not (isClient and isClient()) and not (isServer and isServer())
+end
 
 local function mergeInto(target, source)
     for key, value in pairs(source) do
@@ -214,6 +224,9 @@ function System.registerPipeAt(x, y, z)
     State.registerPipe(x, y, z)
     System.rebuild()
     System.refreshPlumbedEndpoints()
+    if isSinglePlayer() then
+        PipeAutotile.refreshAround(x, y, z)
+    end
 end
 
 function System.unregisterPipeAt(x, y, z)
@@ -240,6 +253,9 @@ function System.unregisterPipeAt(x, y, z)
     -- ...and immediately refresh every object still attached anywhere in the (now smaller) network,
     -- so a break far down a long pipe chain is reflected at once (no stale "phantom water").
     System.refreshPlumbedEndpoints()
+    if isSinglePlayer() then
+        PipeAutotile.refreshAround(x, y, z)
+    end
 end
 
 function System.forceGlobalWaterShutoff()
