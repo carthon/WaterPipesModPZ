@@ -1,0 +1,7 @@
+{
+    "Sandbox_WaterPipes": "Tuberías de Agua",
+    "Sandbox_WaterPipes_GeneratorRefuelThreshold": "Umbral de auto-repostaje del generador (%)",
+    "Sandbox_WaterPipes_GeneratorRefuelThreshold_tooltip": "Un generador conectado extrae combustible de la red cuando su depósito baja de este porcentaje de su capacidad. Pon 0 para desactivar el auto-repostaje.",
+    "Sandbox_WaterPipes_GeneratorRefuelTarget": "Objetivo de auto-repostaje del generador (%)",
+    "Sandbox_WaterPipes_GeneratorRefuelTarget_tooltip": "Al auto-repostar, el generador se llena hasta este porcentaje de su depósito (100 = lleno)."
+}

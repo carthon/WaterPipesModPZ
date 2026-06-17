@@ -28,8 +28,10 @@ Constants.ENDPOINT_ORIGINAL_FLUID_KEY = "waterpipesEndpointOriginalFluid"
 -- Generator fuel consumers: a plumbed generator pulls Petrol from the network into its tank.
 Constants.GENERATOR_PLUMBED_MODDATA_KEY = "waterpipesGeneratorPlumbed"
 Constants.GENERATOR_FUEL_FLUID = "Petrol"
--- Only top the tank up once it drops below this fraction of max fuel (then fill to max).
-Constants.GENERATOR_REFUEL_THRESHOLD = 0.25
+-- Auto-refuel defaults (fractions of max fuel). Overridable PER-SAVE via Sandbox Options
+-- (WaterPipes.GeneratorRefuelThreshold / GeneratorRefuelTarget); these remain the fallback.
+Constants.GENERATOR_REFUEL_THRESHOLD = 0.25   -- start refuelling once fuel drops below this
+Constants.GENERATOR_REFUEL_TARGET = 1.0       -- fill the tank up to this fraction
 Constants.ADAPTER_SOURCE_MODDATA_KEY = "waterpipesAdapterSource"
 Constants.ADAPTER_SOURCE_ENDPOINT_X_KEY = "waterpipesAdapterEndpointX"
 Constants.ADAPTER_SOURCE_ENDPOINT_Y_KEY = "waterpipesAdapterEndpointY"
