@@ -1,0 +1,21 @@
+VERSION = 1,
+
+option WaterPipes.GeneratorRefuelThreshold
+{
+    type = integer,
+    min = 0,
+    max = 100,
+    default = 25,
+    page = WaterPipes,
+    translation = WaterPipes_GeneratorRefuelThreshold,
+}
+
+option WaterPipes.GeneratorRefuelTarget
+{
+    type = integer,
+    min = 0,
+    max = 100,
+    default = 100,
+    page = WaterPipes,
+    translation = WaterPipes_GeneratorRefuelTarget,
+}

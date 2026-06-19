@@ -86,7 +86,25 @@ function GeneratorFuel.unplumb(worldObject)
     return true
 end
 
--- Top the generator tank up from the network when it drops below the threshold.
+-- Per-save tunables (Sandbox Options), as fractions of max fuel; fall back to the constants.
+local function sandboxPercent(name, fallback)
+    local sv = SandboxVars and SandboxVars.WaterPipes
+    local v = sv and sv[name]
+    if type(v) == "number" then
+        return math.max(0, math.min(1, v / 100))
+    end
+    return fallback
+end
+
+local function refuelThreshold()
+    return sandboxPercent("GeneratorRefuelThreshold", Constants.GENERATOR_REFUEL_THRESHOLD)
+end
+
+local function refuelTarget()
+    return sandboxPercent("GeneratorRefuelTarget", Constants.GENERATOR_REFUEL_TARGET)
+end
+
+-- Top the generator tank up from the network when it drops below the threshold, up to the target.
 -- Only draws the configured fuel fluid (Petrol) from a matching single-fluid network.
 function GeneratorFuel.refresh(worldObject)
     if not GeneratorFuel.isPlumbed(worldObject) then
@@ -111,11 +129,11 @@ function GeneratorFuel.refresh(worldObject)
     end
 
     local fuel = worldObject:getFuel() or 0
-    if (fuel / maxFuel) >= Constants.GENERATOR_REFUEL_THRESHOLD then
+    if (fuel / maxFuel) >= refuelThreshold() then
         return false
     end
 
-    local need = maxFuel - fuel
+    local need = (refuelTarget() * maxFuel) - fuel
     if need <= 0 then
         return false
     end
