@@ -11,6 +11,7 @@ require "WaterPipes/EndpointPlumbing"
 require "WaterPipes/EndpointObjects"
 require "WaterPipes/GeneratorFuel"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
 
 local Adapter = WaterPipes.ContainerAdapter

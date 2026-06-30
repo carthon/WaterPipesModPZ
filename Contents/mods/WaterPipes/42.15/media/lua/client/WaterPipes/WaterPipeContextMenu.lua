@@ -11,6 +11,7 @@ require "WaterPipes/Logger"
 -- Client-side: loads PipeAutotile so it registers its OnObjectAdded/LoadGridsquare hooks and each
 -- client recomputes pipe connection sprites locally (the shape is never sent over the network).
 require "WaterPipes/PipeAutotile"
+require "WaterPipes/API"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.ContextMenu = WaterPipes.ContextMenu or {}
