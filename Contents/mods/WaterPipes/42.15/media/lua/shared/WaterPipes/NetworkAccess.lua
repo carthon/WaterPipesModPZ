@@ -309,6 +309,43 @@ function NetworkAccess.drawFluidAtSquare(originSquare, requiredFluidType, amount
     return drawn
 end
 
+-- Add up to `amount` of `fluidType` into the network reachable from `originSquare`. Only works if
+-- the network is empty or already holds the SAME fluid (never mixes). Returns the amount added.
+function NetworkAccess.fillFluidAtSquare(originSquare, fluidType, amount)
+    if not fluidType then
+        return 0
+    end
+
+    local summary = buildSummaryFromSquare(originSquare)
+    if not summary or summary.isMixed then
+        return 0
+    end
+
+    local headroom = (summary.totalCapacity or 0) - (summary.totalAmount or 0)
+    if headroom <= 0 then
+        return 0
+    end
+
+    -- A non-empty network must already hold the same fluid, otherwise we'd mix it.
+    if (summary.totalAmount or 0) > 0 and summary.fluidTypeName
+        and not fluidNameMatches(summary.fluidTypeName, fluidType) then
+        return 0
+    end
+
+    local added = math.min(math.max(amount or 0, 0), headroom)
+    if added <= 0 then
+        return 0
+    end
+
+    -- An empty network adopts the incoming fluid type.
+    if (summary.totalAmount or 0) <= 0 then
+        summary.fluidTypeName = fluidType
+    end
+
+    rebalanceSummary(summary, (summary.totalAmount or 0) + added)
+    return added
+end
+
 function NetworkAccess.isNetworkBackedEndpoint(endpointObject)
     return buildSummary(endpointObject) ~= nil
 end

@@ -20,6 +20,8 @@
 --   WaterPipesAPI.getWaterSummary(square)              -> table|nil   { amount, capacity, fluidType, isMixed }
 --   WaterPipesAPI.drawWater(square, fluidType, amount) -> number      (units actually drawn from the network)
 --        fluidType may be nil to draw whatever single fluid the network currently holds.
+--   WaterPipesAPI.fillWater(square, fluidType, amount) -> number      (units actually added to the network)
+--        only fills an empty network, or one already holding the same fluid (never mixes).
 --
 -- Example (a shower reading then consuming network water at its own tile):
 --     local sq = shower:getSquare()
@@ -86,6 +88,15 @@ function WaterPipesAPI.drawWater(square, fluidType, amount)
         end
     end
     return NetworkAccess.drawFluidAtSquare(square, fluidType, amount) or 0
+end
+
+-- Add up to `amount` of `fluidType` into the network at this square. Only fills an empty network,
+-- or one already holding the same fluid (never mixes). Returns the amount actually added.
+function WaterPipesAPI.fillWater(square, fluidType, amount)
+    if not square or not fluidType then
+        return 0
+    end
+    return NetworkAccess.fillFluidAtSquare(square, fluidType, amount) or 0
 end
 
 return WaterPipesAPI
