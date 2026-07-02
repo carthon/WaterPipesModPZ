@@ -1,4 +1,6 @@
 {
     "Tooltip_craft_WaterPipeDesc": "Pipes auto-connect into a network. Plumb sinks, showers and toilets, and link rain collectors, barrels and vessels to share water. Needs a Pipe Wrench.",
-    "Tooltip_craft_WaterPipeRiserDesc": "A vertical pipe cover for a wall. Connects floor pipes on both sides of the wall and links different floors. Needs a Pipe Wrench."
+    "Tooltip_craft_WaterPipeRiserDesc": "A vertical pipe cover for a wall. Connects floor pipes on both sides of the wall and links different floors. Needs a Pipe Wrench.",
+    "Tooltip_craft_WaterPipeHiddenDesc": "A concealed water pipe: recessed and plastered over so it stays out of sight, while still auto-connecting and carrying water like a normal pipe. Reveal it with 'Show pipe network'. Needs a Pipe Wrench and Plaster Powder.",
+    "Tooltip_craft_WaterPipeRiserHiddenDesc": "A concealed vertical pipe: plastered into the wall so it stays out of sight, while still linking floors and connecting pipes across the wall. Reveal it with 'Show pipe network'. Needs a Pipe Wrench and Plaster Powder."
 }

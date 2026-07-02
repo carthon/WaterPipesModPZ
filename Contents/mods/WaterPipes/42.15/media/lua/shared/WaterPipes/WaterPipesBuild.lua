@@ -74,7 +74,7 @@ end
 
 -- ===== OnCreate (server / single-player) =====
 
-local function markAndRegister(thumpable, surface, riser, edge)
+local function markAndRegister(thumpable, surface, riser, edge, hidden)
     if not thumpable then
         return
     end
@@ -86,6 +86,8 @@ local function markAndRegister(thumpable, surface, riser, edge)
         modData[Constants.PIPE_AXIS_MODDATA_KEY] = Constants.PIPE_AXIS_EW
         modData[Constants.PIPE_RISER_MODDATA_KEY] = riser and true or nil
         modData[Constants.PIPE_RISER_EDGE_MODDATA_KEY] = edge or nil
+        -- Concealed variant: baked in at build; clients render it with a transparent tile.
+        modData[Constants.PIPE_HIDDEN_MODDATA_KEY] = hidden and true or nil
     end
     if thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)
@@ -103,11 +105,21 @@ local function markAndRegister(thumpable, surface, riser, edge)
 end
 
 function Build.floorOnCreate(params)
-    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil)
+    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false)
 end
 
 function Build.riserOnCreate(params)
-    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_WALLCOVER, true, edgeFromFacing(params))
+    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_WALLCOVER, true, edgeFromFacing(params), false)
+end
+
+-- Concealed variants: identical placement/registration, but flagged hidden so each client renders
+-- them invisible. Network, auto-connect and verticality are unaffected (detection is modData-based).
+function Build.floorHiddenOnCreate(params)
+    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, true)
+end
+
+function Build.riserHiddenOnCreate(params)
+    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_WALLCOVER, true, edgeFromFacing(params), true)
 end
 
 -- Global alias used by the entity SpriteConfig OnCreate/OnIsValid dotted paths.

@@ -23,6 +23,7 @@ local GeneratorFuel = WaterPipes.GeneratorFuel
 local Logger = WaterPipes.Logger
 local NetworkAccess = WaterPipes.NetworkAccess
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local PipeAutotile = WaterPipes.PipeAutotile
 local ContextMenu = WaterPipes.ContextMenu
 ContextMenu.originalOnPlumbItem = ContextMenu.originalOnPlumbItem or ISWorldObjectContextMenu.onPlumbItem
 ContextMenu.DEBUG_ROOT_NAME = "Water Pipes"
@@ -68,6 +69,8 @@ end
 -- ===== Network visualization (right-click a pipe) =====
 -- red = pipes, green = fluid-providing objects (containers), blue = consumers (sinks/generators).
 ContextMenu.highlightedObjects = ContextMenu.highlightedObjects or {}
+-- Concealed pipes temporarily revealed for the duration of a network visualization.
+ContextMenu.revealedHiddenPipes = ContextMenu.revealedHiddenPipes or {}
 local HIGHLIGHT_TICKS = 480 -- ~8s at 60fps; auto-clears the highlight
 local COLOR_PIPE = { r = 0.95, g = 0.20, b = 0.20, a = 1.0 }      -- red
 local COLOR_SOURCE = { r = 0.20, g = 0.95, b = 0.30, a = 1.0 }    -- green: provides fluid
@@ -115,6 +118,14 @@ local function clearNetworkHighlight()
     end
     ContextMenu.highlightedObjects = {}
     ContextMenu.highlightTicksLeft = 0
+
+    -- Re-conceal any pipes we temporarily revealed for the visualization.
+    if PipeAutotile and PipeAutotile.rehidePipe then
+        for _, pipe in ipairs(ContextMenu.revealedHiddenPipes) do
+            PipeAutotile.rehidePipe(pipe)
+        end
+    end
+    ContextMenu.revealedHiddenPipes = {}
 end
 ContextMenu.clearNetworkHighlight = clearNetworkHighlight
 
@@ -148,9 +159,13 @@ function ContextMenu.showNetwork(playerObj, pipeObject)
 
     local pipeSquares, descriptors = NetworkAccess.getNetworkFromSquare(square)
 
-    -- Pipes (red).
+    -- Pipes (red). Concealed pipes are temporarily revealed so they show with their overlay.
     for _, sq in ipairs(pipeSquares or {}) do
         for _, pipe in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(sq)) do
+            if PipeAutotile and PipeAutotile.isPipeHidden(pipe) then
+                PipeAutotile.revealPipe(pipe)
+                ContextMenu.revealedHiddenPipes[#ContextMenu.revealedHiddenPipes + 1] = pipe
+            end
             trackAndHighlight(pipe, playerNum, COLOR_PIPE)
         end
     end

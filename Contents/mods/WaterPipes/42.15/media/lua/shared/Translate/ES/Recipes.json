@@ -1,5 +1,7 @@
 {
     "WaterPipe": "Tubería de agua",
     "WaterPipeRiser": "Tubería vertical",
+    "WaterPipeHidden": "Tubería de agua oculta",
+    "WaterPipeRiserHidden": "Tubería vertical oculta",
     "WaterPipes_ForgeMetalPipe": "Forjar una tubería de metal"
 }
