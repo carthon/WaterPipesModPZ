@@ -72,11 +72,14 @@ module WaterPipes
             isThumpable = false,
             OnCreate = WaterPipesBuild.floorHiddenOnCreate,
             OnIsValid = WaterPipesBuild.floorOnIsValid,
+            -- Menu/cursor icon only (a distinct pipe sprite): PZ requires each SpriteConfig face
+            -- sprite to be unique across entities, so it can't reuse WaterPipe's cross. The placed
+            -- object is repainted transparent by the autotile anyway.
             face S
             {
                 layer
                 {
-                    row = waterpipes_01_18,
+                    row = waterpipes_01_9,
                 }
             }
         }
@@ -102,18 +105,20 @@ module WaterPipes
             isThumpable = false,
             OnCreate = WaterPipesBuild.riserHiddenOnCreate,
             OnIsValid = WaterPipesBuild.riserOnIsValid,
+            -- Menu/cursor icons only (distinct pipe sprites); must be unique across entities so they
+            -- can't reuse the riser sprites 24/25. The placed object is repainted transparent anyway.
             face N
             {
                 layer
                 {
-                    row = waterpipes_01_24,
+                    row = waterpipes_01_16,
                 }
             }
             face W
             {
                 layer
                 {
-                    row = waterpipes_01_25,
+                    row = waterpipes_01_17,
                 }
             }
         }
