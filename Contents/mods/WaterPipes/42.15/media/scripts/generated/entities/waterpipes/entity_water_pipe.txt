@@ -90,7 +90,7 @@ module WaterPipes
             {
                 item 1 [Base.PipeWrench] mode:keep flags[Prop1],
                 item 1 [Base.MetalPipe],
-                item 1 [Base.BucketClayCement;Base.BucketCarvedClayCement;Base.BucketConcreteFull;Base.BucketCarvedConcreteFull;Base.ConcretePowder],
+                item 1 [Base.BucketClayCement;Base.BucketCarvedClayCement;Base.BucketConcreteFull;Base.BucketCarvedConcreteFull],
             }
         }
     }
@@ -127,7 +127,7 @@ module WaterPipes
             {
                 item 1 [Base.PipeWrench] mode:keep flags[Prop1],
                 item 1 [Base.MetalPipe],
-                item 1 [Base.BucketClayCement;Base.BucketCarvedClayCement;Base.BucketConcreteFull;Base.BucketCarvedConcreteFull;Base.ConcretePowder],
+                item 1 [Base.BucketClayCement;Base.BucketCarvedClayCement;Base.BucketConcreteFull;Base.BucketCarvedConcreteFull],
             }
         }
     }
