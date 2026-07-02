@@ -79,6 +79,11 @@ Constants.PIPE_WALL_RISER_N_SPRITE = "waterpipes_01_24"
 Constants.PIPE_WALL_RISER_W_SPRITE = "waterpipes_01_25"
 Constants.PIPE_RISER_MODDATA_KEY = "waterpipesRiser"
 Constants.PIPE_RISER_EDGE_MODDATA_KEY = "waterpipesRiserEdge"
+-- Concealed ("invisible") pipe variant: full network functionality, but rendered with a fully
+-- transparent tile client-side. The flag is baked in at build time (modData, synced) and never
+-- toggled at runtime, so no extra network sync is needed -- each client just paints it transparent.
+Constants.PIPE_HIDDEN_MODDATA_KEY = "waterpipesHidden"
+Constants.PIPE_HIDDEN_SPRITE = "waterpipes_01_20"   -- fully transparent tile in the tileset
 Constants.ADAPTER_SOURCE_SPRITE = "carpentry_02_54"
 Constants.ADAPTER_SOURCE_HIDDEN_SPRITE = "waterpipes_01_20"
 Constants.MAX_FINITE_FLUID_CAPACITY = 9999

@@ -1,5 +1,7 @@
 {
     "WaterPipe": "Water Pipe",
     "WaterPipeRiser": "Vertical Water Pipe",
+    "WaterPipeHidden": "Concealed Water Pipe",
+    "WaterPipeRiserHidden": "Concealed Vertical Pipe",
     "WaterPipes_ForgeMetalPipe": "Forge a Metal Pipe"
 }

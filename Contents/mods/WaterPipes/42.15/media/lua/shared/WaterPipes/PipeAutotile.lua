@@ -81,6 +81,39 @@ local function spriteName(worldObject)
     return nil
 end
 
+local function modDataOf(worldObject)
+    return worldObject and worldObject.getModData and worldObject:getModData() or nil
+end
+
+local function isHidden(worldObject)
+    local modData = modDataOf(worldObject)
+    return modData and modData[Constants.PIPE_HIDDEN_MODDATA_KEY] == true or false
+end
+
+local function isRiser(worldObject)
+    local modData = modDataOf(worldObject)
+    return modData and modData[Constants.PIPE_RISER_MODDATA_KEY] == true or false
+end
+
+-- Apply a sprite to a pipe only if it changed (client-cosmetic: never transmitted).
+local function setSpriteIfChanged(worldObject, sprite)
+    if not sprite or spriteName(worldObject) == sprite then
+        return
+    end
+    pcall(worldObject.setSprite, worldObject, sprite)
+    local square = worldObject.getSquare and worldObject:getSquare() or nil
+    if square and square.RecalcProperties then
+        pcall(square.RecalcProperties, square)
+    end
+end
+
+-- The fixed sprite a wall riser should show given its edge (N/W).
+local function riserSprite(worldObject)
+    local modData = modDataOf(worldObject)
+    local edge = modData and modData[Constants.PIPE_RISER_EDGE_MODDATA_KEY]
+    return edge == "W" and Constants.PIPE_WALL_RISER_W_SPRITE or Constants.PIPE_WALL_RISER_N_SPRITE
+end
+
 -- Set of wall-cover edges ("N"/"W") sitting on a square. PZ walls only exist on the N and W
 -- edges of a tile, so a cover always has edge N or W.
 local function getWallCoverEdgeSet(square)
@@ -142,6 +175,27 @@ function PipeAutotile.computeMask(x, y, z)
     return mask
 end
 
+-- The connecting floor sprite the pipe at (x,y,z) should show based on its neighbours. Isolated
+-- pipes keep the orientation the player placed them in.
+local function floorConnectionSprite(pipe, x, y, z)
+    local mask = PipeAutotile.computeMask(x, y, z)
+    if mask == 0 then
+        local placement = PipeObjectUtils.getPipePlacement(pipe)
+        return placement.axis == Constants.PIPE_AXIS_NS
+            and Constants.PIPE_FLOOR_NORTH_SPRITE
+            or Constants.PIPE_FLOOR_WEST_SPRITE
+    end
+    return MASK_SPRITE[mask]
+end
+
+-- A wall riser is never autotiled: paint it transparent when concealed, else its fixed edge sprite.
+local function refreshRiserVisibility(pipe)
+    if not isRiser(pipe) then
+        return
+    end
+    setSpriteIfChanged(pipe, isHidden(pipe) and Constants.PIPE_HIDDEN_SPRITE or riserSprite(pipe))
+end
+
 -- Recompute and apply the connecting sprite of the floor pipe on one square.
 function PipeAutotile.refreshFloorPipeAt(x, y, z)
     if not isRenderingSide() then
@@ -154,39 +208,25 @@ function PipeAutotile.refreshFloorPipeAt(x, y, z)
         return
     end
 
+    -- Concealed floor pipes render transparent, but still count as a floor connection for
+    -- neighbours (getFloorPipeOnSquare finds them by modData, not by sprite).
+    if isHidden(pipe) then
+        setSpriteIfChanged(pipe, Constants.PIPE_HIDDEN_SPRITE)
+        return
+    end
+
     -- Risers keep their fixed (manual) sprite; they still count as a floor connection
     -- for neighbouring pipes (handled in getFloorPipeOnSquare), but we never repaint them.
-    local modData = pipe.getModData and pipe:getModData() or nil
-    if modData and modData[Constants.PIPE_RISER_MODDATA_KEY] == true then
+    if isRiser(pipe) then
         return
     end
 
-    local mask = PipeAutotile.computeMask(x, y, z)
-    local sprite
-    if mask == 0 then
-        -- Isolated: keep the orientation the player placed it in.
-        local placement = PipeObjectUtils.getPipePlacement(pipe)
-        sprite = placement.axis == Constants.PIPE_AXIS_NS
-            and Constants.PIPE_FLOOR_NORTH_SPRITE
-            or Constants.PIPE_FLOOR_WEST_SPRITE
-    else
-        sprite = MASK_SPRITE[mask]
-    end
-
-    if not sprite or spriteName(pipe) == sprite then
-        return
-    end
-
-    -- LOCAL cosmetic change only -- never transmitted. Other clients recompute their own sprite.
-    pcall(pipe.setSprite, pipe, sprite)
-    local square2 = pipe.getSquare and pipe:getSquare() or nil
-    if square2 and square2.RecalcProperties then
-        pcall(square2.RecalcProperties, square2)
-    end
+    setSpriteIfChanged(pipe, floorConnectionSprite(pipe, x, y, z))
 end
 
 -- Refresh a square, its 4 cardinal neighbours, and the floors above/below (a wall cover can
--- affect floor pipes on either side of its wall and on the floor it climbs to).
+-- affect floor pipes on either side of its wall and on the floor it climbs to). Also fixes the
+-- visibility of any riser on the centre square (risers aren't touched by the floor autotile).
 function PipeAutotile.refreshAround(x, y, z)
     if not isRenderingSide() then
         return
@@ -195,6 +235,13 @@ function PipeAutotile.refreshAround(x, y, z)
         PipeAutotile.refreshFloorPipeAt(x, y, z + dz)
         for _, dir in ipairs(DIRS) do
             PipeAutotile.refreshFloorPipeAt(x + dir.dx, y + dir.dy, z + dz)
+        end
+    end
+
+    local center = getSquare(x, y, z)
+    if center then
+        for _, pipe in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(center)) do
+            refreshRiserVisibility(pipe)
         end
     end
 end
@@ -206,6 +253,47 @@ function PipeAutotile.refreshList(pipes)
     end
     for _, pipeData in pairs(pipes) do
         PipeAutotile.refreshFloorPipeAt(pipeData.x, pipeData.y, pipeData.z)
+        local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
+        if square then
+            for _, pipe in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+                refreshRiserVisibility(pipe)
+            end
+        end
+    end
+end
+
+-- ===== Concealed-pipe visibility (used by the network visualization) =====
+
+function PipeAutotile.isPipeHidden(pipe)
+    return isHidden(pipe)
+end
+
+-- Temporarily show a concealed pipe's REAL sprite (does NOT clear the hidden flag). Used so the
+-- "Show pipe network" overlay has something to outline and the pipe is briefly visible.
+function PipeAutotile.revealPipe(pipe)
+    if not pipe then
+        return
+    end
+    local square = pipe.getSquare and pipe:getSquare() or nil
+    if not square then
+        return
+    end
+    if isRiser(pipe) then
+        setSpriteIfChanged(pipe, riserSprite(pipe))
+    else
+        setSpriteIfChanged(pipe, floorConnectionSprite(pipe, square:getX(), square:getY(), square:getZ()))
+    end
+end
+
+-- Restore a concealed pipe to transparent after the visualization ends.
+function PipeAutotile.rehidePipe(pipe)
+    if not isHidden(pipe) then
+        return
+    end
+    if isRiser(pipe) then
+        refreshRiserVisibility(pipe)
+    else
+        setSpriteIfChanged(pipe, Constants.PIPE_HIDDEN_SPRITE)
     end
 end
 
@@ -251,12 +339,16 @@ local function onTickProcessPending()
     end
 end
 
--- Chunk streamed in / joined a server: repaint any pipe on the loaded square.
+-- Chunk streamed in / joined a server: repaint any pipe on the loaded square (floor connection +
+-- riser/concealed visibility).
 local function onLoadGridsquare(square)
     if not isRenderingSide() or not square then
         return
     end
     PipeAutotile.refreshFloorPipeAt(square:getX(), square:getY(), square:getZ())
+    for _, pipe in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+        refreshRiserVisibility(pipe)
+    end
 end
 
 if Events then

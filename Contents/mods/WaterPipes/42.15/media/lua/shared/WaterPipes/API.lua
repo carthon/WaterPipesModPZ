@@ -13,6 +13,11 @@
 -- (typically your fixture's OWN tile, with a pipe built on it). The network reachable
 -- from that pipe is what gets read/drawn.
 --
+-- Multiplayer: the read functions (hasNetwork / getWaterAmount / getWaterSummary) are safe on
+-- any side. The WRITE functions (drawWater / fillWater) mutate network containers, so they only
+-- run on the AUTHORITATIVE side (server or single-player) and return 0 on a plain MP client --
+-- call them server-side (a client write would desync and be overwritten on the next sync).
+--
 -- API:
 --   WaterPipesAPI.VERSION                              -> integer (bumped on breaking changes)
 --   WaterPipesAPI.hasNetwork(square)                   -> bool        (a pipe network is reachable)
@@ -34,6 +39,16 @@ require "WaterPipes/NetworkAccess"
 
 WaterPipes = WaterPipes or {}
 local NetworkAccess = WaterPipes.NetworkAccess
+
+-- Fluid mutations must only run on the authoritative side (server or single-player). A plain MP
+-- client writing to a FluidContainer would desync and be overwritten on the next server sync, so
+-- the write functions below no-op there. Mirrors the guard used across the mod.
+local function isAuthoritative()
+    if isServer and isServer() then
+        return true
+    end
+    return not (isClient and isClient())
+end
 
 WaterPipesAPI = WaterPipesAPI or {}
 WaterPipesAPI.VERSION = 1
@@ -77,7 +92,7 @@ end
 -- match the network's fluid; pass nil to draw whatever single fluid it currently holds.
 -- Returns the amount actually drawn.
 function WaterPipesAPI.drawWater(square, fluidType, amount)
-    if not square then
+    if not square or not isAuthoritative() then
         return 0
     end
     if fluidType == nil then
@@ -93,7 +108,7 @@ end
 -- Add up to `amount` of `fluidType` into the network at this square. Only fills an empty network,
 -- or one already holding the same fluid (never mixes). Returns the amount actually added.
 function WaterPipesAPI.fillWater(square, fluidType, amount)
-    if not square or not fluidType then
+    if not square or not fluidType or not isAuthoritative() then
         return 0
     end
     return NetworkAccess.fillFluidAtSquare(square, fluidType, amount) or 0

@@ -64,4 +64,71 @@ module WaterPipes
             }
         }
     }
+
+    entity WaterPipeHidden
+    {
+        component SpriteConfig
+        {
+            isThumpable = false,
+            OnCreate = WaterPipesBuild.floorHiddenOnCreate,
+            OnIsValid = WaterPipesBuild.floorOnIsValid,
+            face S
+            {
+                layer
+                {
+                    row = waterpipes_01_9,
+                }
+            }
+        }
+        component CraftRecipe
+        {
+            timedAction = BuildLowNoTool,
+            time = 100,
+            category = Piping,
+            Tooltip = Tooltip_craft_WaterPipeHiddenDesc,
+            inputs
+            {
+                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
+                item 1 [Base.MetalPipe],
+                item 1 [Base.BucketClayCement;Base.BucketCarvedClayCement;Base.BucketConcreteFull;Base.BucketCarvedConcreteFull],
+            }
+        }
+    }
+
+    entity WaterPipeRiserHidden
+    {
+        component SpriteConfig
+        {
+            isThumpable = false,
+            OnCreate = WaterPipesBuild.riserHiddenOnCreate,
+            OnIsValid = WaterPipesBuild.riserOnIsValid,
+            face N
+            {
+                layer
+                {
+                    row = waterpipes_01_16,
+                }
+            }
+            face W
+            {
+                layer
+                {
+                    row = waterpipes_01_17,
+                }
+            }
+        }
+        component CraftRecipe
+        {
+            timedAction = BuildWallNoTool,
+            time = 100,
+            category = Piping,
+            Tooltip = Tooltip_craft_WaterPipeRiserHiddenDesc,
+            inputs
+            {
+                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
+                item 1 [Base.MetalPipe],
+                item 1 [Base.BucketClayCement;Base.BucketCarvedClayCement;Base.BucketConcreteFull;Base.BucketCarvedConcreteFull],
+            }
+        }
+    }
 }
