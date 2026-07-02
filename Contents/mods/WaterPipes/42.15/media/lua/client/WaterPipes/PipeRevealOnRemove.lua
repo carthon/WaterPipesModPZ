@@ -34,10 +34,14 @@ local function safeReconceal(pipe)
 end
 
 local function concealAll()
+    local any = false
     for pipe in pairs(revealed) do
         safeReconceal(pipe)
+        any = true
     end
-    revealed = {}
+    if any then
+        revealed = {}
+    end
 end
 
 local function revealAround(playerObj)
@@ -89,7 +93,7 @@ local function onTick()
 
     if playerObj and isRemovalCursor(drag) then
         revealAround(playerObj)
-    elseif next(revealed) ~= nil then
+    else
         concealAll()
     end
 end
