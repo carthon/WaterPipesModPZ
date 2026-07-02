@@ -90,7 +90,7 @@ module WaterPipes
             {
                 item 1 [Base.PipeWrench] mode:keep flags[Prop1],
                 item 1 [Base.MetalPipe],
-                item 1 [Base.PlasterPowder],
+                item 1 [Base.BucketClayCement;Base.BucketCarvedClayCement;Base.PlasterPowder],
                 -fluid 2.0 categories[Water] mode:mixture,
             }
         }
@@ -128,7 +128,7 @@ module WaterPipes
             {
                 item 1 [Base.PipeWrench] mode:keep flags[Prop1],
                 item 1 [Base.MetalPipe],
-                item 1 [Base.PlasterPowder],
+                item 1 [Base.BucketClayCement;Base.BucketCarvedClayCement;Base.PlasterPowder],
                 -fluid 2.0 categories[Water] mode:mixture,
             }
         }
