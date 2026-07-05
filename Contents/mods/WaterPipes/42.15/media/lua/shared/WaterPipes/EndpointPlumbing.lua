@@ -262,6 +262,23 @@ local function endpointHasOwnFluidContainer(worldObject)
     return false
 end
 
+-- "External-water" fixtures (no own FluidContainer, e.g. Take A Bath And Shower) are classified ONCE
+-- at plumb time and remembered in modData. We must NOT re-derive it from live capacity per tick:
+-- those mods add a TEMPORARY water container while the fixture is in use, which would otherwise flip
+-- the classification mid-use and make them report "not connected".
+local EXTERNAL_FIXTURE_KEY = "waterpipesExternalFixture"
+
+local function isExternalWaterFixture(worldObject)
+    local modData = getModData(worldObject)
+    return modData and modData[EXTERNAL_FIXTURE_KEY] == true or false
+end
+
+-- Whether the engine should serve this fixture from our own-container mirror (vanilla sinks) vs.
+-- leaving it "connected" for an external-water mod to handle (canBeWaterPiped stays false).
+local function shouldMirrorFixture(worldObject)
+    return not isExternalWaterFixture(worldObject)
+end
+
 function EndpointPlumbing.isPlumbed(worldObject)
     local modData = getModData(worldObject)
     return modData and modData[Constants.PLUMBED_ENDPOINT_MODDATA_KEY] == true or false
@@ -307,7 +324,7 @@ function EndpointPlumbing.refreshEndpointSource(worldObject)
     -- network mirror; re-asserted every tick (mains water would creep back otherwise). External-water
     -- fixtures with no own container (e.g. Take A Bath And Shower) must stay FALSE here too -- that mod
     -- reads the same modData as "connected". See EndpointPlumbing.plumb for the full rationale.
-    setCanBeWaterPiped(worldObject, endpointHasOwnFluidContainer(worldObject))
+    setCanBeWaterPiped(worldObject, shouldMirrorFixture(worldObject))
     -- Own-container path: the engine reads water from the endpoint's own FluidContainer.
     setUsesExternalWaterSource(worldObject, false)
     return FluidSource.syncForEndpoint(worldObject)
@@ -331,6 +348,9 @@ function EndpointPlumbing.plumb(worldObject)
     local modData = getModData(worldObject)
     if modData then
         modData[Constants.PLUMBED_ENDPOINT_MODDATA_KEY] = true
+        -- Classify now (a fixture with no own container is external-water), before any external mod
+        -- adds a temporary water container while it's in use.
+        modData[EXTERNAL_FIXTURE_KEY] = (not endpointHasOwnFluidContainer(worldObject)) or nil
     end
 
     Logger.log("Plumbing endpoint to pipe network: " .. describeObject(worldObject))
@@ -342,7 +362,7 @@ function EndpointPlumbing.plumb(worldObject)
     -- external-water fixtures with NO own container (e.g. Take A Bath And Shower) must stay FALSE:
     -- that mod reads the same modData as "not connected" (its check is `waterSources==0 and
     -- canBeWaterPiped`). We still charge the network on use via consumption reconciliation.
-    setCanBeWaterPiped(worldObject, endpointHasOwnFluidContainer(worldObject))
+    setCanBeWaterPiped(worldObject, shouldMirrorFixture(worldObject))
     setUsesExternalWaterSource(worldObject, false)
     EndpointPlumbing.refreshEndpointSource(worldObject)
 
@@ -364,6 +384,7 @@ function EndpointPlumbing.unplumb(worldObject)
     if modData then
         modData[Constants.PLUMBED_ENDPOINT_MODDATA_KEY] = nil
         modData[Constants.PLUMBED_ENDPOINT_SOURCE_MODDATA_KEY] = nil
+        modData[EXTERNAL_FIXTURE_KEY] = nil
     end
 
     -- Restore the fixture's pre-plumb fluid state AND water-source flags (capacity/contents +
