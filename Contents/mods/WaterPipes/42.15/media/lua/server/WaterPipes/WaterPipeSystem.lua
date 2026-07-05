@@ -11,6 +11,7 @@ require "WaterPipes/EndpointPlumbing"
 require "WaterPipes/EndpointObjects"
 require "WaterPipes/GeneratorFuel"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/Purifier"
 require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
 
@@ -24,6 +25,7 @@ local GeneratorFuel = WaterPipes.GeneratorFuel
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local PipeAutotile = WaterPipes.PipeAutotile
+local Purifier = WaterPipes.Purifier
 local State = WaterPipes.State
 local System = WaterPipes.System
 
@@ -161,9 +163,33 @@ function System.redistributeWater()
             end
         end
 
+        local hasTainted = false
+        local onlyWaterTypes = true
         for fluidTypeName in pairs(totalByFluidType) do
             fluidTypeCount = fluidTypeCount + 1
             networkFluidType = fluidTypeName
+            if fluidTypeName == "TaintedWater" then
+                hasTainted = true
+            elseif fluidTypeName ~= "Water" then
+                onlyWaterTypes = false
+            end
+        end
+
+        -- Purification (pool model): a working purifier anywhere in the component turns its tainted
+        -- water clean. Applies to any water-only network holding TaintedWater -- a single container, or
+        -- a transient Water+TaintedWater mix -- converging it to clean Water. Non-water fluids (Petrol,
+        -- ...) are never purified, so a network carrying them is left untouched. Runs in the server
+        -- tick (authoritative); writeDescriptorWaterAmount syncs the container to clients.
+        if hasTainted and onlyWaterTypes then
+            local purifier = Purifier.componentWorkingPurifier(component)
+            if purifier then
+                for _, descriptor in ipairs(containers) do
+                    Adapter.writeDescriptorWaterAmount(descriptor, math.max(descriptor.waterAmount or 0, 0), "Water")
+                end
+                networkFluidType = "Water"
+                fluidTypeCount = 1
+                Purifier.consumeForConversion(purifier)
+            end
         end
 
         if fluidTypeCount <= 1 and #containers > 1 and totalCapacity > 0 then
@@ -432,6 +458,20 @@ local function onClientCommand(module, command, player, args)
             GeneratorFuel.plumb(generator)
         else
             GeneratorFuel.unplumb(generator)
+        end
+        return
+    end
+
+    -- Filter-cartridge replacement: the client already consumed the cartridge from its own inventory;
+    -- the server just refills the purifier's charges (authoritative world-object modData).
+    if command == "insertPurifierCartridge" then
+        local square = resolveCommandSquare(args)
+        local purifier = square and Purifier.findOnSquare(square)
+        if purifier then
+            Purifier.insertCartridge(purifier)
+        else
+            Logger.warn("Purifier cartridge command: no purifier at "
+                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
         end
         return
     end

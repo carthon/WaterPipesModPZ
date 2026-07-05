@@ -6,6 +6,7 @@ require "WaterPipes/ISPlumbWaterPipeEndpoint"
 require "WaterPipes/ISPlumbWaterPipeGenerator"
 require "WaterPipes/GeneratorFuel"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/Purifier"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/Logger"
 -- Client-side: loads PipeAutotile so it registers its OnObjectAdded/LoadGridsquare hooks and each
@@ -23,6 +24,7 @@ local GeneratorFuel = WaterPipes.GeneratorFuel
 local Logger = WaterPipes.Logger
 local NetworkAccess = WaterPipes.NetworkAccess
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local Purifier = WaterPipes.Purifier
 local PipeAutotile = WaterPipes.PipeAutotile
 local ContextMenu = WaterPipes.ContextMenu
 ContextMenu.originalOnPlumbItem = ContextMenu.originalOnPlumbItem or ISWorldObjectContextMenu.onPlumbItem
@@ -92,6 +94,81 @@ local function findPipeInWorldObjects(worldobjects)
         end
     end
     return nil
+end
+
+-- ===== Purifier tiles (status readout + filter-cartridge replacement) =====
+
+local function findPurifierInWorldObjects(worldobjects)
+    if not worldobjects then
+        return nil
+    end
+    for _, worldObject in ipairs(worldobjects) do
+        if Purifier.isPurifier(worldObject) then
+            return worldObject
+        end
+        if worldObject and worldObject.getSquare and worldObject:getSquare() then
+            local purifier = Purifier.findOnSquare(worldObject:getSquare())
+            if purifier then
+                return purifier
+            end
+        end
+    end
+    return nil
+end
+
+local function playerHasCartridge(playerObj)
+    local inventory = playerObj and playerObj:getInventory()
+    return inventory and inventory:containsTypeRecurse(Constants.PURIFIER_CARTRIDGE_ITEM_TYPE) or false
+end
+
+-- A one-line "<tier name>: <state>" readout shown (greyed) at the top of a purifier's menu.
+local function purifierStatusText(purifierObject)
+    local tier = Purifier.getTier(purifierObject)
+    local name = getText("IGUI_WaterPipesPurifier_" .. tostring(tier))
+    if tier == Constants.PURIFIER_TIER_FILTER then
+        if Purifier.getCharges(purifierObject) > 0 then
+            return getText("IGUI_WaterPipesPurifierCharges", name, Purifier.getCharges(purifierObject), Constants.PURIFIER_FILTER_MAX_CHARGES)
+        end
+        return getText("IGUI_WaterPipesPurifierNoCartridge", name)
+    elseif tier == Constants.PURIFIER_TIER_FIRE then
+        return getText(Purifier.isWorking(purifierObject) and "IGUI_WaterPipesPurifierHeatOk" or "IGUI_WaterPipesPurifierNoHeat", name)
+    elseif tier == Constants.PURIFIER_TIER_ELECTRIC then
+        return getText(Purifier.isWorking(purifierObject) and "IGUI_WaterPipesPurifierPowered" or "IGUI_WaterPipesPurifierNoPower", name)
+    end
+    return name
+end
+
+-- Client consumes the cartridge from its own inventory, then asks the server to refill the charges
+-- (world-object modData is server-authoritative). Mirrors how plumb splits client action / server state.
+function ContextMenu.replacePurifierCartridge(playerObj, purifierObject)
+    if not playerObj or not purifierObject or not purifierObject.getSquare then
+        return
+    end
+    local inventory = playerObj:getInventory()
+    local cartridge = inventory and inventory:getFirstTypeRecurse(Constants.PURIFIER_CARTRIDGE_ITEM_TYPE)
+    local square = purifierObject:getSquare()
+    if not cartridge or not square then
+        return
+    end
+
+    local container = cartridge.getContainer and cartridge:getContainer() or inventory
+    container:Remove(cartridge)
+
+    sendClientCommand(playerObj, "WaterPipes", "insertPurifierCartridge",
+        { x = square:getX(), y = square:getY(), z = square:getZ() })
+
+    if HaloTextHelper then
+        HaloTextHelper.addGoodText(playerObj, getText("IGUI_WaterPipesCartridgeInstalled"))
+    end
+end
+
+local function addPurifierOptions(context, playerObj, purifierObject)
+    local statusOption = context:addOption(purifierStatusText(purifierObject), nil, nil)
+    statusOption.notAvailable = true
+
+    if Purifier.getTier(purifierObject) == Constants.PURIFIER_TIER_FILTER and playerHasCartridge(playerObj) then
+        context:addOption(getText("ContextMenu_WaterPipesReplaceCartridge"), playerObj, ContextMenu.replacePurifierCartridge, purifierObject)
+    end
 end
 
 local function setHighlight(worldObject, playerNum, on, color)
@@ -640,6 +717,11 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
 
     if hasHideNetworkOption then
         context:addOption(getText("ContextMenu_WaterPipesHideNetwork"), playerObj, ContextMenu.hideNetwork)
+    end
+
+    local purifierObject = findPurifierInWorldObjects(worldobjects)
+    if purifierObject then
+        addPurifierOptions(context, playerObj, purifierObject)
     end
 
     if isDebugActive() then

@@ -1,5 +1,15 @@
 {
     "IGUI_WaterPipesGenerator": "Generator",
     "IGUI_WaterPipesFixture": "Water Fixture",
-    "IGUI_CraftCategory_Piping": "Piping"
+    "IGUI_CraftCategory_Piping": "Piping",
+    "IGUI_WaterPipesPurifier_filter": "Filter purifier",
+    "IGUI_WaterPipesPurifier_fire": "Fire distiller",
+    "IGUI_WaterPipesPurifier_electric": "Electric distiller",
+    "IGUI_WaterPipesPurifierCharges": "%1: %2/%3 filter charges",
+    "IGUI_WaterPipesPurifierNoCartridge": "%1: no cartridge (idle)",
+    "IGUI_WaterPipesPurifierHeatOk": "%1: lit heat source nearby",
+    "IGUI_WaterPipesPurifierNoHeat": "%1: needs a lit heat source",
+    "IGUI_WaterPipesPurifierPowered": "%1: powered",
+    "IGUI_WaterPipesPurifierNoPower": "%1: no power (idle)",
+    "IGUI_WaterPipesCartridgeInstalled": "Filter cartridge installed"
 }

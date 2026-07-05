@@ -3,5 +3,9 @@
     "WaterPipeRiser": "Vertical Water Pipe",
     "WaterPipeHidden": "Concealed Water Pipe",
     "WaterPipeRiserHidden": "Concealed Vertical Pipe",
+    "WaterPurifierFilter": "Water Purifier (Filter)",
+    "WaterPurifierFire": "Water Distiller (Fire)",
+    "WaterPurifierElectric": "Water Distiller (Electric)",
+    "WaterPipes_CraftFilterCartridge": "Craft Water Filter Cartridge",
     "WaterPipes_ForgeMetalPipe": "Forge a Metal Pipe"
 }

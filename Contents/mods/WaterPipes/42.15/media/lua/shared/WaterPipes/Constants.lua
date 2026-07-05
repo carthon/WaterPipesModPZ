@@ -84,6 +84,24 @@ Constants.PIPE_RISER_EDGE_MODDATA_KEY = "waterpipesRiserEdge"
 -- toggled at runtime, so no extra network sync is needed -- each client just paints it transparent.
 Constants.PIPE_HIDDEN_MODDATA_KEY = "waterpipesHidden"
 Constants.PIPE_HIDDEN_SPRITE = "waterpipes_01_20"   -- fully transparent tile in the tileset
+-- Purifier pipe nodes: a purifier is a floor pipe (part of the network like any pipe) that turns the
+-- whole connected network's tainted water clean while it is "working". Three tiers, differing only in
+-- what makes them work (see Purifier.lua): filter (spends a cartridge), fire (needs an adjacent lit
+-- heat source), electric (needs power). The tier is baked in at build time (modData, synced).
+Constants.PURIFIER_MODDATA_KEY = "waterpipesPurifier"       -- value = tier string below
+Constants.PURIFIER_TIER_FILTER = "filter"
+Constants.PURIFIER_TIER_FIRE = "fire"
+Constants.PURIFIER_TIER_ELECTRIC = "electric"
+Constants.PURIFIER_FILTER_CHARGES_KEY = "waterpipesFilterCharges"
+Constants.PURIFIER_FILTER_MAX_CHARGES = 10                  -- charges a fresh cartridge provides
+Constants.PURIFIER_CARTRIDGE_ITEM_TYPE = "Base.WaterFilterCartridge"
+-- Placeholder sprites until the artist delivers dedicated purifier tiles (reserved atlas cells
+-- 26/27/28). These are existing visible pack sprites so the tiles can be built/tested now; purifiers
+-- are excluded from autotiling so they keep this fixed sprite. Swap these three + the entity face
+-- rows in entity_water_pipe.txt when the real art is packed.
+Constants.PURIFIER_FILTER_SPRITE = "waterpipes_01_10"
+Constants.PURIFIER_FIRE_SPRITE = "waterpipes_01_11"
+Constants.PURIFIER_ELECTRIC_SPRITE = "waterpipes_01_12"
 Constants.ADAPTER_SOURCE_SPRITE = "carpentry_02_54"
 Constants.ADAPTER_SOURCE_HIDDEN_SPRITE = "waterpipes_01_20"
 Constants.MAX_FINITE_FLUID_CAPACITY = 9999

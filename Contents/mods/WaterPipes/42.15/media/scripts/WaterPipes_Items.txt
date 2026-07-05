@@ -1,3 +1,27 @@
-module WaterPipes
+module Base
 {
+    item WaterFilterCartridge
+    {
+        DisplayCategory = Material,
+        Type = Normal,
+        DisplayName = Water Filter Cartridge,
+        Weight = 0.4,
+        Icon = Charcoal,
+        Tooltip = Tooltip_WaterFilterCartridge,
+    }
+
+    craftRecipe WaterPipes_CraftFilterCartridge
+    {
+        time = 120,
+        category = Piping,
+        inputs
+        {
+            item 2 tags[base:charcoal],
+            item 2 [Base.RippedSheets],
+        }
+        outputs
+        {
+            item 1 Base.WaterFilterCartridge,
+        }
+    }
 }

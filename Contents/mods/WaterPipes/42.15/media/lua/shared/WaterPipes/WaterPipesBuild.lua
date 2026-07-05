@@ -74,7 +74,7 @@ end
 
 -- ===== OnCreate (server / single-player) =====
 
-local function markAndRegister(thumpable, surface, riser, edge, hidden)
+local function markAndRegister(thumpable, surface, riser, edge, hidden, purifierTier)
     if not thumpable then
         return
     end
@@ -88,6 +88,13 @@ local function markAndRegister(thumpable, surface, riser, edge, hidden)
         modData[Constants.PIPE_RISER_EDGE_MODDATA_KEY] = edge or nil
         -- Concealed variant: baked in at build; clients render it with a transparent tile.
         modData[Constants.PIPE_HIDDEN_MODDATA_KEY] = hidden and true or nil
+        -- Purifier variant: a floor pipe that cleans the network's tainted water while it works.
+        modData[Constants.PURIFIER_MODDATA_KEY] = purifierTier or nil
+        -- The filter tier is built with its first cartridge installed (part of the recipe), so it
+        -- works out of the box; replacements are inserted later via the context menu.
+        if purifierTier == Constants.PURIFIER_TIER_FILTER then
+            modData[Constants.PURIFIER_FILTER_CHARGES_KEY] = Constants.PURIFIER_FILTER_MAX_CHARGES
+        end
     end
     if thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)
@@ -120,6 +127,20 @@ end
 
 function Build.riserHiddenOnCreate(params)
     markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_WALLCOVER, true, edgeFromFacing(params), true)
+end
+
+-- Purifier variants: floor pipes (auto-connect + carry water like any pipe) tagged with a tier so
+-- the network tick knows to clean tainted water through them. Never hidden, never risers.
+function Build.filterPurifierOnCreate(params)
+    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, Constants.PURIFIER_TIER_FILTER)
+end
+
+function Build.firePurifierOnCreate(params)
+    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, Constants.PURIFIER_TIER_FIRE)
+end
+
+function Build.electricPurifierOnCreate(params)
+    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, Constants.PURIFIER_TIER_ELECTRIC)
 end
 
 -- Global alias used by the entity SpriteConfig OnCreate/OnIsValid dotted paths.

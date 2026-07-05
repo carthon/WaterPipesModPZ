@@ -131,4 +131,96 @@ module WaterPipes
             }
         }
     }
+
+    entity WaterPurifierFilter
+    {
+        component SpriteConfig
+        {
+            isThumpable = false,
+            OnCreate = WaterPipesBuild.filterPurifierOnCreate,
+            OnIsValid = WaterPipesBuild.floorOnIsValid,
+            face S
+            {
+                layer
+                {
+                    row = waterpipes_01_10,
+                }
+            }
+        }
+        component CraftRecipe
+        {
+            timedAction = BuildLowNoTool,
+            time = 120,
+            category = Piping,
+            Tooltip = Tooltip_craft_WaterPurifierFilterDesc,
+            inputs
+            {
+                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
+                item 2 [Base.MetalPipe],
+                item 2 [Base.RippedSheets],
+            }
+        }
+    }
+
+    entity WaterPurifierFire
+    {
+        component SpriteConfig
+        {
+            isThumpable = false,
+            OnCreate = WaterPipesBuild.firePurifierOnCreate,
+            OnIsValid = WaterPipesBuild.floorOnIsValid,
+            face S
+            {
+                layer
+                {
+                    row = waterpipes_01_11,
+                }
+            }
+        }
+        component CraftRecipe
+        {
+            timedAction = BuildLowNoTool,
+            time = 160,
+            category = Piping,
+            Tooltip = Tooltip_craft_WaterPurifierFireDesc,
+            inputs
+            {
+                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
+                item 3 [Base.MetalPipe],
+                item 2 [Base.SheetMetal],
+            }
+        }
+    }
+
+    entity WaterPurifierElectric
+    {
+        component SpriteConfig
+        {
+            isThumpable = false,
+            OnCreate = WaterPipesBuild.electricPurifierOnCreate,
+            OnIsValid = WaterPipesBuild.floorOnIsValid,
+            face S
+            {
+                layer
+                {
+                    row = waterpipes_01_12,
+                }
+            }
+        }
+        component CraftRecipe
+        {
+            timedAction = BuildLowNoTool,
+            time = 200,
+            category = Piping,
+            Tooltip = Tooltip_craft_WaterPurifierElectricDesc,
+            inputs
+            {
+                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
+                item 3 [Base.MetalPipe],
+                item 2 [Base.SheetMetal],
+                item 1 [Base.ElectronicsScrap],
+                item 1 [Base.Wire],
+            }
+        }
+    }
 }
