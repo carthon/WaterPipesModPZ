@@ -330,9 +330,18 @@ function EndpointPlumbing.refreshEndpointSource(worldObject)
     -- network mirror; re-asserted every tick (mains water would creep back otherwise). External-water
     -- fixtures with no own container (e.g. Take A Bath And Shower) must stay FALSE here too -- that mod
     -- reads the same modData as "connected". See EndpointPlumbing.plumb for the full rationale.
-    setCanBeWaterPiped(worldObject, desiredCanBeWaterPiped(worldObject))
+    local wantedPiped = desiredCanBeWaterPiped(worldObject)
+    local currentData = getModData(worldObject)
+    local pipedChanged = currentData ~= nil and currentData.canBeWaterPiped ~= wantedPiped
+    setCanBeWaterPiped(worldObject, wantedPiped)
     -- Own-container path: the engine reads water from the endpoint's own FluidContainer.
     setUsesExternalWaterSource(worldObject, false)
+    -- Push the flip to clients when it actually changes: external mods (e.g. Take A Bath And Shower)
+    -- read canBeWaterPiped CLIENT-side to decide if the fixture is usable, so a stale value would
+    -- otherwise let/deny use incorrectly in multiplayer. Only on change -> no per-tick spam.
+    if pipedChanged then
+        transmitObjectState(worldObject)
+    end
     return FluidSource.syncForEndpoint(worldObject)
 end
 
