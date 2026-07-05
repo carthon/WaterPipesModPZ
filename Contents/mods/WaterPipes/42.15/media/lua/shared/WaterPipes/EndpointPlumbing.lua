@@ -249,6 +249,19 @@ local function setCanBeWaterPiped(worldObject, value)
     end
 end
 
+-- Vanilla sinks hold their own FluidContainer (we mirror the network into it). External-water
+-- fixtures from other mods (e.g. Take A Bath And Shower) have NO own container (capacity 0) and
+-- read/track their water themselves. We use this to decide the canBeWaterPiped flag below.
+local function endpointHasOwnFluidContainer(worldObject)
+    if worldObject and worldObject.getFluidCapacity then
+        local ok, capacity = pcall(worldObject.getFluidCapacity, worldObject)
+        if ok and type(capacity) == "number" and capacity > 0 then
+            return true
+        end
+    end
+    return false
+end
+
 function EndpointPlumbing.isPlumbed(worldObject)
     local modData = getModData(worldObject)
     return modData and modData[Constants.PLUMBED_ENDPOINT_MODDATA_KEY] == true or false
@@ -317,22 +330,18 @@ function EndpointPlumbing.plumb(worldObject)
     local modData = getModData(worldObject)
     if modData then
         modData[Constants.PLUMBED_ENDPOINT_MODDATA_KEY] = true
-        -- Compat (Take A Bath And Shower): their fixtures gate on a `CanBeWaterPipe` modData; flip it
-        -- to false so their reader treats the fixture as connected to the piping. Only touch it when
-        -- present (nil = not a TABAS fixture -> left untouched).
-        if modData.CanBeWaterPipe ~= nil then
-            modData.CanBeWaterPipe = false
-        end
     end
 
     Logger.log("Plumbing endpoint to pipe network: " .. describeObject(worldObject))
     Logger.log("Plumbing diagnostics: " .. describePlumbingDiagnostics(worldObject))
     -- Snapshot the fixture's own fluid state + water-source flags before we take it over.
     FluidSource.captureOriginalState(worldObject)
-    -- IMPORTANT: canBeWaterPiped=true DISABLES the engine's infinite city-mains water for this
-    -- fixture (isWaterInfinite() is true only when canBeWaterPiped is nil/false). We want the sink
-    -- to serve OUR network's FluidContainer mirror, not free mains water, so it must be true.
-    setCanBeWaterPiped(worldObject, true)
+    -- canBeWaterPiped=true DISABLES the engine's infinite city-mains water so our network mirror
+    -- serves the fixture (isWaterInfinite() is true only when canBeWaterPiped is nil/false). But
+    -- external-water fixtures with NO own container (e.g. Take A Bath And Shower) must stay FALSE:
+    -- that mod reads the same modData as "not connected" (its check is `waterSources==0 and
+    -- canBeWaterPiped`). We still charge the network on use via consumption reconciliation.
+    setCanBeWaterPiped(worldObject, endpointHasOwnFluidContainer(worldObject))
     setUsesExternalWaterSource(worldObject, false)
     EndpointPlumbing.refreshEndpointSource(worldObject)
 
@@ -354,10 +363,6 @@ function EndpointPlumbing.unplumb(worldObject)
     if modData then
         modData[Constants.PLUMBED_ENDPOINT_MODDATA_KEY] = nil
         modData[Constants.PLUMBED_ENDPOINT_SOURCE_MODDATA_KEY] = nil
-        -- Compat (Take A Bath And Shower): restore their `CanBeWaterPipe` flag on disconnect.
-        if modData.CanBeWaterPipe ~= nil then
-            modData.CanBeWaterPipe = true
-        end
     end
 
     -- Restore the fixture's pre-plumb fluid state AND water-source flags (capacity/contents +
