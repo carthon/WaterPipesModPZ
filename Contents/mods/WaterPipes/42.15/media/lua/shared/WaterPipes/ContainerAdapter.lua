@@ -456,8 +456,27 @@ function Adapter.writeDescriptorWaterAmount(descriptor, fluidAmount, fluidTypeNa
     return false
 end
 
+-- Compat (Take A Bath And Shower): its "TubFluidContainer" is a special fluid container the network
+-- must NEVER manage -- doing so causes unstable behaviour. Matched by getName() on the object or on
+-- the fluid container, per the mod author. No-op for everything else.
+local EXCLUDED_CONTAINER_NAMES = { TubFluidContainer = true }
+
+local function isExcludedByName(namedThing)
+    if namedThing and namedThing.getName then
+        local ok, name = pcall(namedThing.getName, namedThing)
+        if ok and name and EXCLUDED_CONTAINER_NAMES[name] then
+            return true
+        end
+    end
+    return false
+end
+
 function Adapter.isWaterCandidate(container)
     if not container then
+        return false
+    end
+
+    if isExcludedByName(container) then
         return false
     end
 
@@ -505,7 +524,7 @@ function Adapter.collectSquareContainers(square)
 
     for objectIndex = 0, objects:size() - 1 do
         local worldObject = objects:get(objectIndex)
-        if not EndpointObjects.isEndpointCandidate(worldObject) then
+        if not EndpointObjects.isEndpointCandidate(worldObject) and not isExcludedByName(worldObject) then
             local fluidKind = getDirectWorldFluidKind(worldObject)
 
             if fluidKind then
