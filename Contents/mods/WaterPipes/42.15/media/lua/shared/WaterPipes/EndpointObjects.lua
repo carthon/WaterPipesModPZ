@@ -64,6 +64,12 @@ local function hasEndpointModData(worldObject)
         return true
     end
 
+    -- Take A Bath And Shower fixtures carry a `CanBeWaterPipe` modData; recognise them as plumbable
+    -- endpoints so the connect/disconnect options appear (nil on non-TABAS objects -> no effect).
+    if modData.CanBeWaterPipe ~= nil then
+        return true
+    end
+
     if modData.usesExternalWaterSource == true then
         return true
     end
