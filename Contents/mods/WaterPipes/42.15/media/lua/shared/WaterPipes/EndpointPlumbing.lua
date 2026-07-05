@@ -273,10 +273,16 @@ local function isExternalWaterFixture(worldObject)
     return modData and modData[EXTERNAL_FIXTURE_KEY] == true or false
 end
 
--- Whether the engine should serve this fixture from our own-container mirror (vanilla sinks) vs.
--- leaving it "connected" for an external-water mod to handle (canBeWaterPiped stays false).
-local function shouldMirrorFixture(worldObject)
-    return not isExternalWaterFixture(worldObject)
+-- The canBeWaterPiped modData the fixture should carry right now:
+--   vanilla sink (own container) -> true: engine mains off, our mirror serves it.
+--   external-water fixture (e.g. Take A Bath And Shower) -> false ONLY while the network actually
+--   has water (so that mod treats it as connected); true when the network is dry, so it reports
+--   "not connected" instead of handing out free water.
+local function desiredCanBeWaterPiped(worldObject)
+    if isExternalWaterFixture(worldObject) then
+        return not NetworkAccess.hasWater(worldObject)
+    end
+    return true
 end
 
 function EndpointPlumbing.isPlumbed(worldObject)
@@ -324,7 +330,7 @@ function EndpointPlumbing.refreshEndpointSource(worldObject)
     -- network mirror; re-asserted every tick (mains water would creep back otherwise). External-water
     -- fixtures with no own container (e.g. Take A Bath And Shower) must stay FALSE here too -- that mod
     -- reads the same modData as "connected". See EndpointPlumbing.plumb for the full rationale.
-    setCanBeWaterPiped(worldObject, shouldMirrorFixture(worldObject))
+    setCanBeWaterPiped(worldObject, desiredCanBeWaterPiped(worldObject))
     -- Own-container path: the engine reads water from the endpoint's own FluidContainer.
     setUsesExternalWaterSource(worldObject, false)
     return FluidSource.syncForEndpoint(worldObject)
@@ -362,7 +368,7 @@ function EndpointPlumbing.plumb(worldObject)
     -- external-water fixtures with NO own container (e.g. Take A Bath And Shower) must stay FALSE:
     -- that mod reads the same modData as "not connected" (its check is `waterSources==0 and
     -- canBeWaterPiped`). We still charge the network on use via consumption reconciliation.
-    setCanBeWaterPiped(worldObject, shouldMirrorFixture(worldObject))
+    setCanBeWaterPiped(worldObject, desiredCanBeWaterPiped(worldObject))
     setUsesExternalWaterSource(worldObject, false)
     EndpointPlumbing.refreshEndpointSource(worldObject)
 
