@@ -1,5 +1,7 @@
 {
     "Sandbox_WaterPipes": "Water Pipes",
+    "Sandbox_WaterPipes_RealisticPurification": "Realistic water purification",
+    "Sandbox_WaterPipes_RealisticPurification_tooltip": "When on, taps no longer purify tainted water automatically: tainted water stays tainted until you run it through a purifier tile. Default: off, so taps serve clean water as before.",
     "Sandbox_WaterPipes_GeneratorRefuelThreshold": "Generator auto-refuel threshold (%)",
     "Sandbox_WaterPipes_GeneratorRefuelThreshold_tooltip": "A plumbed generator pulls fuel from the network once its tank drops below this percentage of its capacity. Set to 0 to disable auto-refuelling.",
     "Sandbox_WaterPipes_GeneratorRefuelTarget": "Generator auto-refuel target (%)",

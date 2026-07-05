@@ -1,5 +1,13 @@
 VERSION = 1,
 
+option WaterPipes.RealisticPurification
+{
+    type = boolean,
+    default = false,
+    page = WaterPipes,
+    translation = WaterPipes_RealisticPurification,
+}
+
 option WaterPipes.GeneratorRefuelThreshold
 {
     type = integer,

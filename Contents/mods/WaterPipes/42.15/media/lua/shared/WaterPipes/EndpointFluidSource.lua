@@ -26,6 +26,13 @@ local function isAuthoritative()
     return not (isClient and isClient())
 end
 
+-- Sandbox toggle: when ON, taps stop auto-purifying tainted water (it must be run through a
+-- purifier tile first). Default OFF preserves the classic behaviour (the tap purifies rainwater).
+local function realisticPurification()
+    local sv = SandboxVars and SandboxVars.WaterPipes
+    return sv and sv.RealisticPurification == true or false
+end
+
 local function getModData(worldObject)
     if not worldObject or not worldObject.getModData then
         return nil
@@ -250,11 +257,13 @@ function FluidSource.syncForEndpoint(endpoint)
 
     local capacity = math.max(summary.totalCapacity or 0, 0)
     local visibleAmount = math.min(summary.totalAmount or 0, capacity)
-    -- Any single fluid in the network can be drawn from the tap. The tap purifies rain water:
-    -- TaintedWater is served as clean Water (the stored water stays tainted; only what comes out
-    -- of the tap is purified). Every other fluid (Water, Petrol, ...) is served as-is.
+    -- Any single fluid in the network can be drawn from the tap. By default the tap purifies rain
+    -- water: TaintedWater is served as clean Water (the stored water stays tainted; only what comes
+    -- out of the tap is purified). With the "Realistic water purification" sandbox option ON, the tap
+    -- no longer purifies -- tainted water is served as-is and must be cleaned by a purifier tile.
+    -- Every other fluid (Water, Petrol, ...) is always served as-is.
     local servedType = summary.fluidTypeName
-    if servedType == "TaintedWater" then
+    if servedType == "TaintedWater" and not realisticPurification() then
         servedType = "Water"
     end
     writeSnapshot(endpoint, visibleAmount, capacity, servedType)
