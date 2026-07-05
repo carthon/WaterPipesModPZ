@@ -317,6 +317,12 @@ function EndpointPlumbing.plumb(worldObject)
     local modData = getModData(worldObject)
     if modData then
         modData[Constants.PLUMBED_ENDPOINT_MODDATA_KEY] = true
+        -- Compat (Take A Bath And Shower): their fixtures gate on a `CanBeWaterPipe` modData; flip it
+        -- to false so their reader treats the fixture as connected to the piping. Only touch it when
+        -- present (nil = not a TABAS fixture -> left untouched).
+        if modData.CanBeWaterPipe ~= nil then
+            modData.CanBeWaterPipe = false
+        end
     end
 
     Logger.log("Plumbing endpoint to pipe network: " .. describeObject(worldObject))
@@ -348,6 +354,10 @@ function EndpointPlumbing.unplumb(worldObject)
     if modData then
         modData[Constants.PLUMBED_ENDPOINT_MODDATA_KEY] = nil
         modData[Constants.PLUMBED_ENDPOINT_SOURCE_MODDATA_KEY] = nil
+        -- Compat (Take A Bath And Shower): restore their `CanBeWaterPipe` flag on disconnect.
+        if modData.CanBeWaterPipe ~= nil then
+            modData.CanBeWaterPipe = true
+        end
     end
 
     -- Restore the fixture's pre-plumb fluid state AND water-source flags (capacity/contents +

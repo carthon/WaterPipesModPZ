@@ -4,6 +4,7 @@ tools/
 # Internal/dev notes not shipped with the mod
 docs/texturepack.md
 docs/informe-revision.md
+docs/purifier-plan.md
 
 # Claude Code / AI assistant artifacts
 .claude/
