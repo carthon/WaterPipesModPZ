@@ -303,10 +303,11 @@ function EndpointPlumbing.refreshEndpointSource(worldObject)
         return false
     end
 
-    -- canBeWaterPiped=true keeps the engine's infinite city-mains water OFF, so the fixture serves
-    -- our network mirror. refreshEndpointSource runs every server tick for plumbed fixtures, so it
-    -- must re-assert this (otherwise mains water would creep back when the water service is on).
-    setCanBeWaterPiped(worldObject, true)
+    -- canBeWaterPiped=true keeps the engine's infinite city-mains water OFF so the fixture serves our
+    -- network mirror; re-asserted every tick (mains water would creep back otherwise). External-water
+    -- fixtures with no own container (e.g. Take A Bath And Shower) must stay FALSE here too -- that mod
+    -- reads the same modData as "connected". See EndpointPlumbing.plumb for the full rationale.
+    setCanBeWaterPiped(worldObject, endpointHasOwnFluidContainer(worldObject))
     -- Own-container path: the engine reads water from the endpoint's own FluidContainer.
     setUsesExternalWaterSource(worldObject, false)
     return FluidSource.syncForEndpoint(worldObject)
