@@ -3,7 +3,7 @@ module Base
     item WaterFilterCartridge
     {
         DisplayCategory = Material,
-        Type = Normal,
+        ItemType = base:normal,
         DisplayName = Water Filter Cartridge,
         Weight = 0.4,
         Icon = Charcoal,
