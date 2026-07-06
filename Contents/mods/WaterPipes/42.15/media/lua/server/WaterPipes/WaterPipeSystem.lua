@@ -12,6 +12,7 @@ require "WaterPipes/EndpointObjects"
 require "WaterPipes/GeneratorFuel"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Purifier"
+require "WaterPipes/GravityFlow"
 require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
 
@@ -26,6 +27,7 @@ local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local PipeAutotile = WaterPipes.PipeAutotile
 local Purifier = WaterPipes.Purifier
+local GravityFlow = WaterPipes.GravityFlow
 local State = WaterPipes.State
 local System = WaterPipes.System
 
@@ -193,12 +195,9 @@ function System.redistributeWater()
         end
 
         if fluidTypeCount <= 1 and #containers > 1 and totalCapacity > 0 then
-            local ratio = math.min(totalWater / totalCapacity, 1)
-
-            for _, descriptor in ipairs(containers) do
-                local targetWater = (descriptor.capacity or 0) * ratio
-                Adapter.writeDescriptorWaterAmount(descriptor, targetWater, networkFluidType)
-            end
+            -- Gravity settle: water pools to the lowest floors first (relocation). A single-floor
+            -- component reduces to the classic per-pool equalization, so one floor is unchanged.
+            GravityFlow.settle(containers, totalWater, networkFluidType)
         elseif fluidTypeCount > 1 then
             Logger.warn("Skipping mixed-fluid network with " .. tostring(fluidTypeCount) .. " fluid types")
         end
