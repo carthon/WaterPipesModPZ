@@ -161,7 +161,26 @@ function Build.electricContainerOnCreate(params)
     markPurifierContainer(params and params.thumpable, Constants.PURIFIER_TIER_ELECTRIC)
 end
 
--- A purifier-container needs a router on its tile (the router drives it), and only one per tile.
+-- The tall tank clips through anything overhead: refuse placement if a floor sits on the tile directly
+-- above. (Pipes and routers are floor-level and CAN hide under structures; the visible tank cannot.)
+local function hasStructureAbove(square)
+    if not square or not getCell then
+        return false
+    end
+    local cell = getCell()
+    if not cell or not cell.getGridSquare then
+        return false
+    end
+    local above = cell:getGridSquare(square:getX(), square:getY(), square:getZ() + 1)
+    if not above or not above.getFloor then
+        return false
+    end
+    local ok, floor = pcall(above.getFloor, above)
+    return ok and floor ~= nil
+end
+
+-- A purifier-container needs a router on its tile (the router drives it), only one per tile, and clear
+-- headroom (no structure directly above) so the tall tank does not clip through it.
 function Build.purifierContainerOnIsValid(params)
     local square = params and params.square
     if not square then
@@ -173,6 +192,9 @@ function Build.purifierContainerOnIsValid(params)
         return false
     end
     if Purifier and Purifier.findOnSquare(square) then
+        return false
+    end
+    if hasStructureAbove(square) then
         return false
     end
     return true
