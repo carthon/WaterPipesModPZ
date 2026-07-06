@@ -231,11 +231,32 @@ module WaterPipes
             isThumpable = false,
             OnCreate = WaterPipesBuild.routerOnCreate,
             OnIsValid = WaterPipesBuild.floorOnIsValid,
+            face N
+            {
+                layer
+                {
+                    row = waterpipes_01_21,
+                }
+            }
+            face E
+            {
+                layer
+                {
+                    row = waterpipes_01_22,
+                }
+            }
             face S
             {
                 layer
                 {
-                    row = waterpipes_01_13,
+                    row = waterpipes_01_23,
+                }
+            }
+            face W
+            {
+                layer
+                {
+                    row = waterpipes_01_19,
                 }
             }
         }

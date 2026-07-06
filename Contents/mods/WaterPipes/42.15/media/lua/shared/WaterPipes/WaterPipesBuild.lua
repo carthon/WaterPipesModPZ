@@ -26,6 +26,17 @@ local function edgeFromFacing(params)
     return (params and params.facing == "w") and "W" or "N"
 end
 
+-- Router OUT direction from the build-cursor facing (chosen by rotating with R). The engine passes
+-- facing as lowercase n/e/s/w; be tolerant of case.
+local function facingToDirection(params)
+    local facing = params and params.facing
+    facing = type(facing) == "string" and string.lower(facing) or "n"
+    if facing == "e" then return "E" end
+    if facing == "s" then return "S" end
+    if facing == "w" then return "W" end
+    return "N"
+end
+
 local function getModData(worldObject)
     if worldObject and worldObject.getModData then
         local ok, modData = pcall(worldObject.getModData, worldObject)
@@ -74,7 +85,7 @@ end
 
 -- ===== OnCreate (server / single-player) =====
 
-local function markAndRegister(thumpable, surface, riser, edge, hidden, purifierTier, router)
+local function markAndRegister(thumpable, surface, riser, edge, hidden, purifierTier, router, routerDirection)
     if not thumpable then
         return
     end
@@ -95,10 +106,10 @@ local function markAndRegister(thumpable, surface, riser, edge, hidden, purifier
         if purifierTier == Constants.PURIFIER_TIER_FILTER then
             modData[Constants.PURIFIER_FILTER_CHARGES_KEY] = Constants.PURIFIER_FILTER_MAX_CHARGES
         end
-        -- Router variant: a flow boundary; give it a default OUT direction until the player rotates it.
+        -- Router variant: a flow boundary; the OUT direction is chosen by rotating (R) at build time.
         modData[Constants.ROUTER_MODDATA_KEY] = router and true or nil
-        if router and modData[Constants.ROUTER_DIRECTION_KEY] == nil then
-            modData[Constants.ROUTER_DIRECTION_KEY] = Constants.ROUTER_DEFAULT_DIRECTION
+        if router then
+            modData[Constants.ROUTER_DIRECTION_KEY] = routerDirection or Constants.ROUTER_DEFAULT_DIRECTION
         end
     end
     if thumpable.transmitModData then
@@ -150,9 +161,11 @@ function Build.electricPurifierOnCreate(params)
     markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, Constants.PURIFIER_TIER_ELECTRIC)
 end
 
--- Fluid router: a floor pipe that is a flow boundary (splits the network into IN and OUT sides).
+-- Fluid router: a floor pipe that is a flow boundary (splits the network into IN and OUT sides). The
+-- OUT direction comes from the build-cursor facing (rotate with R while placing).
 function Build.routerOnCreate(params)
-    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, nil, true)
+    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, nil, true,
+        facingToDirection(params))
 end
 
 -- Global alias used by the entity SpriteConfig OnCreate/OnIsValid dotted paths.

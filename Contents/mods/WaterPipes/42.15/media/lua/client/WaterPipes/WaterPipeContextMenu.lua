@@ -215,6 +215,16 @@ function ContextMenu.rotateRouter(playerObj, routerObject)
         return
     end
     local nextDir = Router.nextDirection(Router.getDirection(routerObject))
+
+    -- Optimistic local repaint (the sprite is client-cosmetic; the direction modData syncs via the
+    -- server command), so the arrow updates immediately without waiting for the round-trip.
+    if routerObject.setSprite then
+        pcall(routerObject.setSprite, routerObject, Router.spriteForDirection(nextDir))
+        if square.RecalcProperties then
+            pcall(square.RecalcProperties, square)
+        end
+    end
+
     sendClientCommand(playerObj, "WaterPipes", "setRouterDirection",
         { x = square:getX(), y = square:getY(), z = square:getZ(), dir = nextDir })
     if HaloTextHelper then

@@ -25,9 +25,21 @@ function Router.isRouter(worldObject)
     return modData and modData[Constants.ROUTER_MODDATA_KEY] == true or false
 end
 
+-- Placeholder sprites hint the OUT direction (an end-cap stub pointing that way) until the real
+-- straight-pipe with green(IN)/red(OUT) band art is packed. Keyed by the OUT direction.
+local DIR_SPRITE = {
+    N = "waterpipes_01_21",
+    E = "waterpipes_01_22",
+    S = "waterpipes_01_23",
+    W = "waterpipes_01_19",
+}
+
+function Router.spriteForDirection(dir)
+    return DIR_SPRITE[dir] or Constants.ROUTER_SPRITE
+end
+
 function Router.spriteFor(worldObject)
-    -- Single placeholder sprite for now; direction-specific arrow sprites arrive with the art.
-    return Constants.ROUTER_SPRITE
+    return Router.spriteForDirection(Router.getDirection(worldObject))
 end
 
 function Router.findOnSquare(square)
