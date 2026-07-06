@@ -223,4 +223,34 @@ module WaterPipes
             }
         }
     }
+
+    entity WaterPipeRouter
+    {
+        component SpriteConfig
+        {
+            isThumpable = false,
+            OnCreate = WaterPipesBuild.routerOnCreate,
+            OnIsValid = WaterPipesBuild.floorOnIsValid,
+            face S
+            {
+                layer
+                {
+                    row = waterpipes_01_13,
+                }
+            }
+        }
+        component CraftRecipe
+        {
+            timedAction = BuildLowNoTool,
+            time = 120,
+            category = Piping,
+            Tooltip = Tooltip_craft_WaterPipeRouterDesc,
+            inputs
+            {
+                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
+                item 2 [Base.MetalPipe],
+                item 1 [Base.SheetMetal],
+            }
+        }
+    }
 }

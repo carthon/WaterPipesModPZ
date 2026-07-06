@@ -6,6 +6,7 @@
     "WaterPurifierFilter": "Purificador de agua (filtro)",
     "WaterPurifierFire": "Destilador de agua (fuego)",
     "WaterPurifierElectric": "Destilador de agua (eléctrico)",
+    "WaterPipeRouter": "Enrutador de fluidos",
     "WaterPipes_CraftFilterCartridge": "Fabricar cartucho de filtro de agua",
     "WaterPipes_ForgeMetalPipe": "Forjar una tubería de metal"
 }

@@ -6,6 +6,7 @@ require "WaterPipes/ContainerAdapter"
 require "WaterPipes/EndpointObjects"
 require "WaterPipes/Logger"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/Router"
 
 local Adapter = WaterPipes.ContainerAdapter
 local Constants = WaterPipes.Constants
@@ -13,6 +14,7 @@ local EndpointObjects = WaterPipes.EndpointObjects
 local Logger = WaterPipes.Logger
 local NetworkAccess = WaterPipes.NetworkAccess
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local Router = WaterPipes.Router
 
 local function getCellSquare(x, y, z)
     if not getCell then
@@ -126,7 +128,10 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode)
     local pipeSquares = {}
 
     local function tryAdd(square)
-        if square and hasPipeOnSquare(square) and addSquare(visited, square) then
+        -- Routers are flow boundaries: the network never traverses through one, so the IN side and
+        -- OUT side resolve to separate networks.
+        if square and hasPipeOnSquare(square) and not Router.hasRouterOnSquare(square)
+            and addSquare(visited, square) then
             queue[#queue + 1] = square
             pipeSquares[#pipeSquares + 1] = square
         end

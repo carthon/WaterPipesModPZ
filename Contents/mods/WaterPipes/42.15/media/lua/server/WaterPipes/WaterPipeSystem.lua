@@ -246,8 +246,8 @@ function System.tick()
     end
 end
 
-function System.registerPipeAt(x, y, z)
-    State.registerPipe(x, y, z)
+function System.registerPipeAt(x, y, z, metadata)
+    State.registerPipe(x, y, z, metadata)
     System.rebuild()
     System.refreshPlumbedEndpoints()
     if isSinglePlayer() then

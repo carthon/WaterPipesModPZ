@@ -74,7 +74,7 @@ end
 
 -- ===== OnCreate (server / single-player) =====
 
-local function markAndRegister(thumpable, surface, riser, edge, hidden, purifierTier)
+local function markAndRegister(thumpable, surface, riser, edge, hidden, purifierTier, router)
     if not thumpable then
         return
     end
@@ -95,6 +95,8 @@ local function markAndRegister(thumpable, surface, riser, edge, hidden, purifier
         if purifierTier == Constants.PURIFIER_TIER_FILTER then
             modData[Constants.PURIFIER_FILTER_CHARGES_KEY] = Constants.PURIFIER_FILTER_MAX_CHARGES
         end
+        -- Router variant: a flow boundary between two networks (direction/transfer added in step 4).
+        modData[Constants.ROUTER_MODDATA_KEY] = router and true or nil
     end
     if thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)
@@ -107,7 +109,9 @@ local function markAndRegister(thumpable, surface, riser, edge, hidden, purifier
                 tostring(edge), square:getX(), square:getY(), square:getZ()))
         end
         -- registerPipeAt rebuilds the network, refreshes plumbed endpoints and runs the autotile.
-        WaterPipes.System.registerPipeAt(square:getX(), square:getY(), square:getZ())
+        -- Routers pass metadata so the graph rebuild can isolate them as flow boundaries.
+        WaterPipes.System.registerPipeAt(square:getX(), square:getY(), square:getZ(),
+            router and { router = true } or nil)
     end
 end
 
@@ -141,6 +145,11 @@ end
 
 function Build.electricPurifierOnCreate(params)
     markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, Constants.PURIFIER_TIER_ELECTRIC)
+end
+
+-- Fluid router: a floor pipe that is a flow boundary (splits the network into IN and OUT sides).
+function Build.routerOnCreate(params)
+    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, nil, true)
 end
 
 -- Global alias used by the entity SpriteConfig OnCreate/OnIsValid dotted paths.

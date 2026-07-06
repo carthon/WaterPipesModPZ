@@ -102,6 +102,12 @@ Constants.PURIFIER_CARTRIDGE_ITEM_TYPE = "Base.WaterFilterCartridge"
 Constants.PURIFIER_FILTER_SPRITE = "waterpipes_01_10"
 Constants.PURIFIER_FIRE_SPRITE = "waterpipes_01_11"
 Constants.PURIFIER_ELECTRIC_SPRITE = "waterpipes_01_12"
+-- Fluid router: a directional floor pipe that acts as a BOUNDARY between two separate networks (the
+-- IN side and the OUT side never merge), bridged only through a container on its tile. Baked in at
+-- build time (modData, synced). The IN->OUT direction is set later via the context menu (step 4).
+Constants.ROUTER_MODDATA_KEY = "waterpipesRouter"
+Constants.ROUTER_DIRECTION_KEY = "waterpipesRouterDir"   -- "N"/"E"/"S"/"W" = the OUT side (step 4)
+Constants.ROUTER_SPRITE = "waterpipes_01_13"             -- placeholder until the arrow art is packed
 Constants.ADAPTER_SOURCE_SPRITE = "carpentry_02_54"
 Constants.ADAPTER_SOURCE_HIDDEN_SPRITE = "waterpipes_01_20"
 Constants.MAX_FINITE_FLUID_CAPACITY = 9999

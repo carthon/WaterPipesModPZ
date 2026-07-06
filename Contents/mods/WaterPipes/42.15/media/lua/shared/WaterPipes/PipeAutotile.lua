@@ -5,11 +5,13 @@ require "WaterPipes/Constants"
 require "WaterPipes/Logger"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Purifier"
+require "WaterPipes/Router"
 
 local Constants = WaterPipes.Constants
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Purifier = WaterPipes.Purifier
+local Router = WaterPipes.Router
 local PipeAutotile = WaterPipes.PipeAutotile
 
 -- Direction bits and world offsets. Isometric mapping: E=+x, W=-x, S=+y, N=-y.
@@ -227,6 +229,12 @@ function PipeAutotile.refreshFloorPipeAt(x, y, z)
     -- (they still count as a floor connection for neighbours, exactly like a riser).
     if Purifier.isPurifier(pipe) then
         setSpriteIfChanged(pipe, Purifier.spriteFor(pipe))
+        return
+    end
+
+    -- Routers likewise keep a fixed device sprite (the IN->OUT arrow, once the art lands).
+    if Router.isRouter(pipe) then
+        setSpriteIfChanged(pipe, Router.spriteFor(pipe))
         return
     end
 

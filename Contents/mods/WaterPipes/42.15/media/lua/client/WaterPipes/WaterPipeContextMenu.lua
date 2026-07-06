@@ -7,6 +7,7 @@ require "WaterPipes/ISPlumbWaterPipeGenerator"
 require "WaterPipes/GeneratorFuel"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Purifier"
+require "WaterPipes/Router"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/Logger"
 -- Client-side: loads PipeAutotile so it registers its OnObjectAdded/LoadGridsquare hooks and each
@@ -25,6 +26,7 @@ local Logger = WaterPipes.Logger
 local NetworkAccess = WaterPipes.NetworkAccess
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Purifier = WaterPipes.Purifier
+local Router = WaterPipes.Router
 local PipeAutotile = WaterPipes.PipeAutotile
 local ContextMenu = WaterPipes.ContextMenu
 ContextMenu.originalOnPlumbItem = ContextMenu.originalOnPlumbItem or ISWorldObjectContextMenu.onPlumbItem
@@ -77,6 +79,7 @@ local HIGHLIGHT_TICKS = 480 -- ~8s at 60fps; auto-clears the highlight
 local COLOR_PIPE = { r = 0.95, g = 0.20, b = 0.20, a = 1.0 }      -- red
 local COLOR_SOURCE = { r = 0.20, g = 0.95, b = 0.30, a = 1.0 }    -- green: provides fluid
 local COLOR_CONSUMER = { r = 0.30, g = 0.60, b = 1.00, a = 1.0 }  -- blue: draws fluid (out-network)
+local COLOR_ROUTER = { r = 1.00, g = 0.75, b = 0.10, a = 1.0 }    -- amber: fluid router (boundary)
 
 local function findPipeInWorldObjects(worldobjects)
     if not worldobjects then
@@ -244,6 +247,23 @@ function ContextMenu.showNetwork(playerObj, pipeObject)
                 ContextMenu.revealedHiddenPipes[#ContextMenu.revealedHiddenPipes + 1] = pipe
             end
             trackAndHighlight(pipe, playerNum, COLOR_PIPE)
+        end
+    end
+
+    -- Routers bounding this network (amber). They are excluded from the traversal, so surface any
+    -- router sitting on a square adjacent to a shown pipe.
+    local cell = getCell and getCell() or nil
+    if cell then
+        local routerSeen = {}
+        for _, sq in ipairs(pipeSquares or {}) do
+            for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
+                local nsq = cell:getGridSquare(sq:getX() + offset.x, sq:getY() + offset.y, sq:getZ() + offset.z)
+                local router = nsq and Router.findOnSquare(nsq)
+                if router and not routerSeen[tostring(router)] then
+                    routerSeen[tostring(router)] = true
+                    trackAndHighlight(router, playerNum, COLOR_ROUTER)
+                end
+            end
         end
     end
 
