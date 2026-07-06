@@ -533,17 +533,6 @@ local function onClientCommand(module, command, player, args)
         return
     end
 
-    -- Router flow direction: set authoritatively on the server (clients request it).
-    if command == "setRouterDirection" then
-        local square = resolveCommandSquare(args)
-        local router = square and Router.findOnSquare(square)
-        if router then
-            Router.setDirection(router, args and args.dir)
-            System.processRouters()
-        end
-        return
-    end
-
     if command == "forceGlobalWaterShutoff" then
         System.forceGlobalWaterShutoff()
         System.tick()

@@ -205,38 +205,12 @@ local function findRouterInWorldObjects(worldobjects)
     return nil
 end
 
--- Cycle the OUT direction; the server applies it authoritatively (world-object modData).
-function ContextMenu.rotateRouter(playerObj, routerObject)
-    if not playerObj or not routerObject or not routerObject.getSquare then
-        return
-    end
-    local square = routerObject:getSquare()
-    if not square then
-        return
-    end
-    local nextDir = Router.nextDirection(Router.getDirection(routerObject))
-
-    -- Optimistic local repaint (the sprite is client-cosmetic; the direction modData syncs via the
-    -- server command), so the arrow updates immediately without waiting for the round-trip.
-    if routerObject.setSprite then
-        pcall(routerObject.setSprite, routerObject, Router.spriteForDirection(nextDir))
-        if square.RecalcProperties then
-            pcall(square.RecalcProperties, square)
-        end
-    end
-
-    sendClientCommand(playerObj, "WaterPipes", "setRouterDirection",
-        { x = square:getX(), y = square:getY(), z = square:getZ(), dir = nextDir })
-    if HaloTextHelper then
-        HaloTextHelper.addText(playerObj, getText("IGUI_WaterPipesRouterFlow", routerDirectionName(nextDir)))
-    end
-end
-
+-- The IN->OUT direction is chosen by rotating the tile with R at build time. The menu only reports
+-- the current OUT side (no rotate action).
 local function addRouterOptions(context, playerObj, routerObject)
     local statusOption = context:addOption(
         getText("IGUI_WaterPipesRouterFlow", routerDirectionName(Router.getDirection(routerObject))), nil, nil)
     statusOption.notAvailable = true
-    context:addOption(getText("ContextMenu_WaterPipesRotateRouter"), playerObj, ContextMenu.rotateRouter, routerObject)
 end
 
 local function setHighlight(worldObject, playerNum, on, color)

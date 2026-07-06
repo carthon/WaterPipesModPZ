@@ -2,6 +2,5 @@
     "ContextMenu_WaterPipesUnplumbItem": "Desinstalar %1",
     "ContextMenu_WaterPipesShowNetwork": "Mostrar red de tuberías",
     "ContextMenu_WaterPipesHideNetwork": "Ocultar red de tuberías",
-    "ContextMenu_WaterPipesReplaceCartridge": "Reemplazar cartucho de filtro",
-    "ContextMenu_WaterPipesRotateRouter": "Rotar flujo (IN->OUT)"
+    "ContextMenu_WaterPipesReplaceCartridge": "Reemplazar cartucho de filtro"
 }

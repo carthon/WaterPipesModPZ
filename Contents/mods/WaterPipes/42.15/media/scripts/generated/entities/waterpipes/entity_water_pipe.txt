@@ -235,28 +235,28 @@ module WaterPipes
             {
                 layer
                 {
-                    row = waterpipes_01_21,
+                    row = waterpipes_01_32,
                 }
             }
             face E
             {
                 layer
                 {
-                    row = waterpipes_01_22,
+                    row = waterpipes_01_33,
                 }
             }
             face S
             {
                 layer
                 {
-                    row = waterpipes_01_23,
+                    row = waterpipes_01_34,
                 }
             }
             face W
             {
                 layer
                 {
-                    row = waterpipes_01_19,
+                    row = waterpipes_01_35,
                 }
             }
         }
