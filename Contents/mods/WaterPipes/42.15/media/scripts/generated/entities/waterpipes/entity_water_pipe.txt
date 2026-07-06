@@ -132,66 +132,6 @@ module WaterPipes
         }
     }
 
-    entity WaterPurifierFilter
-    {
-        component SpriteConfig
-        {
-            isThumpable = false,
-            OnCreate = WaterPipesBuild.filterContainerOnCreate,
-            OnIsValid = WaterPipesBuild.purifierContainerOnIsValid,
-            face S
-            {
-                layer
-                {
-                    row = waterpipes_01_36,
-                }
-            }
-        }
-        component CraftRecipe
-        {
-            timedAction = BuildLowNoTool,
-            time = 120,
-            category = Piping,
-            Tooltip = Tooltip_craft_WaterPurifierFilterDesc,
-            inputs
-            {
-                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
-                item 2 [Base.MetalPipe],
-                item 2 [Base.RippedSheets],
-            }
-        }
-    }
-
-    entity WaterPurifierFire
-    {
-        component SpriteConfig
-        {
-            isThumpable = false,
-            OnCreate = WaterPipesBuild.fireContainerOnCreate,
-            OnIsValid = WaterPipesBuild.purifierContainerOnIsValid,
-            face S
-            {
-                layer
-                {
-                    row = waterpipes_01_37,
-                }
-            }
-        }
-        component CraftRecipe
-        {
-            timedAction = BuildLowNoTool,
-            time = 160,
-            category = Piping,
-            Tooltip = Tooltip_craft_WaterPurifierFireDesc,
-            inputs
-            {
-                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
-                item 3 [Base.MetalPipe],
-                item 2 [Base.SheetMetal],
-            }
-        }
-    }
-
     entity WaterPurifierElectric
     {
         component SpriteConfig

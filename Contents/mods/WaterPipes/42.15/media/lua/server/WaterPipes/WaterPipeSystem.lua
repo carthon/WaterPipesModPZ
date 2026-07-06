@@ -234,9 +234,8 @@ local function processPurifierRouter(purifier, inSquare, outSquare)
             if Purifier.isInTainted(purifier) then
                 if Purifier.isWorking(purifier) then
                     Purifier.moveInToOut(purifier, move)   -- lands in the OUT buffer as clean Water
-                    Purifier.consumeForConversion(purifier)
                 end
-                -- tainted + not working: stays in the IN buffer until a cartridge / heat / power arrives
+                -- tainted + not powered: stays in the IN buffer until the tile has power
             else
                 Purifier.moveInToOut(purifier, move)       -- clean water always passes through
             end
@@ -550,20 +549,6 @@ local function onClientCommand(module, command, player, args)
             GeneratorFuel.plumb(generator)
         else
             GeneratorFuel.unplumb(generator)
-        end
-        return
-    end
-
-    -- Filter-cartridge replacement: the client already consumed the cartridge from its own inventory;
-    -- the server just refills the purifier's charges (authoritative world-object modData).
-    if command == "insertPurifierCartridge" then
-        local square = resolveCommandSquare(args)
-        local purifier = square and Purifier.findOnSquare(square)
-        if purifier then
-            Purifier.insertCartridge(purifier)
-        else
-            Logger.warn("Purifier cartridge command: no purifier at "
-                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
         end
         return
     end

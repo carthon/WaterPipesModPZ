@@ -119,50 +119,10 @@ local function findPurifierInWorldObjects(worldobjects)
     return nil
 end
 
-local function playerHasCartridge(playerObj)
-    local inventory = playerObj and playerObj:getInventory()
-    return inventory and inventory:containsTypeRecurse(Constants.PURIFIER_CARTRIDGE_ITEM_TYPE) or false
-end
-
--- A one-line "<tier name>: <state>" readout shown (greyed) at the top of a purifier's menu.
+-- A one-line status readout shown (greyed) at the top of a purifier's menu.
 local function purifierStatusText(purifierObject)
-    local tier = Purifier.getTier(purifierObject)
-    local name = getText("IGUI_WaterPipesPurifier_" .. tostring(tier))
-    if tier == Constants.PURIFIER_TIER_FILTER then
-        if Purifier.getCharges(purifierObject) > 0 then
-            return getText("IGUI_WaterPipesPurifierCharges", name, Purifier.getCharges(purifierObject), Constants.PURIFIER_FILTER_MAX_CHARGES)
-        end
-        return getText("IGUI_WaterPipesPurifierNoCartridge", name)
-    elseif tier == Constants.PURIFIER_TIER_FIRE then
-        return getText(Purifier.isWorking(purifierObject) and "IGUI_WaterPipesPurifierHeatOk" or "IGUI_WaterPipesPurifierNoHeat", name)
-    elseif tier == Constants.PURIFIER_TIER_ELECTRIC then
-        return getText(Purifier.isWorking(purifierObject) and "IGUI_WaterPipesPurifierPowered" or "IGUI_WaterPipesPurifierNoPower", name)
-    end
-    return name
-end
-
--- Client consumes the cartridge from its own inventory, then asks the server to refill the charges
--- (world-object modData is server-authoritative). Mirrors how plumb splits client action / server state.
-function ContextMenu.replacePurifierCartridge(playerObj, purifierObject)
-    if not playerObj or not purifierObject or not purifierObject.getSquare then
-        return
-    end
-    local inventory = playerObj:getInventory()
-    local cartridge = inventory and inventory:getFirstTypeRecurse(Constants.PURIFIER_CARTRIDGE_ITEM_TYPE)
-    local square = purifierObject:getSquare()
-    if not cartridge or not square then
-        return
-    end
-
-    local container = cartridge.getContainer and cartridge:getContainer() or inventory
-    container:Remove(cartridge)
-
-    sendClientCommand(playerObj, "WaterPipes", "insertPurifierCartridge",
-        { x = square:getX(), y = square:getY(), z = square:getZ() })
-
-    if HaloTextHelper then
-        HaloTextHelper.addGoodText(playerObj, getText("IGUI_WaterPipesCartridgeInstalled"))
-    end
+    local name = getText("IGUI_WaterPipesPurifier_electric")
+    return getText(Purifier.isWorking(purifierObject) and "IGUI_WaterPipesPurifierPowered" or "IGUI_WaterPipesPurifierNoPower", name)
 end
 
 local function addPurifierOptions(context, playerObj, purifierObject)
@@ -173,10 +133,6 @@ local function addPurifierOptions(context, playerObj, purifierObject)
         getText("IGUI_WaterPipesPurifierBuffers",
             math.floor(Purifier.getInAmount(purifierObject)), math.floor(Purifier.getOutAmount(purifierObject))), nil, nil)
     bufferOption.notAvailable = true
-
-    if Purifier.getTier(purifierObject) == Constants.PURIFIER_TIER_FILTER and playerHasCartridge(playerObj) then
-        context:addOption(getText("ContextMenu_WaterPipesReplaceCartridge"), playerObj, ContextMenu.replacePurifierCartridge, purifierObject)
-    end
 end
 
 -- ===== Fluid router (flow direction) =====

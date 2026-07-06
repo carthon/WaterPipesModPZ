@@ -151,22 +151,10 @@ local function markPurifierContainer(thumpable, tier)
         modData[Constants.PURIFIER_MODDATA_KEY] = tier
         modData[Constants.PURIFIER_IN_AMOUNT_KEY] = 0
         modData[Constants.PURIFIER_OUT_AMOUNT_KEY] = 0
-        -- The filter is built with its first cartridge installed (part of the recipe).
-        if tier == Constants.PURIFIER_TIER_FILTER then
-            modData[Constants.PURIFIER_FILTER_CHARGES_KEY] = Constants.PURIFIER_FILTER_MAX_CHARGES
-        end
     end
     if thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)
     end
-end
-
-function Build.filterContainerOnCreate(params)
-    markPurifierContainer(params and params.thumpable, Constants.PURIFIER_TIER_FILTER)
-end
-
-function Build.fireContainerOnCreate(params)
-    markPurifierContainer(params and params.thumpable, Constants.PURIFIER_TIER_FIRE)
 end
 
 function Build.electricContainerOnCreate(params)
