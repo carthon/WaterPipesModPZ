@@ -95,8 +95,11 @@ local function markAndRegister(thumpable, surface, riser, edge, hidden, purifier
         if purifierTier == Constants.PURIFIER_TIER_FILTER then
             modData[Constants.PURIFIER_FILTER_CHARGES_KEY] = Constants.PURIFIER_FILTER_MAX_CHARGES
         end
-        -- Router variant: a flow boundary between two networks (direction/transfer added in step 4).
+        -- Router variant: a flow boundary; give it a default OUT direction until the player rotates it.
         modData[Constants.ROUTER_MODDATA_KEY] = router and true or nil
+        if router and modData[Constants.ROUTER_DIRECTION_KEY] == nil then
+            modData[Constants.ROUTER_DIRECTION_KEY] = Constants.ROUTER_DEFAULT_DIRECTION
+        end
     end
     if thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)

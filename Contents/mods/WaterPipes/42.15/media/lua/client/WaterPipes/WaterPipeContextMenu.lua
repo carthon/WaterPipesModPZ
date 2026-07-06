@@ -174,6 +174,61 @@ local function addPurifierOptions(context, playerObj, purifierObject)
     end
 end
 
+-- ===== Fluid router (flow direction) =====
+
+local ROUTER_DIR_TEXT = {
+    N = "IGUI_WaterPipesDir_N",
+    E = "IGUI_WaterPipesDir_E",
+    S = "IGUI_WaterPipesDir_S",
+    W = "IGUI_WaterPipesDir_W",
+}
+
+local function routerDirectionName(dir)
+    return getText(ROUTER_DIR_TEXT[dir] or "IGUI_WaterPipesDir_N")
+end
+
+local function findRouterInWorldObjects(worldobjects)
+    if not worldobjects then
+        return nil
+    end
+    for _, worldObject in ipairs(worldobjects) do
+        if Router.isRouter(worldObject) then
+            return worldObject
+        end
+        if worldObject and worldObject.getSquare and worldObject:getSquare() then
+            local router = Router.findOnSquare(worldObject:getSquare())
+            if router then
+                return router
+            end
+        end
+    end
+    return nil
+end
+
+-- Cycle the OUT direction; the server applies it authoritatively (world-object modData).
+function ContextMenu.rotateRouter(playerObj, routerObject)
+    if not playerObj or not routerObject or not routerObject.getSquare then
+        return
+    end
+    local square = routerObject:getSquare()
+    if not square then
+        return
+    end
+    local nextDir = Router.nextDirection(Router.getDirection(routerObject))
+    sendClientCommand(playerObj, "WaterPipes", "setRouterDirection",
+        { x = square:getX(), y = square:getY(), z = square:getZ(), dir = nextDir })
+    if HaloTextHelper then
+        HaloTextHelper.addText(playerObj, getText("IGUI_WaterPipesRouterFlow", routerDirectionName(nextDir)))
+    end
+end
+
+local function addRouterOptions(context, playerObj, routerObject)
+    local statusOption = context:addOption(
+        getText("IGUI_WaterPipesRouterFlow", routerDirectionName(Router.getDirection(routerObject))), nil, nil)
+    statusOption.notAvailable = true
+    context:addOption(getText("ContextMenu_WaterPipesRotateRouter"), playerObj, ContextMenu.rotateRouter, routerObject)
+end
+
 local function setHighlight(worldObject, playerNum, on, color)
     if not worldObject or not worldObject.setHighlighted then
         return
@@ -742,6 +797,11 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     local purifierObject = findPurifierInWorldObjects(worldobjects)
     if purifierObject then
         addPurifierOptions(context, playerObj, purifierObject)
+    end
+
+    local routerObject = findRouterInWorldObjects(worldobjects)
+    if routerObject then
+        addRouterOptions(context, playerObj, routerObject)
     end
 
     if isDebugActive() then

@@ -13,6 +13,8 @@ require "WaterPipes/GeneratorFuel"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Purifier"
 require "WaterPipes/GravityFlow"
+require "WaterPipes/Router"
+require "WaterPipes/NetworkAccess"
 require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
 
@@ -28,6 +30,8 @@ local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local PipeAutotile = WaterPipes.PipeAutotile
 local Purifier = WaterPipes.Purifier
 local GravityFlow = WaterPipes.GravityFlow
+local Router = WaterPipes.Router
+local NetworkAccess = WaterPipes.NetworkAccess
 local State = WaterPipes.State
 local System = WaterPipes.System
 
@@ -204,6 +208,55 @@ function System.redistributeWater()
     end
 end
 
+-- Fluid routers actively move fluid across their boundary in the OUT direction. With no purifier
+-- container on the tile this is a one-way passthrough of the same fluid (capped by the transfer rate);
+-- the purifier-container path (two buffers + conversion) is layered on next. Authoritative server tick.
+function System.processRouter(router, rx, ry, rz)
+    local out = Router.getOutOffset(router)
+    if not out then
+        return
+    end
+
+    local inSquare = getSquare(rx - out.dx, ry - out.dy, rz)
+    local outSquare = getSquare(rx + out.dx, ry + out.dy, rz)
+    if not inSquare or not outSquare then
+        return
+    end
+
+    local avail, fluidType = NetworkAccess.availableToPull(inSquare)
+    if not fluidType or avail <= 0 then
+        return
+    end
+
+    local headroom = NetworkAccess.availableToPush(outSquare, fluidType)
+    if headroom <= 0 then
+        return
+    end
+
+    local transfer = math.min(Constants.ROUTER_TRANSFER_RATE, avail, headroom)
+    if transfer <= 0 then
+        return
+    end
+
+    local drawn = NetworkAccess.drawFluidAtSquare(inSquare, fluidType, transfer)
+    if drawn and drawn > 0 then
+        NetworkAccess.fillFluidAtSquare(outSquare, fluidType, drawn)
+    end
+end
+
+function System.processRouters()
+    local state = State.ensure()
+    for _, pipeData in pairs(state.pipes) do
+        if pipeData.metadata and pipeData.metadata.router == true then
+            local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
+            local router = square and Router.findOnSquare(square)
+            if router then
+                System.processRouter(router, pipeData.x, pipeData.y, pipeData.z)
+            end
+        end
+    end
+end
+
 function System.refreshPlumbedEndpoints()
     local state = State.ensure()
     local coordinates = {}
@@ -372,6 +425,11 @@ local function onEveryTenMinutes()
 end
 
 local function onEveryOneMinute()
+    local okRouters, errRouters = pcall(System.processRouters)
+    if not okRouters then
+        Logger.error("Router processing failed: " .. tostring(errRouters))
+    end
+
     local ok, err = pcall(System.refreshPlumbedEndpoints)
     if not ok then
         Logger.error("Endpoint plumbing refresh failed: " .. tostring(err))
@@ -471,6 +529,17 @@ local function onClientCommand(module, command, player, args)
         else
             Logger.warn("Purifier cartridge command: no purifier at "
                 .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
+        end
+        return
+    end
+
+    -- Router flow direction: set authoritatively on the server (clients request it).
+    if command == "setRouterDirection" then
+        local square = resolveCommandSquare(args)
+        local router = square and Router.findOnSquare(square)
+        if router then
+            Router.setDirection(router, args and args.dir)
+            System.processRouters()
         end
         return
     end

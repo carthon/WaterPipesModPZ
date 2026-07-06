@@ -312,6 +312,34 @@ function NetworkAccess.getNetworkFromSquare(originSquare)
     return pipeSquares, descriptors
 end
 
+-- Router intake helper: which single fluid (and how much) can be PULLED from the network reachable
+-- upward from `square` (gravity-consumer view). Returns (amount, fluidTypeName) or (0, nil).
+function NetworkAccess.availableToPull(square)
+    local summary = buildSummaryFromSquare(square, "up")
+    if not summary or summary.isMixed or (summary.totalAmount or 0) <= 0 then
+        return 0, nil
+    end
+    return summary.totalAmount, summary.fluidTypeName
+end
+
+-- Router output helper: how much `fluidType` can be PUSHED into the network reachable downward from
+-- `square` (gravity-fill view). Returns the free headroom, or 0 if full / mixed / incompatible fluid.
+function NetworkAccess.availableToPush(square, fluidType)
+    local summary = buildSummaryFromSquare(square, "down")
+    if not summary or summary.isMixed then
+        return 0
+    end
+    local headroom = (summary.totalCapacity or 0) - (summary.totalAmount or 0)
+    if headroom <= 0 then
+        return 0
+    end
+    if (summary.totalAmount or 0) > 0 and summary.fluidTypeName
+        and not fluidNameMatches(summary.fluidTypeName, fluidType) then
+        return 0
+    end
+    return headroom
+end
+
 -- Draw up to `amount` of `requiredFluidType` from the network reachable from `originSquare`.
 -- Only works on a single-fluid network whose fluid matches requiredFluidType. Returns the
 -- amount actually drawn (rebalanced out of the network's containers).

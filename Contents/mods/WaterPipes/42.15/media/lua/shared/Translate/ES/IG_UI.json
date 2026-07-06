@@ -11,5 +11,10 @@
     "IGUI_WaterPipesPurifierNoHeat": "%1: necesita una fuente de calor encendida",
     "IGUI_WaterPipesPurifierPowered": "%1: con electricidad",
     "IGUI_WaterPipesPurifierNoPower": "%1: sin electricidad (inactivo)",
-    "IGUI_WaterPipesCartridgeInstalled": "Cartucho de filtro instalado"
+    "IGUI_WaterPipesCartridgeInstalled": "Cartucho de filtro instalado",
+    "IGUI_WaterPipesRouterFlow": "Enrutador - salida hacia: %1",
+    "IGUI_WaterPipesDir_N": "Norte",
+    "IGUI_WaterPipesDir_E": "Este",
+    "IGUI_WaterPipesDir_S": "Sur",
+    "IGUI_WaterPipesDir_W": "Oeste"
 }

@@ -11,5 +11,10 @@
     "IGUI_WaterPipesPurifierNoHeat": "%1: needs a lit heat source",
     "IGUI_WaterPipesPurifierPowered": "%1: powered",
     "IGUI_WaterPipesPurifierNoPower": "%1: no power (idle)",
-    "IGUI_WaterPipesCartridgeInstalled": "Filter cartridge installed"
+    "IGUI_WaterPipesCartridgeInstalled": "Filter cartridge installed",
+    "IGUI_WaterPipesRouterFlow": "Fluid router - flow out: %1",
+    "IGUI_WaterPipesDir_N": "North",
+    "IGUI_WaterPipesDir_E": "East",
+    "IGUI_WaterPipesDir_S": "South",
+    "IGUI_WaterPipesDir_W": "West"
 }

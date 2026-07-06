@@ -106,8 +106,10 @@ Constants.PURIFIER_ELECTRIC_SPRITE = "waterpipes_01_12"
 -- IN side and the OUT side never merge), bridged only through a container on its tile. Baked in at
 -- build time (modData, synced). The IN->OUT direction is set later via the context menu (step 4).
 Constants.ROUTER_MODDATA_KEY = "waterpipesRouter"
-Constants.ROUTER_DIRECTION_KEY = "waterpipesRouterDir"   -- "N"/"E"/"S"/"W" = the OUT side (step 4)
+Constants.ROUTER_DIRECTION_KEY = "waterpipesRouterDir"   -- "N"/"E"/"S"/"W" = the OUT side
 Constants.ROUTER_SPRITE = "waterpipes_01_13"             -- placeholder until the arrow art is packed
+Constants.ROUTER_DEFAULT_DIRECTION = "N"
+Constants.ROUTER_TRANSFER_RATE = 30                      -- max fluid units moved IN->OUT per minute tick
 Constants.ADAPTER_SOURCE_SPRITE = "carpentry_02_54"
 Constants.ADAPTER_SOURCE_HIDDEN_SPRITE = "waterpipes_01_20"
 Constants.MAX_FINITE_FLUID_CAPACITY = 9999
