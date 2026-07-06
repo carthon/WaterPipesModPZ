@@ -85,7 +85,7 @@ end
 
 -- ===== OnCreate (server / single-player) =====
 
-local function markAndRegister(thumpable, surface, riser, edge, hidden, purifierTier, router, routerDirection)
+local function markAndRegister(thumpable, surface, riser, edge, hidden, router, routerDirection)
     if not thumpable then
         return
     end
@@ -99,13 +99,6 @@ local function markAndRegister(thumpable, surface, riser, edge, hidden, purifier
         modData[Constants.PIPE_RISER_EDGE_MODDATA_KEY] = edge or nil
         -- Concealed variant: baked in at build; clients render it with a transparent tile.
         modData[Constants.PIPE_HIDDEN_MODDATA_KEY] = hidden and true or nil
-        -- Purifier variant: a floor pipe that cleans the network's tainted water while it works.
-        modData[Constants.PURIFIER_MODDATA_KEY] = purifierTier or nil
-        -- The filter tier is built with its first cartridge installed (part of the recipe), so it
-        -- works out of the box; replacements are inserted later via the context menu.
-        if purifierTier == Constants.PURIFIER_TIER_FILTER then
-            modData[Constants.PURIFIER_FILTER_CHARGES_KEY] = Constants.PURIFIER_FILTER_MAX_CHARGES
-        end
         -- Router variant: a flow boundary; the OUT direction is chosen by rotating (R) at build time.
         modData[Constants.ROUTER_MODDATA_KEY] = router and true or nil
         if router then
@@ -147,24 +140,60 @@ function Build.riserHiddenOnCreate(params)
     markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_WALLCOVER, true, edgeFromFacing(params), true)
 end
 
--- Purifier variants: floor pipes (auto-connect + carry water like any pipe) tagged with a tier so
--- the network tick knows to clean tainted water through them. Never hidden, never risers.
-function Build.filterPurifierOnCreate(params)
-    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, Constants.PURIFIER_TIER_FILTER)
+-- Purifier-containers: NON-pipe objects placed on a router tile. They hold two buffers (IN tainted /
+-- OUT clean) and the router purifies water in transit through them; they never register as pipes.
+local function markPurifierContainer(thumpable, tier)
+    if not thumpable then
+        return
+    end
+    local modData = getModData(thumpable)
+    if modData then
+        modData[Constants.PURIFIER_MODDATA_KEY] = tier
+        modData[Constants.PURIFIER_IN_AMOUNT_KEY] = 0
+        modData[Constants.PURIFIER_OUT_AMOUNT_KEY] = 0
+        -- The filter is built with its first cartridge installed (part of the recipe).
+        if tier == Constants.PURIFIER_TIER_FILTER then
+            modData[Constants.PURIFIER_FILTER_CHARGES_KEY] = Constants.PURIFIER_FILTER_MAX_CHARGES
+        end
+    end
+    if thumpable.transmitModData then
+        pcall(thumpable.transmitModData, thumpable)
+    end
 end
 
-function Build.firePurifierOnCreate(params)
-    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, Constants.PURIFIER_TIER_FIRE)
+function Build.filterContainerOnCreate(params)
+    markPurifierContainer(params and params.thumpable, Constants.PURIFIER_TIER_FILTER)
 end
 
-function Build.electricPurifierOnCreate(params)
-    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, Constants.PURIFIER_TIER_ELECTRIC)
+function Build.fireContainerOnCreate(params)
+    markPurifierContainer(params and params.thumpable, Constants.PURIFIER_TIER_FIRE)
+end
+
+function Build.electricContainerOnCreate(params)
+    markPurifierContainer(params and params.thumpable, Constants.PURIFIER_TIER_ELECTRIC)
+end
+
+-- A purifier-container needs a router on its tile (the router drives it), and only one per tile.
+function Build.purifierContainerOnIsValid(params)
+    local square = params and params.square
+    if not square then
+        return false
+    end
+    local Router = WaterPipes.Router
+    local Purifier = WaterPipes.Purifier
+    if not Router or not Router.hasRouterOnSquare(square) then
+        return false
+    end
+    if Purifier and Purifier.findOnSquare(square) then
+        return false
+    end
+    return true
 end
 
 -- Fluid router: a floor pipe that is a flow boundary (splits the network into IN and OUT sides). The
 -- OUT direction comes from the build-cursor facing (rotate with R while placing).
 function Build.routerOnCreate(params)
-    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, nil, true,
+    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, true,
         facingToDirection(params))
 end
 

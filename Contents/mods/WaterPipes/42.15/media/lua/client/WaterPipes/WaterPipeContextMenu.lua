@@ -169,6 +169,11 @@ local function addPurifierOptions(context, playerObj, purifierObject)
     local statusOption = context:addOption(purifierStatusText(purifierObject), nil, nil)
     statusOption.notAvailable = true
 
+    local bufferOption = context:addOption(
+        getText("IGUI_WaterPipesPurifierBuffers",
+            math.floor(Purifier.getInAmount(purifierObject)), math.floor(Purifier.getOutAmount(purifierObject))), nil, nil)
+    bufferOption.notAvailable = true
+
     if Purifier.getTier(purifierObject) == Constants.PURIFIER_TIER_FILTER and playerHasCartridge(playerObj) then
         context:addOption(getText("ContextMenu_WaterPipesReplaceCartridge"), playerObj, ContextMenu.replacePurifierCartridge, purifierObject)
     end

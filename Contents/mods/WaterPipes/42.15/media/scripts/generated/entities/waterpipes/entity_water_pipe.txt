@@ -137,13 +137,13 @@ module WaterPipes
         component SpriteConfig
         {
             isThumpable = false,
-            OnCreate = WaterPipesBuild.filterPurifierOnCreate,
-            OnIsValid = WaterPipesBuild.floorOnIsValid,
+            OnCreate = WaterPipesBuild.filterContainerOnCreate,
+            OnIsValid = WaterPipesBuild.purifierContainerOnIsValid,
             face S
             {
                 layer
                 {
-                    row = waterpipes_01_10,
+                    row = waterpipes_01_36,
                 }
             }
         }
@@ -167,13 +167,13 @@ module WaterPipes
         component SpriteConfig
         {
             isThumpable = false,
-            OnCreate = WaterPipesBuild.firePurifierOnCreate,
-            OnIsValid = WaterPipesBuild.floorOnIsValid,
+            OnCreate = WaterPipesBuild.fireContainerOnCreate,
+            OnIsValid = WaterPipesBuild.purifierContainerOnIsValid,
             face S
             {
                 layer
                 {
-                    row = waterpipes_01_11,
+                    row = waterpipes_01_37,
                 }
             }
         }
@@ -197,13 +197,13 @@ module WaterPipes
         component SpriteConfig
         {
             isThumpable = false,
-            OnCreate = WaterPipesBuild.electricPurifierOnCreate,
-            OnIsValid = WaterPipesBuild.floorOnIsValid,
+            OnCreate = WaterPipesBuild.electricContainerOnCreate,
+            OnIsValid = WaterPipesBuild.purifierContainerOnIsValid,
             face S
             {
                 layer
                 {
-                    row = waterpipes_01_12,
+                    row = waterpipes_01_38,
                 }
             }
         }

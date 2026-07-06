@@ -10,9 +10,9 @@ local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Purifier = WaterPipes.Purifier
 
--- A purifier is a floor pipe carrying the purifier tier in its modData. It is detected the same
--- modData-based way as every other pipe variant (never by sprite), so hiding/placeholder art never
--- affects behaviour.
+-- A purifier is a NON-pipe container object placed on a router tile, tagged with its tier in modData.
+-- It holds two internal buffers (IN tainted / OUT clean); the router drives intake -> convert -> output.
+-- Detected by modData (never by sprite).
 
 local function getModData(worldObject)
     if not worldObject or not worldObject.getModData then
@@ -178,35 +178,86 @@ function Purifier.consumeForConversion(worldObject)
     end
 end
 
--- ===== Network integration =====
+-- ===== IN / OUT buffers (two internal tanks, stored as modData) =====
 
--- The first purifier world object sitting on a square, or nil.
-function Purifier.findOnSquare(square)
-    if not square then
-        return nil
+local function transmit(worldObject)
+    if worldObject and worldObject.transmitModData then
+        pcall(worldObject.transmitModData, worldObject)
     end
-    for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
-        if Purifier.isPurifier(worldObject) then
-            return worldObject
-        end
-    end
-    return nil
 end
 
--- Return the first WORKING purifier world object anywhere in a network component (nil if none). The
--- component's pipe nodes carry the square coordinates; we look up the live world object to read its
--- state. Squares that are not loaded (far chunks on a dedicated server) are skipped, exactly like the
--- rest of the redistribution pass.
-function Purifier.componentWorkingPurifier(component)
-    if not component or not component.nodes then
+function Purifier.getInAmount(worldObject)
+    local modData = getModData(worldObject)
+    local value = modData and modData[Constants.PURIFIER_IN_AMOUNT_KEY]
+    return type(value) == "number" and math.max(value, 0) or 0
+end
+
+function Purifier.isInTainted(worldObject)
+    local modData = getModData(worldObject)
+    return modData and modData[Constants.PURIFIER_IN_TAINTED_KEY] == true or false
+end
+
+function Purifier.getOutAmount(worldObject)
+    local modData = getModData(worldObject)
+    local value = modData and modData[Constants.PURIFIER_OUT_AMOUNT_KEY]
+    return type(value) == "number" and math.max(value, 0) or 0
+end
+
+-- Add intake into the IN buffer, recording whether it is tainted (an empty buffer adopts the type).
+function Purifier.addIn(worldObject, amount, tainted)
+    local modData = getModData(worldObject)
+    if not modData or (amount or 0) <= 0 then
+        return
+    end
+    if Purifier.getInAmount(worldObject) <= 0 then
+        modData[Constants.PURIFIER_IN_TAINTED_KEY] = tainted and true or nil
+    end
+    modData[Constants.PURIFIER_IN_AMOUNT_KEY] = Purifier.getInAmount(worldObject) + amount
+    transmit(worldObject)
+end
+
+-- Move fluid IN -> OUT (the OUT buffer is always clean Water). Clears the taint flag when IN empties.
+function Purifier.moveInToOut(worldObject, amount)
+    local modData = getModData(worldObject)
+    if not modData then
+        return
+    end
+    local moved = math.min(amount or 0, Purifier.getInAmount(worldObject))
+    if moved <= 0 then
+        return
+    end
+    local newIn = Purifier.getInAmount(worldObject) - moved
+    modData[Constants.PURIFIER_IN_AMOUNT_KEY] = newIn
+    if newIn <= 0 then
+        modData[Constants.PURIFIER_IN_AMOUNT_KEY] = 0
+        modData[Constants.PURIFIER_IN_TAINTED_KEY] = nil
+    end
+    modData[Constants.PURIFIER_OUT_AMOUNT_KEY] = Purifier.getOutAmount(worldObject) + moved
+    transmit(worldObject)
+end
+
+function Purifier.removeOut(worldObject, amount)
+    local modData = getModData(worldObject)
+    if not modData or (amount or 0) <= 0 then
+        return
+    end
+    modData[Constants.PURIFIER_OUT_AMOUNT_KEY] = math.max(Purifier.getOutAmount(worldObject) - amount, 0)
+    transmit(worldObject)
+end
+
+-- ===== Location =====
+
+-- The purifier-container object sitting on a square, or nil. It is a NON-pipe object (placed on a
+-- router tile), so we scan every object on the square, not only pipes.
+function Purifier.findOnSquare(square)
+    if not square or not square.getObjects then
         return nil
     end
-    for _, node in pairs(component.nodes) do
-        if node.kind == Constants.NODE_KIND_PIPE then
-            local purifier = Purifier.findOnSquare(getSquare(node.x, node.y, node.z))
-            if purifier and Purifier.isWorking(purifier) then
-                return purifier
-            end
+    local objects = square:getObjects()
+    for index = 0, objects:size() - 1 do
+        local worldObject = objects:get(index)
+        if Purifier.isPurifier(worldObject) then
+            return worldObject
         end
     end
     return nil

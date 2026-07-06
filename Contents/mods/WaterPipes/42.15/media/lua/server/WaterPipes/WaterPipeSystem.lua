@@ -169,33 +169,9 @@ function System.redistributeWater()
             end
         end
 
-        local hasTainted = false
-        local onlyWaterTypes = true
         for fluidTypeName in pairs(totalByFluidType) do
             fluidTypeCount = fluidTypeCount + 1
             networkFluidType = fluidTypeName
-            if fluidTypeName == "TaintedWater" then
-                hasTainted = true
-            elseif fluidTypeName ~= "Water" then
-                onlyWaterTypes = false
-            end
-        end
-
-        -- Purification (pool model): a working purifier anywhere in the component turns its tainted
-        -- water clean. Applies to any water-only network holding TaintedWater -- a single container, or
-        -- a transient Water+TaintedWater mix -- converging it to clean Water. Non-water fluids (Petrol,
-        -- ...) are never purified, so a network carrying them is left untouched. Runs in the server
-        -- tick (authoritative); writeDescriptorWaterAmount syncs the container to clients.
-        if hasTainted and onlyWaterTypes then
-            local purifier = Purifier.componentWorkingPurifier(component)
-            if purifier then
-                for _, descriptor in ipairs(containers) do
-                    Adapter.writeDescriptorWaterAmount(descriptor, math.max(descriptor.waterAmount or 0, 0), "Water")
-                end
-                networkFluidType = "Water"
-                fluidTypeCount = 1
-                Purifier.consumeForConversion(purifier)
-            end
         end
 
         if fluidTypeCount <= 1 and #containers > 1 and totalCapacity > 0 then
@@ -208,9 +184,81 @@ function System.redistributeWater()
     end
 end
 
--- Fluid routers actively move fluid across their boundary in the OUT direction. With no purifier
--- container on the tile this is a one-way passthrough of the same fluid (capped by the transfer rate);
--- the purifier-container path (two buffers + conversion) is layered on next. Authoritative server tick.
+-- No purifier on the tile: one-way passthrough of the IN network's single fluid into the OUT network.
+local function processPassthroughRouter(inSquare, outSquare)
+    local avail, fluidType = NetworkAccess.availableToPull(inSquare)
+    if not fluidType or avail <= 0 then
+        return
+    end
+    local headroom = NetworkAccess.availableToPush(outSquare, fluidType)
+    if headroom <= 0 then
+        return
+    end
+    local transfer = math.min(Constants.ROUTER_TRANSFER_RATE, avail, headroom)
+    if transfer <= 0 then
+        return
+    end
+    local drawn = NetworkAccess.drawFluidAtSquare(inSquare, fluidType, transfer)
+    if drawn and drawn > 0 then
+        NetworkAccess.fillFluidAtSquare(outSquare, fluidType, drawn)
+    end
+end
+
+-- Purifier-container on the tile: IN network -> IN buffer -> convert -> OUT buffer -> OUT network.
+-- Tainted water is only converted (to clean) while the purifier is working; clean water always passes.
+local function processPurifierRouter(purifier, inSquare, outSquare)
+    -- 1. Intake: pull water from the IN network into the IN buffer (only water types).
+    local avail, fluidType = NetworkAccess.availableToPull(inSquare)
+    if (fluidType == "Water" or fluidType == "TaintedWater") and avail > 0 then
+        local incomingTainted = (fluidType == "TaintedWater")
+        local inAmount = Purifier.getInAmount(purifier)
+        -- Only pull into an empty buffer or one already holding the same taint state (never mix).
+        if inAmount <= 0 or Purifier.isInTainted(purifier) == incomingTainted then
+            local headroom = Constants.PURIFIER_BUFFER_CAPACITY - inAmount
+            local pull = math.min(Constants.PURIFIER_INTAKE_RATE, avail, headroom)
+            if pull > 0 then
+                local drawn = NetworkAccess.drawFluidAtSquare(inSquare, fluidType, pull)
+                if drawn and drawn > 0 then
+                    Purifier.addIn(purifier, drawn, incomingTainted)
+                end
+            end
+        end
+    end
+
+    -- 2. Convert: move IN -> OUT. Tainted needs a working purifier (spends a charge); clean passes.
+    local inAmount = Purifier.getInAmount(purifier)
+    if inAmount > 0 then
+        local outHeadroom = Constants.PURIFIER_BUFFER_CAPACITY - Purifier.getOutAmount(purifier)
+        if outHeadroom > 0 then
+            local move = math.min(Constants.PURIFIER_CONVERT_RATE, inAmount, outHeadroom)
+            if Purifier.isInTainted(purifier) then
+                if Purifier.isWorking(purifier) then
+                    Purifier.moveInToOut(purifier, move)   -- lands in the OUT buffer as clean Water
+                    Purifier.consumeForConversion(purifier)
+                end
+                -- tainted + not working: stays in the IN buffer until a cartridge / heat / power arrives
+            else
+                Purifier.moveInToOut(purifier, move)       -- clean water always passes through
+            end
+        end
+    end
+
+    -- 3. Output: push the (clean) OUT buffer into the OUT network.
+    local outAmount = Purifier.getOutAmount(purifier)
+    if outAmount > 0 then
+        local pushHeadroom = NetworkAccess.availableToPush(outSquare, "Water")
+        local push = math.min(Constants.PURIFIER_OUTPUT_RATE, outAmount, pushHeadroom)
+        if push > 0 then
+            local filled = NetworkAccess.fillFluidAtSquare(outSquare, "Water", push)
+            if filled and filled > 0 then
+                Purifier.removeOut(purifier, filled)
+            end
+        end
+    end
+end
+
+-- Fluid routers actively move fluid across their boundary in the OUT direction each server tick. A
+-- purifier-container on the tile purifies in transit; otherwise it is a plain one-way passthrough.
 function System.processRouter(router, rx, ry, rz)
     local out = Router.getOutOffset(router)
     if not out then
@@ -223,24 +271,11 @@ function System.processRouter(router, rx, ry, rz)
         return
     end
 
-    local avail, fluidType = NetworkAccess.availableToPull(inSquare)
-    if not fluidType or avail <= 0 then
-        return
-    end
-
-    local headroom = NetworkAccess.availableToPush(outSquare, fluidType)
-    if headroom <= 0 then
-        return
-    end
-
-    local transfer = math.min(Constants.ROUTER_TRANSFER_RATE, avail, headroom)
-    if transfer <= 0 then
-        return
-    end
-
-    local drawn = NetworkAccess.drawFluidAtSquare(inSquare, fluidType, transfer)
-    if drawn and drawn > 0 then
-        NetworkAccess.fillFluidAtSquare(outSquare, fluidType, drawn)
+    local purifier = Purifier.findOnSquare(getSquare(rx, ry, rz))
+    if purifier then
+        processPurifierRouter(purifier, inSquare, outSquare)
+    else
+        processPassthroughRouter(inSquare, outSquare)
     end
 end
 

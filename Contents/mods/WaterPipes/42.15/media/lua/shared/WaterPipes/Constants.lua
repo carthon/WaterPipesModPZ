@@ -93,15 +93,21 @@ Constants.PURIFIER_TIER_FILTER = "filter"
 Constants.PURIFIER_TIER_FIRE = "fire"
 Constants.PURIFIER_TIER_ELECTRIC = "electric"
 Constants.PURIFIER_FILTER_CHARGES_KEY = "waterpipesFilterCharges"
-Constants.PURIFIER_FILTER_MAX_CHARGES = 10                  -- charges a fresh cartridge provides
+Constants.PURIFIER_FILTER_MAX_CHARGES = 20                  -- charges a fresh cartridge provides
 Constants.PURIFIER_CARTRIDGE_ITEM_TYPE = "Base.WaterFilterCartridge"
--- Placeholder sprites until the artist delivers dedicated purifier tiles (reserved atlas cells
--- 26/27/28). These are existing visible pack sprites so the tiles can be built/tested now; purifiers
--- are excluded from autotiling so they keep this fixed sprite. Swap these three + the entity face
--- rows in entity_water_pipe.txt when the real art is packed.
-Constants.PURIFIER_FILTER_SPRITE = "waterpipes_01_10"
-Constants.PURIFIER_FIRE_SPRITE = "waterpipes_01_11"
-Constants.PURIFIER_ELECTRIC_SPRITE = "waterpipes_01_12"
+-- Purifier-container is a NON-pipe object placed on a router tile. It holds two internal buffers
+-- (modData): IN (tainted intake) and OUT (clean output). The router drives intake -> convert -> output.
+Constants.PURIFIER_IN_AMOUNT_KEY = "waterpipesPurIn"
+Constants.PURIFIER_IN_TAINTED_KEY = "waterpipesPurInTainted"
+Constants.PURIFIER_OUT_AMOUNT_KEY = "waterpipesPurOut"
+Constants.PURIFIER_BUFFER_CAPACITY = 50
+Constants.PURIFIER_INTAKE_RATE = 20                         -- per minute tick
+Constants.PURIFIER_CONVERT_RATE = 20
+Constants.PURIFIER_OUTPUT_RATE = 20
+-- Purifier tank sprites (vanilla industry_02 tank tinted per tier, packed into our atlas 36/37/38).
+Constants.PURIFIER_FILTER_SPRITE = "waterpipes_01_36"
+Constants.PURIFIER_FIRE_SPRITE = "waterpipes_01_37"
+Constants.PURIFIER_ELECTRIC_SPRITE = "waterpipes_01_38"
 -- Fluid router: a directional floor pipe that acts as a BOUNDARY between two separate networks (the
 -- IN side and the OUT side never merge), bridged only through a container on its tile. Baked in at
 -- build time (modData, synced). The IN->OUT direction is set later via the context menu (step 4).
