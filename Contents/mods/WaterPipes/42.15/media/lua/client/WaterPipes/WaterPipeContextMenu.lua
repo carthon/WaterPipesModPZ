@@ -14,6 +14,8 @@ require "WaterPipes/Logger"
 -- client recomputes pipe connection sprites locally (the shape is never sent over the network).
 require "WaterPipes/PipeAutotile"
 require "WaterPipes/API"
+require "WaterPipes/WaterPipesPurifierWindow"
+require "WaterPipes/WaterPipesPurifierSound"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.ContextMenu = WaterPipes.ContextMenu or {}
@@ -101,77 +103,48 @@ end
 
 -- ===== Purifier tiles (status readout + filter-cartridge replacement) =====
 
+-- The purifier is a 2x2 tank whose modData lives only on the ANCHOR (min-corner / back) tile, but the
+-- player will often right-click the visible body (a non-anchor tile). The footprint extends +x/+y from
+-- the anchor, so from any of the four tiles the anchor sits within the 2x2 block up-and-left of it --
+-- scan that block so "Open Purifier" shows from anywhere on the tank.
+local PURIFIER_BLOCK_OFFSETS = { { 0, 0 }, { -1, 0 }, { 0, -1 }, { -1, -1 } }
+
 local function findPurifierInWorldObjects(worldobjects)
     if not worldobjects then
         return nil
     end
+    local cell = getCell and getCell() or nil
     for _, worldObject in ipairs(worldobjects) do
         if Purifier.isPurifier(worldObject) then
             return worldObject
         end
-        if worldObject and worldObject.getSquare and worldObject:getSquare() then
-            local purifier = Purifier.findOnSquare(worldObject:getSquare())
-            if purifier then
-                return purifier
+        local square = worldObject and worldObject.getSquare and worldObject:getSquare() or nil
+        if square then
+            for _, off in ipairs(PURIFIER_BLOCK_OFFSETS) do
+                local nsq = square
+                if off[1] ~= 0 or off[2] ~= 0 then
+                    nsq = cell and cell:getGridSquare(square:getX() + off[1], square:getY() + off[2], square:getZ())
+                end
+                local purifier = nsq and Purifier.findOnSquare(nsq)
+                if purifier then
+                    return purifier
+                end
             end
         end
     end
     return nil
 end
 
--- A one-line status readout shown (greyed) at the top of a purifier's menu.
-local function purifierStatusText(purifierObject)
-    local name = getText("IGUI_WaterPipesPurifier_electric")
-    return getText(Purifier.isWorking(purifierObject) and "IGUI_WaterPipesPurifierPowered" or "IGUI_WaterPipesPurifierNoPower", name)
+-- Open the purifier readout window (buffers, running status, filtering rate).
+function ContextMenu.openPurifier(playerObj, purifierObject)
+    if not purifierObject or not WaterPipesPurifierWindow then
+        return
+    end
+    WaterPipesPurifierWindow.openFor(purifierObject)
 end
 
 local function addPurifierOptions(context, playerObj, purifierObject)
-    local statusOption = context:addOption(purifierStatusText(purifierObject), nil, nil)
-    statusOption.notAvailable = true
-
-    local bufferOption = context:addOption(
-        getText("IGUI_WaterPipesPurifierBuffers",
-            math.floor(Purifier.getInAmount(purifierObject)), math.floor(Purifier.getOutAmount(purifierObject))), nil, nil)
-    bufferOption.notAvailable = true
-end
-
--- ===== Fluid router (flow direction) =====
-
-local ROUTER_DIR_TEXT = {
-    N = "IGUI_WaterPipesDir_N",
-    E = "IGUI_WaterPipesDir_E",
-    S = "IGUI_WaterPipesDir_S",
-    W = "IGUI_WaterPipesDir_W",
-}
-
-local function routerDirectionName(dir)
-    return getText(ROUTER_DIR_TEXT[dir] or "IGUI_WaterPipesDir_N")
-end
-
-local function findRouterInWorldObjects(worldobjects)
-    if not worldobjects then
-        return nil
-    end
-    for _, worldObject in ipairs(worldobjects) do
-        if Router.isRouter(worldObject) then
-            return worldObject
-        end
-        if worldObject and worldObject.getSquare and worldObject:getSquare() then
-            local router = Router.findOnSquare(worldObject:getSquare())
-            if router then
-                return router
-            end
-        end
-    end
-    return nil
-end
-
--- The IN->OUT direction is chosen by rotating the tile with R at build time. The menu only reports
--- the current OUT side (no rotate action).
-local function addRouterOptions(context, playerObj, routerObject)
-    local statusOption = context:addOption(
-        getText("IGUI_WaterPipesRouterFlow", routerDirectionName(Router.getDirection(routerObject))), nil, nil)
-    statusOption.notAvailable = true
+    context:addOption(getText("ContextMenu_WaterPipesOpenPurifier"), playerObj, ContextMenu.openPurifier, purifierObject)
 end
 
 local function setHighlight(worldObject, playerNum, on, color)
@@ -703,9 +676,14 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     local hasShowNetworkOption = pipeObject ~= nil
     local hasHideNetworkOption = #ContextMenu.highlightedObjects > 0
 
+    -- Purifier: an "Open Purifier" option that pops the readout window (buffers / status / rate).
+    local purifierObject = findPurifierInWorldObjects(worldobjects)
+    local hasPurifierOption = purifierObject ~= nil
+
     if not hasUnplumbOption and not hasModPlumbOption
         and not hasGeneratorPlumbOption and not hasGeneratorUnplumbOption
         and not hasShowNetworkOption and not hasHideNetworkOption
+        and not hasPurifierOption
         and not isDebugActive() then
         return false
     end
@@ -739,14 +717,8 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         context:addOption(getText("ContextMenu_WaterPipesHideNetwork"), playerObj, ContextMenu.hideNetwork)
     end
 
-    local purifierObject = findPurifierInWorldObjects(worldobjects)
-    if purifierObject then
+    if hasPurifierOption then
         addPurifierOptions(context, playerObj, purifierObject)
-    end
-
-    local routerObject = findRouterInWorldObjects(worldobjects)
-    if routerObject then
-        addRouterOptions(context, playerObj, routerObject)
     end
 
     if isDebugActive() then

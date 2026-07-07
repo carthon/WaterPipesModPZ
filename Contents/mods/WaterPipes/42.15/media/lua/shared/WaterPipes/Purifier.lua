@@ -46,14 +46,10 @@ function Purifier.isPurifier(worldObject)
     return Purifier.getTier(worldObject) ~= nil
 end
 
--- The fixed device sprite for a purifier tier (placeholder art for now, see Constants).
+-- The purifier's identity sprite. Purifiers are electric-only and the visible tank is drawn by the
+-- entity's 2x2 SpriteConfig grid, so this is only the anchor/front-body cell (used for detection/UI).
 function Purifier.spriteForTier(tier)
-    if tier == Constants.PURIFIER_TIER_FIRE then
-        return Constants.PURIFIER_FIRE_SPRITE
-    elseif tier == Constants.PURIFIER_TIER_ELECTRIC then
-        return Constants.PURIFIER_ELECTRIC_SPRITE
-    end
-    return Constants.PURIFIER_FILTER_SPRITE
+    return Constants.PURIFIER_ELECTRIC_SPRITE
 end
 
 function Purifier.spriteFor(worldObject)

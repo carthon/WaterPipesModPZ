@@ -206,21 +206,21 @@ end
 
 -- Purifier-container on the tile: IN network -> IN buffer -> convert -> OUT buffer -> OUT network.
 -- Tainted water is only converted (to clean) while the purifier is working; clean water always passes.
+--
+-- Step order is OUTPUT -> CONVERT -> INTAKE on purpose: draining the output side FIRST and refilling
+-- the intake side LAST leaves water resident in both buffers between ticks, so the tanks actually hold
+-- (and the readout shows) a real level instead of being fully cycled to 0 every tick. Throughput and
+-- the powered/unpowered behaviour are unchanged; water just takes one extra tick to traverse.
 local function processPurifierRouter(purifier, inSquare, outSquare)
-    -- 1. Intake: pull water from the IN network into the IN buffer (only water types).
-    local avail, fluidType = NetworkAccess.availableToPull(inSquare)
-    if (fluidType == "Water" or fluidType == "TaintedWater") and avail > 0 then
-        local incomingTainted = (fluidType == "TaintedWater")
-        local inAmount = Purifier.getInAmount(purifier)
-        -- Only pull into an empty buffer or one already holding the same taint state (never mix).
-        if inAmount <= 0 or Purifier.isInTainted(purifier) == incomingTainted then
-            local headroom = Constants.PURIFIER_BUFFER_CAPACITY - inAmount
-            local pull = math.min(Constants.PURIFIER_INTAKE_RATE, avail, headroom)
-            if pull > 0 then
-                local drawn = NetworkAccess.drawFluidAtSquare(inSquare, fluidType, pull)
-                if drawn and drawn > 0 then
-                    Purifier.addIn(purifier, drawn, incomingTainted)
-                end
+    -- 1. Output: push the (clean) OUT buffer into the OUT network.
+    local outAmount = Purifier.getOutAmount(purifier)
+    if outAmount > 0 then
+        local pushHeadroom = NetworkAccess.availableToPush(outSquare, "Water")
+        local push = math.min(Constants.PURIFIER_OUTPUT_RATE, outAmount, pushHeadroom)
+        if push > 0 then
+            local filled = NetworkAccess.fillFluidAtSquare(outSquare, "Water", push)
+            if filled and filled > 0 then
+                Purifier.removeOut(purifier, filled)
             end
         end
     end
@@ -242,15 +242,20 @@ local function processPurifierRouter(purifier, inSquare, outSquare)
         end
     end
 
-    -- 3. Output: push the (clean) OUT buffer into the OUT network.
-    local outAmount = Purifier.getOutAmount(purifier)
-    if outAmount > 0 then
-        local pushHeadroom = NetworkAccess.availableToPush(outSquare, "Water")
-        local push = math.min(Constants.PURIFIER_OUTPUT_RATE, outAmount, pushHeadroom)
-        if push > 0 then
-            local filled = NetworkAccess.fillFluidAtSquare(outSquare, "Water", push)
-            if filled and filled > 0 then
-                Purifier.removeOut(purifier, filled)
+    -- 3. Intake: pull water from the IN network into the IN buffer (only water types).
+    local avail, fluidType = NetworkAccess.availableToPull(inSquare)
+    if (fluidType == "Water" or fluidType == "TaintedWater") and avail > 0 then
+        local incomingTainted = (fluidType == "TaintedWater")
+        local curIn = Purifier.getInAmount(purifier)
+        -- Only pull into an empty buffer or one already holding the same taint state (never mix).
+        if curIn <= 0 or Purifier.isInTainted(purifier) == incomingTainted then
+            local headroom = Constants.PURIFIER_BUFFER_CAPACITY - curIn
+            local pull = math.min(Constants.PURIFIER_INTAKE_RATE, avail, headroom)
+            if pull > 0 then
+                local drawn = NetworkAccess.drawFluidAtSquare(inSquare, fluidType, pull)
+                if drawn and drawn > 0 then
+                    Purifier.addIn(purifier, drawn, incomingTainted)
+                end
             end
         end
     end

@@ -104,10 +104,16 @@ Constants.PURIFIER_BUFFER_CAPACITY = 50
 Constants.PURIFIER_INTAKE_RATE = 20                         -- per minute tick
 Constants.PURIFIER_CONVERT_RATE = 20
 Constants.PURIFIER_OUTPUT_RATE = 20
--- Purifier tank sprites (vanilla industry_02 tank tinted per tier, packed into our atlas 36/37/38).
-Constants.PURIFIER_FILTER_SPRITE = "waterpipes_01_36"
-Constants.PURIFIER_FIRE_SPRITE = "waterpipes_01_37"
-Constants.PURIFIER_ELECTRIC_SPRITE = "waterpipes_01_38"
+-- Electric purifier tank: a 2x2 multi-tile object. The vanilla industry_02 cylinder is split into
+-- four perspective quadrants (industry 72/73/74/75), tinted electric-blue and packed into atlas
+-- cells 36-39. The entity script (WaterPurifierElectric, face S) lays them on the footprint:
+--   (0,0) top->36   (1,0) right->37   (0,1) left->39   (1,1) body/front->38
+Constants.PURIFIER_TANK_TOP_SPRITE = "waterpipes_01_36"    -- industry 74, back tile (0,0)
+Constants.PURIFIER_TANK_RIGHT_SPRITE = "waterpipes_01_37"  -- industry 75, tile (1,0)
+Constants.PURIFIER_TANK_LEFT_SPRITE = "waterpipes_01_39"   -- industry 72, tile (0,1)
+Constants.PURIFIER_TANK_BODY_SPRITE = "waterpipes_01_38"   -- industry 73, front tile (1,1)
+-- The anchor/front body sprite doubles as the purifier's identity sprite.
+Constants.PURIFIER_ELECTRIC_SPRITE = Constants.PURIFIER_TANK_BODY_SPRITE
 -- Fluid router: a directional floor pipe that acts as a BOUNDARY between two separate networks (the
 -- IN side and the OUT side never merge), bridged only through a container on its tile. Baked in at
 -- build time (modData, synced). The IN->OUT direction is set later via the context menu (step 4).

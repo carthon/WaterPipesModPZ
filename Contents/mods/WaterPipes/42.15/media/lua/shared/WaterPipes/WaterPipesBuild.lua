@@ -179,13 +179,25 @@ local function hasStructureAbove(square)
     return ok and floor ~= nil
 end
 
--- A purifier-container needs a router on its tile (the router drives it), only one per tile, and clear
--- headroom (no structure directly above) so the tall tank does not clip through it.
+-- The purifier is a 2x2 multi-tile tank. The engine validates EVERY footprint tile and requires ALL
+-- of them to pass, so the router requirement must apply to exactly ONE tile -- the anchor -- not to all
+-- four (otherwise the player would need a router under every tile). The anchor is the cursor/origin tile
+-- (grid 0,0), which draws the top/back quadrant sprite (_36); it is where OnCreate tags the purifier and
+-- where the runtime pairs router<->purifier on the SAME square. The other three tiles only need to be
+-- clear, which the engine already checks -- for them we just return true.
 function Build.purifierContainerOnIsValid(params)
     local square = params and params.square
     if not square then
         return false
     end
+    -- Identify the anchor tile by the per-tile sprite the engine is validating.
+    local tileInfo = params.tileInfo
+    local spriteName = tileInfo and tileInfo.getSpriteName and tileInfo:getSpriteName()
+    if spriteName ~= Constants.PURIFIER_TANK_TOP_SPRITE then
+        return true   -- a non-anchor footprint tile: no router needed here
+    end
+    -- Anchor tile: needs the (single, central) router, no existing purifier, and clear headroom so the
+    -- tall tank does not clip through a floor above.
     local Router = WaterPipes.Router
     local Purifier = WaterPipes.Purifier
     if not Router or not Router.hasRouterOnSquare(square) then
