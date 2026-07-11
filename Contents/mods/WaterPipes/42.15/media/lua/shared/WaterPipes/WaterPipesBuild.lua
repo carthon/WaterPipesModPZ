@@ -151,6 +151,7 @@ local function markPurifierContainer(thumpable, tier)
         modData[Constants.PURIFIER_MODDATA_KEY] = tier
         modData[Constants.PURIFIER_IN_AMOUNT_KEY] = 0
         modData[Constants.PURIFIER_OUT_AMOUNT_KEY] = 0
+        modData[Constants.PURIFIER_FILTER_CONDITION_KEY] = Constants.PURIFIER_FILTER_MAX_CONDITION
     end
     if thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)

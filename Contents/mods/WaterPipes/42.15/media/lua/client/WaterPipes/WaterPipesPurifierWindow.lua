@@ -26,6 +26,7 @@ local COL_EMPTY = { r = 0.16, g = 0.17, b = 0.19 }     -- empty tank
 local COL_LABEL = { r = 0.80, g = 0.82, b = 0.85 }
 local COL_RUNNING = { r = 0.35, g = 0.85, b = 0.40 }
 local COL_STOPPED = { r = 0.85, g = 0.45, b = 0.30 }
+local COL_WARN = { r = 0.90, g = 0.70, b = 0.20 }      -- filter running low (repair soon)
 
 local PAD = 14
 local GAUGE_W = 66
@@ -54,11 +55,13 @@ local function keyForSquare(x, y, z)
     return string.format("%d:%d:%d", x or 0, y or 0, z or 0)
 end
 
-function WaterPipesPurifierWindow.openFor(purifierObject)
-    if not purifierObject then
-        return nil
-    end
-    local sq = purifierObject.getSquare and purifierObject:getSquare() or nil
+-- anchorSquare is the router/anchor tile the SERVER processes the purifier on. The window keys off it
+-- and resolves the purifier the same way the server does (findForRouterSquare), so the readout reflects
+-- the exact buffers the server updates -- not a different footprint tile's object (which would read 0).
+function WaterPipesPurifierWindow.openFor(purifierObject, anchorSquare)
+    local sq = anchorSquare
+        or (purifierObject and purifierObject.getSquare and purifierObject:getSquare())
+        or nil
     if not sq then
         return nil
     end
@@ -73,7 +76,7 @@ function WaterPipesPurifierWindow.openFor(purifierObject)
         return existing
     end
 
-    local w, h = 292, 312
+    local w, h = 292, 360
     local px = (getCore():getScreenWidth() - w) / 2
     local py = (getCore():getScreenHeight() - h) / 2
     local win = WaterPipesPurifierWindow:new(px, py, w, h, x, y, z)
@@ -122,12 +125,14 @@ end
 function WaterPipesPurifierWindow:prerender()
     ISCollapsableWindow.prerender(self)
 
-    -- Resolve the LIVE purifier object from its tile each frame (never a cached ref).
+    -- Resolve the LIVE purifier object each frame from the router/anchor tile, using the SAME lookup the
+    -- server uses (findForRouterSquare) so we read the exact buffers it writes -- never a cached ref, and
+    -- never a different footprint tile's object (whose buffers would sit at 0).
     local sq = getSquareAt(self.px, self.py, self.pz)
     if not sq then
         return   -- tile not currently loaded; keep the window and retry next frame
     end
-    local obj = Purifier.findOnSquare(sq)
+    local obj = Purifier.findForRouterSquare(sq)
     if not obj then
         self:close()   -- the purifier was removed
         return
@@ -139,6 +144,8 @@ function WaterPipesPurifierWindow:prerender()
     local inTainted = Purifier.isInTainted(obj)
     local outAmount = Purifier.getOutAmount(obj)
     local connected = Purifier.isWorking(obj)   -- isWorking == the tile has electricity available
+    local condition = Purifier.getFilterCondition(obj)
+    local clogged = condition <= 0
 
     local contentTop = self:titleBarHeight() + PAD
 
@@ -147,13 +154,22 @@ function WaterPipesPurifierWindow:prerender()
     local gridCol = connected and COL_RUNNING or COL_STOPPED
     self:drawTextCentre(gridText, self.width / 2, contentTop, gridCol.r, gridCol.g, gridCol.b, 1, font())
 
-    -- Line 2: operating status. Only "Filtering" when powered AND there is tainted water to convert;
-    -- powered with nothing tainted to clean = "Idle"; no power = "Stopped".
-    local filtering = connected and inTainted and inAmount > 0
+    -- Line 2: operating status. No power = "Stopped"; tainted stuck on a spent filter = "Clogged";
+    -- the OUTPUT buffer is full so nothing more can be pushed out / converted = "Stopped"; water moving
+    -- (converting tainted OR pushing clean out) = "Filtering"; powered but empty = "Idle". converting =
+    -- actually cleaning tainted right now.
+    local hasTainted = inTainted and inAmount > 0
+    local converting = connected and hasTainted and not clogged
+    local full = outAmount >= cap
+    local working = connected and (inAmount > 0 or outAmount > 0)
     local statusKey, statusCol
     if not connected then
         statusKey, statusCol = "IGUI_WaterPipesPurifierStopped", COL_STOPPED
-    elseif filtering then
+    elseif hasTainted and clogged then
+        statusKey, statusCol = "IGUI_WaterPipesPurifierClogged", COL_STOPPED
+    elseif full then
+        statusKey, statusCol = "IGUI_WaterPipesPurifierStopped", COL_STOPPED
+    elseif working then
         statusKey, statusCol = "IGUI_WaterPipesPurifierFiltering", COL_RUNNING
     else
         statusKey, statusCol = "IGUI_WaterPipesPurifierIdle", COL_LABEL
@@ -183,11 +199,59 @@ function WaterPipesPurifierWindow:prerender()
     drawGauge(self, leftX + GAUGE_W + GAUGE_GAP, gaugesTop, outAmount, cap, outCol,
         getText("IGUI_WaterPipesPurifierOutput"), outName)
 
-    -- Filtering rate: the tainted->clean conversion rate while actually filtering (0 otherwise).
-    local rate = filtering and Constants.PURIFIER_CONVERT_RATE or 0
+    -- Filtering rate: the tainted->clean conversion rate while actually converting (0 otherwise).
+    local rate = converting and Constants.PURIFIER_CONVERT_RATE or 0
     local rateText = getText("IGUI_WaterPipesPurifierRate", rate)
     local rateY = gaugesTop + GAUGE_H + 4 + (lineH() + 2) * 2 + PAD
     self:drawTextCentre(rateText, self.width / 2, rateY, COL_LABEL.r, COL_LABEL.g, COL_LABEL.b, 1, font())
+
+    -- Filter condition: a horizontal wear bar (green -> amber -> red) so the player sees maintenance
+    -- coming. It spans exactly under the two gauges.
+    local maxCond = Constants.PURIFIER_FILTER_MAX_CONDITION
+    local condRatio = maxCond > 0 and math.min(math.max(condition / maxCond, 0), 1) or 0
+    local condCol
+    if clogged then
+        condCol = COL_STOPPED
+    elseif condition <= (Constants.PURIFIER_FILTER_WARN_CONDITION or 25) then
+        condCol = COL_WARN
+    else
+        condCol = COL_RUNNING
+    end
+
+    local barLabelY = rateY + lineH() + PAD
+    self:drawText(getText("IGUI_WaterPipesPurifierFilter"), leftX, barLabelY,
+        COL_LABEL.r, COL_LABEL.g, COL_LABEL.b, 1, font())
+    self:drawTextRight(string.format("%d%%", math.floor(condition + 0.5)), leftX + totalGaugesW, barLabelY,
+        condCol.r, condCol.g, condCol.b, 1, font())
+
+    local barTop = barLabelY + lineH() + 3
+    local barH = 14
+    self:drawRect(leftX, barTop, totalGaugesW, barH, 1, COL_EMPTY.r, COL_EMPTY.g, COL_EMPTY.b)
+    local fillW = math.floor(totalGaugesW * condRatio)
+    if fillW > 0 then
+        self:drawRect(leftX, barTop, fillW, barH, 0.92, condCol.r, condCol.g, condCol.b)
+    end
+    self:drawRectBorder(leftX, barTop, totalGaugesW, barH, 1, 0.45, 0.47, 0.50)
+end
+
+-- Auto-close when the player walks out of range or changes floor, mirroring the vanilla fluid info
+-- panel (ISFluidInfoUI:update, range = ISFluidUtil.isoMaxPanelDist = 2). The window is keyed to the
+-- tank's anchor tile and the 2x2 footprint extends +x/+y from it, so the in-range box covers the
+-- footprint (px..px+1, py..py+1) plus the margin on every side.
+local CLOSE_DISTANCE = 2
+function WaterPipesPurifierWindow:update()
+    ISCollapsableWindow.update(self)
+    local player = getPlayer and getPlayer() or nil
+    if not player then
+        return
+    end
+    if player:getZ() ~= self.pz
+        or player:getX() < self.px - CLOSE_DISTANCE
+        or player:getX() > self.px + 1 + CLOSE_DISTANCE
+        or player:getY() < self.py - CLOSE_DISTANCE
+        or player:getY() > self.py + 1 + CLOSE_DISTANCE then
+        self:close()
+    end
 end
 
 function WaterPipesPurifierWindow:close()

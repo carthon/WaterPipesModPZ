@@ -66,13 +66,89 @@ local function squareHasPower(square)
     return ok and powered or false
 end
 
--- The purifier works while its tile has power (electric tier only for now).
+-- The purifier works while its tile has power (electric tier only for now). "Working" is about POWER
+-- alone (used for the ambient sound and the grid readout); whether it can actually clean tainted water
+-- also depends on the filter condition -- see Purifier.canFilter.
 function Purifier.isWorking(worldObject)
     if not Purifier.isPurifier(worldObject) then
         return false
     end
     local square = worldObject.getSquare and worldObject:getSquare() or nil
     return squareHasPower(square)
+end
+
+-- ===== Filter condition (maintenance) =====
+
+local function transmitObj(worldObject)
+    if worldObject and worldObject.transmitModData then
+        pcall(worldObject.transmitModData, worldObject)
+    end
+end
+
+-- Current filter condition (0..MAX). Absent key => full, so purifiers from saves made before this
+-- feature (and freshly built ones whose OnCreate seeds it) read as a fresh filter.
+function Purifier.getFilterCondition(worldObject)
+    local modData = getModData(worldObject)
+    local value = modData and modData[Constants.PURIFIER_FILTER_CONDITION_KEY]
+    if type(value) ~= "number" then
+        return Constants.PURIFIER_FILTER_MAX_CONDITION
+    end
+    return math.min(math.max(value, 0), Constants.PURIFIER_FILTER_MAX_CONDITION)
+end
+
+function Purifier.setFilterCondition(worldObject, value)
+    local modData = getModData(worldObject)
+    if not modData then
+        return
+    end
+    modData[Constants.PURIFIER_FILTER_CONDITION_KEY] =
+        math.min(math.max(value or 0, 0), Constants.PURIFIER_FILTER_MAX_CONDITION)
+    transmitObj(worldObject)
+end
+
+-- Effective wear per unit of tainted water filtered. The base rate is scaled by the per-save Sandbox
+-- Option WaterPipes.PurifierFilterWear (a percentage: 100 = default, 200 = twice as fast, 0 = filters
+-- never wear out). Falls back to the base constant when the sandbox var is absent.
+local function filterWearPerUnit()
+    local base = Constants.PURIFIER_FILTER_WEAR_PER_UNIT
+    local sv = SandboxVars and SandboxVars.WaterPipes
+    local pct = sv and sv.PurifierFilterWear
+    if type(pct) == "number" then
+        return base * (math.max(pct, 0) / 100)
+    end
+    return base
+end
+
+-- Wear the filter by the volume of tainted water just converted. Only ever called from the server
+-- convert step, so the condition stays authoritative there.
+function Purifier.wearFilter(worldObject, volume)
+    if (volume or 0) <= 0 then
+        return
+    end
+    local perUnit = filterWearPerUnit()
+    if perUnit <= 0 then
+        return   -- wear disabled via sandbox: the filter never degrades
+    end
+    local worn = Purifier.getFilterCondition(worldObject) - volume * perUnit
+    Purifier.setFilterCondition(worldObject, worn)
+end
+
+-- Restore the filter to full (the "Repair Filter" action, after consuming the repair kit).
+function Purifier.repairFilter(worldObject)
+    Purifier.setFilterCondition(worldObject, Constants.PURIFIER_FILTER_MAX_CONDITION)
+end
+
+function Purifier.isFilterClogged(worldObject)
+    return Purifier.getFilterCondition(worldObject) <= 0
+end
+
+function Purifier.needsRepair(worldObject)
+    return Purifier.getFilterCondition(worldObject) < Constants.PURIFIER_FILTER_MAX_CONDITION
+end
+
+-- Can the purifier actually clean tainted water right now: powered AND filter not spent.
+function Purifier.canFilter(worldObject)
+    return Purifier.isWorking(worldObject) and Purifier.getFilterCondition(worldObject) > 0
 end
 
 -- ===== IN / OUT buffers (two internal tanks, stored as modData) =====
@@ -155,6 +231,32 @@ function Purifier.findOnSquare(square)
         local worldObject = objects:get(index)
         if Purifier.isPurifier(worldObject) then
             return worldObject
+        end
+    end
+    return nil
+end
+
+-- The purifier whose 2x2 footprint sits on a router tile. The tank's modData lives on ONE footprint
+-- tile, which is not necessarily the router/anchor tile the engine registered, so a bare
+-- findOnSquare(routerTile) can miss it (and the router then wrongly runs as a plain passthrough). The
+-- footprint extends +x/+y from the anchor and the router sits on the anchor, so scan the anchor tile
+-- plus its +x/+y block to find the purifier from the router tile no matter which footprint tile holds
+-- the modData.
+local PURIFIER_FOOTPRINT_OFFSETS = { { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 } }
+function Purifier.findForRouterSquare(square)
+    if not square then
+        return nil
+    end
+    local cell = getCell and getCell() or nil
+    for _, off in ipairs(PURIFIER_FOOTPRINT_OFFSETS) do
+        local sq = square
+        if off[1] ~= 0 or off[2] ~= 0 then
+            sq = cell and cell.getGridSquare
+                and cell:getGridSquare(square:getX() + off[1], square:getY() + off[2], square:getZ())
+        end
+        local purifier = sq and Purifier.findOnSquare(sq)
+        if purifier then
+            return purifier
         end
     end
     return nil

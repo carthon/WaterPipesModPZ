@@ -2,5 +2,6 @@
     "ContextMenu_WaterPipesUnplumbItem": "Desinstalar %1",
     "ContextMenu_WaterPipesShowNetwork": "Mostrar red de tuberías",
     "ContextMenu_WaterPipesHideNetwork": "Ocultar red de tuberías",
-    "ContextMenu_WaterPipesOpenPurifier": "Abrir purificador"
+    "ContextMenu_WaterPipesOpenPurifier": "Abrir purificador",
+    "ContextMenu_WaterPipesRepairFilter": "Reparar filtro"
 }

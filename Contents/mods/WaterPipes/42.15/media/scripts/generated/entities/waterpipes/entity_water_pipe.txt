@@ -161,6 +161,8 @@ module WaterPipes
                 item 2 [Base.SheetMetal],
                 item 1 [Base.ElectronicsScrap],
                 item 1 [Base.Wire],
+                item 1 [Base.Charcoal],
+                item 2 [Base.RippedSheets],
             }
         }
     }

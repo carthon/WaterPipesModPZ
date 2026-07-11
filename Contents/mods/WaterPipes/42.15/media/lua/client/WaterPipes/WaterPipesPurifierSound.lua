@@ -14,9 +14,36 @@ local Sound = WaterPipes.PurifierSound
 
 -- Tunables. Switch SOUND_NAME to "OldGeneratorLoop" for a rougher, older-motor hum.
 local SOUND_NAME = "GeneratorLoop"
-local VOLUME = 0.55           -- 0..1 multiplier; a background hum, not dominating
+local DEFAULT_VOLUME = 55     -- 0..100; slider default and fallback
 local SCAN_RADIUS = 14        -- tiles around the player we manage emitters within
 local INTERVAL_TICKS = 60     -- ~1s at 60fps between rescans (cheap; the hum is local)
+
+-- THE single entry point for all of the mod's audio: client-side, per-player, runtime mod options
+-- (in-game Options -> Mods), persisted in ModOptions.ini. No sandbox / no restart needed. Every future
+-- sound must gate on soundEnabled() and use soundVolume() (see the sound-entry-point project memory).
+if PZAPI and PZAPI.ModOptions and not PZAPI.ModOptions:getOptions("WaterPipes") then
+    local opts = PZAPI.ModOptions:create("WaterPipes", "IGUI_WaterPipes_Options")
+    opts:addTickBox("SoundEnabled", "IGUI_WaterPipes_SoundEnabled", true, "IGUI_WaterPipes_SoundEnabled_tooltip")
+    opts:addSlider("SoundVolume", "IGUI_WaterPipes_SoundVolume", 0, 100, 5, DEFAULT_VOLUME, "IGUI_WaterPipes_SoundVolume_tooltip")
+end
+
+local function modOption(id)
+    local group = PZAPI and PZAPI.ModOptions and PZAPI.ModOptions:getOptions("WaterPipes")
+    return group and group:getOption(id) or nil
+end
+
+-- Read live so a change in the options menu takes effect on the next rescan. Safe defaults if the
+-- options are not registered yet (enabled, 55%).
+local function soundEnabled()
+    local o = modOption("SoundEnabled")
+    return not o or o:getValue() ~= false
+end
+
+local function soundVolume()
+    local o = modOption("SoundVolume")
+    local v = o and o:getValue() or DEFAULT_VOLUME
+    return math.min(math.max(v, 0), 100) / 100
+end
 
 Sound.active = Sound.active or {}   -- key "x:y:z" -> { emitter = , channel = }
 
@@ -24,30 +51,40 @@ local function keyFor(sq)
     return sq:getX() .. ":" .. sq:getY() .. ":" .. sq:getZ()
 end
 
-local function startSound(sq)
-    local k = keyFor(sq)
-    if Sound.active[k] then
-        return
+-- Play the machine hum on a WORLD free emitter at the purifier tile. We deliberately do NOT take
+-- ownership: the engine's WorldSoundManager then ticks the pooled emitter for us. (An OWNED emitter --
+-- and, in practice on this build, an object's own getEmitter() loop -- must be tick()'d by hand every
+-- frame or it stays silent; that was the original no-sound bug.) A looping sound keeps the pooled
+-- emitter busy so it is not recycled; we re-arm each rescan if it ever stops and re-apply the volume.
+local function ensureLoop(sq, k)
+    local entry = Sound.active[k]
+    local playing = false
+    if entry and entry.emitter and entry.channel and entry.channel ~= 0 then
+        pcall(function() playing = entry.emitter:isPlaying(entry.channel) end)
     end
-    local world = getWorld and getWorld() or nil
-    if not world or not world.getFreeEmitter then
-        return
+    if not playing then
+        local world = getWorld and getWorld() or nil
+        if not world or not world.getFreeEmitter then
+            return
+        end
+        local emitter
+        pcall(function()
+            emitter = world:getFreeEmitter(sq:getX() + 0.5, sq:getY() + 0.5, sq:getZ())
+        end)
+        if not emitter then
+            return
+        end
+        local channel = 0
+        pcall(function() channel = emitter:playSoundLooped(SOUND_NAME) or 0 end)
+        if channel == 0 then
+            return
+        end
+        entry = { emitter = emitter, channel = channel }
+        Sound.active[k] = entry
     end
-    local ok, emitter = pcall(function()
-        return world:getFreeEmitter(sq:getX() + 0.5, sq:getY() + 0.5, sq:getZ())
-    end)
-    if not ok or not emitter then
-        return
+    if entry.channel and entry.channel ~= 0 then
+        pcall(function() entry.emitter:setVolume(entry.channel, soundVolume()) end)
     end
-    -- Own the emitter so the pool does not recycle it while our loop is playing.
-    pcall(function() if world.takeOwnershipOfEmitter then world:takeOwnershipOfEmitter(emitter) end end)
-    local okPlay, channel = pcall(function() return emitter:playSoundLooped(SOUND_NAME) end)
-    if not okPlay or not channel or channel == 0 then
-        pcall(function() if world.returnOwnershipOfEmitter then world:returnOwnershipOfEmitter(emitter) end end)
-        return
-    end
-    pcall(function() emitter:setVolume(channel, VOLUME) end)
-    Sound.active[k] = { emitter = emitter, channel = channel }
 end
 
 local function stopSound(k)
@@ -56,17 +93,15 @@ local function stopSound(k)
         return
     end
     Sound.active[k] = nil
-    local emitter, channel = entry.emitter, entry.channel
+    local emitter = entry.emitter
     if emitter then
         pcall(function()
-            if channel and emitter.isPlaying and emitter:isPlaying(channel) then
-                emitter:stopSound(channel)
-            elseif emitter.stopAll then
-                emitter:stopAll()
+            if entry.channel and entry.channel ~= 0 and emitter.isPlaying and emitter:isPlaying(entry.channel) then
+                emitter:stopSound(entry.channel)
+            elseif emitter.stopSoundByName then
+                emitter:stopSoundByName(SOUND_NAME)
             end
         end)
-        local world = getWorld and getWorld() or nil
-        pcall(function() if world and world.returnOwnershipOfEmitter then world:returnOwnershipOfEmitter(emitter) end end)
     end
 end
 
@@ -78,6 +113,12 @@ end
 
 -- Rescan the area around the player: start a loop for each powered purifier in range, stop the rest.
 function Sound.update()
+    -- Sandbox toggle: total silence when disabled.
+    if not soundEnabled() then
+        Sound.stopAll()
+        return
+    end
+
     local player = getPlayer and getPlayer() or nil
     local cell = getCell and getCell() or nil
     if not player or not cell then
@@ -98,7 +139,7 @@ function Sound.update()
                 if purifier and Purifier.isWorking(purifier) then
                     local k = keyFor(sq)
                     seen[k] = true
-                    startSound(sq)
+                    ensureLoop(sq, k)   -- (re)start the loop + refresh volume on a world free emitter
                 end
             end
         end
