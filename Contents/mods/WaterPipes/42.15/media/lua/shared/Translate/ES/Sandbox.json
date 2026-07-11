@@ -1,7 +1,11 @@
 {
     "Sandbox_WaterPipes": "Tuberías de Agua",
+    "Sandbox_WaterPipes_RealisticPurification": "Purificación de agua realista",
+    "Sandbox_WaterPipes_RealisticPurification_tooltip": "Si se activa, los grifos ya no purifican el agua turbia automáticamente: el agua turbia sigue turbia hasta que la pasas por una baldosa purificadora. Por defecto: desactivado, los grifos dan agua limpia como antes.",
     "Sandbox_WaterPipes_GeneratorRefuelThreshold": "Umbral de auto-repostaje del generador (%)",
     "Sandbox_WaterPipes_GeneratorRefuelThreshold_tooltip": "Un generador conectado extrae combustible de la red cuando su depósito baja de este porcentaje de su capacidad. Pon 0 para desactivar el auto-repostaje.",
     "Sandbox_WaterPipes_GeneratorRefuelTarget": "Objetivo de auto-repostaje del generador (%)",
-    "Sandbox_WaterPipes_GeneratorRefuelTarget_tooltip": "Al auto-repostar, el generador se llena hasta este porcentaje de su depósito (100 = lleno)."
+    "Sandbox_WaterPipes_GeneratorRefuelTarget_tooltip": "Al auto-repostar, el generador se llena hasta este porcentaje de su depósito (100 = lleno).",
+    "Sandbox_WaterPipes_PurifierFilterWear": "Ritmo de desgaste del filtro del purificador (%)",
+    "Sandbox_WaterPipes_PurifierFilterWear_tooltip": "Con qué rapidez se desgasta con el uso el filtro del purificador eléctrico, como porcentaje del ritmo por defecto. 100 = por defecto (un filtro completo limpia unas 5000 unidades de agua turbia antes de necesitar reparación). 200 = se desgasta el doble de rápido, 50 = la mitad. Pon 0 para que los filtros nunca se desgasten ni haya que repararlos."
 }

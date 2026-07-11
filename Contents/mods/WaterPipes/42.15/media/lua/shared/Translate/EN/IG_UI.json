@@ -1,5 +1,24 @@
 {
     "IGUI_WaterPipesGenerator": "Generator",
     "IGUI_WaterPipesFixture": "Water Fixture",
-    "IGUI_CraftCategory_Piping": "Piping"
+    "IGUI_CraftCategory_Piping": "Piping",
+    "IGUI_WaterPipesPurifierWindowTitle": "Electric Purifier",
+    "IGUI_WaterPipesPurifierIntake": "Intake",
+    "IGUI_WaterPipesPurifierOutput": "Output",
+    "IGUI_WaterPipesFluidTainted": "Tainted water",
+    "IGUI_WaterPipesFluidClean": "Clean water",
+    "IGUI_WaterPipesFluidEmpty": "Empty",
+    "IGUI_WaterPipesPurifierGridOn": "Power grid: connected",
+    "IGUI_WaterPipesPurifierGridOff": "Power grid: disconnected",
+    "IGUI_WaterPipesPurifierFiltering": "Filtering",
+    "IGUI_WaterPipesPurifierIdle": "Idle",
+    "IGUI_WaterPipesPurifierStopped": "Stopped",
+    "IGUI_WaterPipesPurifierClogged": "Filter clogged",
+    "IGUI_WaterPipesPurifierRate": "Filtering: %1 u/min",
+    "IGUI_WaterPipesPurifierFilter": "Filter",
+    "IGUI_WaterPipes_Options": "Water Pipes",
+    "IGUI_WaterPipes_SoundEnabled": "Machine sounds",
+    "IGUI_WaterPipes_SoundEnabled_tooltip": "Looping ambient hum played by working machines, such as the electric purifier while it is powered. Turn off for total silence.",
+    "IGUI_WaterPipes_SoundVolume": "Machine sound volume (%)",
+    "IGUI_WaterPipes_SoundVolume_tooltip": "Volume of the mod's machine sounds, from 0 (silent) to 100 (loudest)."
 }

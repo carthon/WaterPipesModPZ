@@ -129,18 +129,31 @@ function State.rebuildGraph()
         })
     end
 
+    local function isRouterAt(x, y, z)
+        local data = state.pipes[State.squareKey(x, y, z)]
+        return data and data.metadata and data.metadata.router == true or false
+    end
+
     for _, pipeData in pairs(state.pipes) do
         local pipeNodeId = State.pipeNodeId(pipeData.x, pipeData.y, pipeData.z)
 
-        -- Same-floor neighbours.
-        for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
-            Graph.connect(state.graph, pipeNodeId,
-                State.pipeNodeId(pipeData.x + offset.x, pipeData.y + offset.y, pipeData.z))
-        end
+        -- Routers are flow boundaries: they never conduct, keeping the IN side and OUT side as two
+        -- separate networks. Skip every connection where either endpoint is a router.
+        if not (pipeData.metadata and pipeData.metadata.router == true) then
+            -- Same-floor neighbours.
+            for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
+                local nx, ny, nz = pipeData.x + offset.x, pipeData.y + offset.y, pipeData.z
+                if not isRouterAt(nx, ny, nz) then
+                    Graph.connect(state.graph, pipeNodeId, State.pipeNodeId(nx, ny, nz))
+                end
+            end
 
-        -- Cross-floor neighbours through wall risers.
-        for _, coord in ipairs(PipeObjectUtils.getRiserVerticalNeighborCoords(pipeData.x, pipeData.y, pipeData.z)) do
-            Graph.connect(state.graph, pipeNodeId, State.pipeNodeId(coord.x, coord.y, coord.z))
+            -- Cross-floor neighbours through wall risers.
+            for _, coord in ipairs(PipeObjectUtils.getRiserVerticalNeighborCoords(pipeData.x, pipeData.y, pipeData.z)) do
+                if not isRouterAt(coord.x, coord.y, coord.z) then
+                    Graph.connect(state.graph, pipeNodeId, State.pipeNodeId(coord.x, coord.y, coord.z))
+                end
+            end
         end
     end
 

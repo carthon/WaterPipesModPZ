@@ -84,6 +84,60 @@ Constants.PIPE_RISER_EDGE_MODDATA_KEY = "waterpipesRiserEdge"
 -- toggled at runtime, so no extra network sync is needed -- each client just paints it transparent.
 Constants.PIPE_HIDDEN_MODDATA_KEY = "waterpipesHidden"
 Constants.PIPE_HIDDEN_SPRITE = "waterpipes_01_20"   -- fully transparent tile in the tileset
+-- Purifier: a NON-pipe tank placed on a router tile that turns the connected network's tainted water
+-- clean while it is "working" (electric-only: the tile must have power). The tier is baked in at build
+-- time (modData, synced). The legacy filter/fire tier strings are still recognised by getTier so old
+-- saves keep working, but only the electric tier is buildable now.
+Constants.PURIFIER_MODDATA_KEY = "waterpipesPurifier"       -- value = tier string below
+Constants.PURIFIER_TIER_FILTER = "filter"
+Constants.PURIFIER_TIER_FIRE = "fire"
+Constants.PURIFIER_TIER_ELECTRIC = "electric"
+-- Filter condition (maintenance): the carbon/cloth filter medium wears out with USE, not idle time.
+-- Every unit of tainted water actually converted to clean spends FILTER_WEAR_PER_UNIT of condition.
+-- At 0 the purifier can no longer clean tainted water (clean water still passes) until it is repaired
+-- (Charcoal + RippedSheets). Condition lives in the anchor's modData, server-authoritative, synced.
+Constants.PURIFIER_FILTER_CONDITION_KEY = "waterpipesFilterCondition"
+Constants.PURIFIER_FILTER_MAX_CONDITION = 100              -- % scale; a fresh/repaired filter starts here
+-- Base wear per unit of tainted water filtered. Scaled PER-SAVE by the Sandbox Option
+-- WaterPipes.PurifierFilterWear (percentage: 100 = this base, 0 = never wears); this stays the fallback.
+Constants.PURIFIER_FILTER_WEAR_PER_UNIT = 0.02            -- % lost per unit of tainted water filtered
+Constants.PURIFIER_FILTER_WARN_CONDITION = 25             -- UI turns amber at/below this (repair soon)
+-- Repair kit: consumed by the "Repair Filter" timed action to restore condition to MAX.
+Constants.PURIFIER_REPAIR_ITEMS = {
+    { type = "Base.Charcoal", count = 1 },
+    { type = "Base.RippedSheets", count = 2 },
+}
+Constants.PURIFIER_REPAIR_TIME = 150                       -- timed-action ticks (build is 200)
+-- Purifier-container is a NON-pipe object placed on a router tile. It holds two internal buffers
+-- (modData): IN (tainted intake) and OUT (clean output). The router drives intake -> convert -> output.
+Constants.PURIFIER_IN_AMOUNT_KEY = "waterpipesPurIn"
+Constants.PURIFIER_IN_TAINTED_KEY = "waterpipesPurInTainted"
+Constants.PURIFIER_OUT_AMOUNT_KEY = "waterpipesPurOut"
+Constants.PURIFIER_BUFFER_CAPACITY = 50
+-- Rates are per IN-GAME MINUTE (the server sub-steps them by elapsed game-time each tick, so throughput
+-- is the same whatever the framerate). Intake is FASTER than convert/output on purpose: the IN buffer
+-- fills faster than the filter processes it, so it visibly holds a level instead of draining to 0.
+Constants.PURIFIER_INTAKE_RATE = 20
+Constants.PURIFIER_CONVERT_RATE = 10
+Constants.PURIFIER_OUTPUT_RATE = 10
+-- Electric purifier tank: a 2x2 multi-tile object. The vanilla industry_02 cylinder is split into
+-- four perspective quadrants (industry 72/73/74/75), tinted electric-blue and packed into atlas
+-- cells 36-39. The entity script (WaterPurifierElectric, face S) lays them on the footprint:
+--   (0,0) top->36   (1,0) right->37   (0,1) left->39   (1,1) body/front->38
+Constants.PURIFIER_TANK_TOP_SPRITE = "waterpipes_01_36"    -- industry 74, back tile (0,0)
+Constants.PURIFIER_TANK_RIGHT_SPRITE = "waterpipes_01_37"  -- industry 75, tile (1,0)
+Constants.PURIFIER_TANK_LEFT_SPRITE = "waterpipes_01_39"   -- industry 72, tile (0,1)
+Constants.PURIFIER_TANK_BODY_SPRITE = "waterpipes_01_38"   -- industry 73, front tile (1,1)
+-- The anchor/front body sprite doubles as the purifier's identity sprite.
+Constants.PURIFIER_ELECTRIC_SPRITE = Constants.PURIFIER_TANK_BODY_SPRITE
+-- Fluid router: a directional floor pipe that acts as a BOUNDARY between two separate networks (the
+-- IN side and the OUT side never merge), bridged only through a container on its tile. Baked in at
+-- build time (modData, synced). The IN->OUT direction is set later via the context menu (step 4).
+Constants.ROUTER_MODDATA_KEY = "waterpipesRouter"
+Constants.ROUTER_DIRECTION_KEY = "waterpipesRouterDir"   -- "N"/"E"/"S"/"W" = the OUT side
+Constants.ROUTER_SPRITE = "waterpipes_01_13"             -- placeholder until the arrow art is packed
+Constants.ROUTER_DEFAULT_DIRECTION = "N"
+Constants.ROUTER_TRANSFER_RATE = 30                      -- max fluid units moved IN->OUT per minute tick
 Constants.ADAPTER_SOURCE_SPRITE = "carpentry_02_54"
 Constants.ADAPTER_SOURCE_HIDDEN_SPRITE = "waterpipes_01_20"
 Constants.MAX_FINITE_FLUID_CAPACITY = 9999

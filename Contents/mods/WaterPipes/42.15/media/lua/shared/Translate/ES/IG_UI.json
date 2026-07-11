@@ -1,5 +1,24 @@
 {
     "IGUI_WaterPipesGenerator": "Generador",
     "IGUI_WaterPipesFixture": "Punto de agua",
-    "IGUI_CraftCategory_Piping": "Tuberías"
+    "IGUI_CraftCategory_Piping": "Tuberías",
+    "IGUI_WaterPipesPurifierWindowTitle": "Purificador eléctrico",
+    "IGUI_WaterPipesPurifierIntake": "Entrada",
+    "IGUI_WaterPipesPurifierOutput": "Salida",
+    "IGUI_WaterPipesFluidTainted": "Agua contaminada",
+    "IGUI_WaterPipesFluidClean": "Agua limpia",
+    "IGUI_WaterPipesFluidEmpty": "Vacío",
+    "IGUI_WaterPipesPurifierGridOn": "Red eléctrica: conectada",
+    "IGUI_WaterPipesPurifierGridOff": "Red eléctrica: desconectada",
+    "IGUI_WaterPipesPurifierFiltering": "Filtrando",
+    "IGUI_WaterPipesPurifierIdle": "En espera",
+    "IGUI_WaterPipesPurifierStopped": "Parado",
+    "IGUI_WaterPipesPurifierClogged": "Filtro saturado",
+    "IGUI_WaterPipesPurifierRate": "Filtrando: %1 u/min",
+    "IGUI_WaterPipesPurifierFilter": "Filtro",
+    "IGUI_WaterPipes_Options": "Tuberías de Agua",
+    "IGUI_WaterPipes_SoundEnabled": "Sonidos de las máquinas",
+    "IGUI_WaterPipes_SoundEnabled_tooltip": "Zumbido ambiental en bucle de las máquinas en marcha, como el purificador eléctrico mientras tiene electricidad. Desactívalo para silencio total.",
+    "IGUI_WaterPipes_SoundVolume": "Volumen de sonido de las máquinas (%)",
+    "IGUI_WaterPipes_SoundVolume_tooltip": "Volumen de los sonidos de las máquinas del mod, de 0 (silencio) a 100 (máximo)."
 }

@@ -6,6 +6,7 @@ require "WaterPipes/ContainerAdapter"
 require "WaterPipes/EndpointObjects"
 require "WaterPipes/Logger"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/Router"
 
 local Adapter = WaterPipes.ContainerAdapter
 local Constants = WaterPipes.Constants
@@ -13,6 +14,7 @@ local EndpointObjects = WaterPipes.EndpointObjects
 local Logger = WaterPipes.Logger
 local NetworkAccess = WaterPipes.NetworkAccess
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local Router = WaterPipes.Router
 
 local function getCellSquare(x, y, z)
     if not getCell then
@@ -109,29 +111,47 @@ local function hasPipeOnSquare(square)
     return square and PipeObjectUtils.getPipeOnSquare(square) ~= nil
 end
 
-local function collectPipeSquaresFromSquare(originSquare)
+-- verticalMode gates how riser (cross-floor) links are followed so gravity is honoured:
+--   "both" (default) -> both directions (topology / visualization),
+--   "up"   -> only to HIGHER floors: the sources whose water can drain down to originSquare,
+--   "down" -> only to LOWER floors: where water introduced at originSquare would fall.
+-- Same-floor (horizontal) links always conduct both ways.
+local function collectPipeSquaresFromSquare(originSquare, verticalMode)
     if not originSquare then
         return {}
     end
+
+    verticalMode = verticalMode or "both"
 
     local visited = {}
     local queue = {}
     local pipeSquares = {}
 
     local function tryAdd(square)
-        if square and hasPipeOnSquare(square) and addSquare(visited, square) then
+        -- Routers are flow boundaries: the network never traverses through one, so the IN side and
+        -- OUT side resolve to separate networks.
+        if square and hasPipeOnSquare(square) and not Router.hasRouterOnSquare(square)
+            and addSquare(visited, square) then
             queue[#queue + 1] = square
             pipeSquares[#pipeSquares + 1] = square
         end
     end
 
-    -- Same-floor cardinal neighbours + cross-floor neighbours through wall risers.
+    -- Same-floor cardinal neighbours (both ways) + cross-floor riser neighbours filtered by gravity.
     local function addNeighborsOf(x, y, z)
         for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
             tryAdd(getCellSquare(x + offset.x, y + offset.y, z))
         end
         for _, coord in ipairs(PipeObjectUtils.getRiserVerticalNeighborCoords(x, y, z)) do
-            tryAdd(getCellSquare(coord.x, coord.y, coord.z))
+            local keep = true
+            if verticalMode == "up" then
+                keep = coord.z > z
+            elseif verticalMode == "down" then
+                keep = coord.z < z
+            end
+            if keep then
+                tryAdd(getCellSquare(coord.x, coord.y, coord.z))
+            end
         end
     end
 
@@ -186,12 +206,12 @@ local function normalizeDescriptorList(descriptorMap)
     return descriptors
 end
 
-local function buildSummaryFromSquare(originSquare)
+local function buildSummaryFromSquare(originSquare, verticalMode)
     if not originSquare then
         return nil
     end
 
-    local pipeSquares = collectPipeSquaresFromSquare(originSquare)
+    local pipeSquares = collectPipeSquaresFromSquare(originSquare, verticalMode)
     if #pipeSquares == 0 then
         return nil
     end
@@ -245,7 +265,9 @@ local function buildSummary(endpointObject)
     end
 
     local originSquare = endpointObject.getSquare and endpointObject:getSquare() or nil
-    local summary = buildSummaryFromSquare(originSquare)
+    -- A tap draws only water that can reach it under gravity: its own floor plus anything above that
+    -- drains down to it. Water on a lower floor cannot climb up, so it is excluded.
+    local summary = buildSummaryFromSquare(originSquare, "up")
     if summary then
         summary.endpoint = endpointObject
     end
@@ -276,22 +298,54 @@ end
 
 -- Square-based access for non-endpoint consumers (e.g. generators pulling Petrol).
 function NetworkAccess.getFluidSummaryAtSquare(originSquare)
-    return buildSummaryFromSquare(originSquare)
+    -- A square-based consumer (generator, API read) sees the fluid that can reach it under gravity.
+    return buildSummaryFromSquare(originSquare, "up")
 end
 
 -- For visualization: the pipe squares reachable from a square + the container descriptors on them.
 -- Unlike getFluidSummaryAtSquare it returns the pipe squares even when there are no containers.
 function NetworkAccess.getNetworkFromSquare(originSquare)
-    local pipeSquares = collectPipeSquaresFromSquare(originSquare)
+    -- Visualization: show the whole physically-connected network (both directions), not just the
+    -- gravity-reachable part.
+    local pipeSquares = collectPipeSquaresFromSquare(originSquare, "both")
     local descriptors = normalizeDescriptorList(collectStorageDescriptors(pipeSquares))
     return pipeSquares, descriptors
+end
+
+-- Router intake helper: which single fluid (and how much) can be PULLED from the network reachable
+-- upward from `square` (gravity-consumer view). Returns (amount, fluidTypeName) or (0, nil).
+function NetworkAccess.availableToPull(square)
+    local summary = buildSummaryFromSquare(square, "up")
+    if not summary or summary.isMixed or (summary.totalAmount or 0) <= 0 then
+        return 0, nil
+    end
+    return summary.totalAmount, summary.fluidTypeName
+end
+
+-- Router output helper: how much `fluidType` can be PUSHED into the network reachable downward from
+-- `square` (gravity-fill view). Returns the free headroom, or 0 if full / mixed / incompatible fluid.
+function NetworkAccess.availableToPush(square, fluidType)
+    local summary = buildSummaryFromSquare(square, "down")
+    if not summary or summary.isMixed then
+        return 0
+    end
+    local headroom = (summary.totalCapacity or 0) - (summary.totalAmount or 0)
+    if headroom <= 0 then
+        return 0
+    end
+    if (summary.totalAmount or 0) > 0 and summary.fluidTypeName
+        and not fluidNameMatches(summary.fluidTypeName, fluidType) then
+        return 0
+    end
+    return headroom
 end
 
 -- Draw up to `amount` of `requiredFluidType` from the network reachable from `originSquare`.
 -- Only works on a single-fluid network whose fluid matches requiredFluidType. Returns the
 -- amount actually drawn (rebalanced out of the network's containers).
 function NetworkAccess.drawFluidAtSquare(originSquare, requiredFluidType, amount)
-    local summary = buildSummaryFromSquare(originSquare)
+    -- Drawing is consumption: only fluid that can reach this square under gravity is available.
+    local summary = buildSummaryFromSquare(originSquare, "up")
     if not summary or summary.isMixed or (summary.totalAmount or 0) <= 0 then
         return 0
     end
@@ -316,7 +370,8 @@ function NetworkAccess.fillFluidAtSquare(originSquare, fluidType, amount)
         return 0
     end
 
-    local summary = buildSummaryFromSquare(originSquare)
+    -- Water introduced into the network flows DOWN from here.
+    local summary = buildSummaryFromSquare(originSquare, "down")
     if not summary or summary.isMixed then
         return 0
     end

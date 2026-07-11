@@ -11,6 +11,10 @@ require "WaterPipes/EndpointPlumbing"
 require "WaterPipes/EndpointObjects"
 require "WaterPipes/GeneratorFuel"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/Purifier"
+require "WaterPipes/GravityFlow"
+require "WaterPipes/Router"
+require "WaterPipes/NetworkAccess"
 require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
 
@@ -24,6 +28,10 @@ local GeneratorFuel = WaterPipes.GeneratorFuel
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local PipeAutotile = WaterPipes.PipeAutotile
+local Purifier = WaterPipes.Purifier
+local GravityFlow = WaterPipes.GravityFlow
+local Router = WaterPipes.Router
+local NetworkAccess = WaterPipes.NetworkAccess
 local State = WaterPipes.State
 local System = WaterPipes.System
 
@@ -167,14 +175,144 @@ function System.redistributeWater()
         end
 
         if fluidTypeCount <= 1 and #containers > 1 and totalCapacity > 0 then
-            local ratio = math.min(totalWater / totalCapacity, 1)
-
-            for _, descriptor in ipairs(containers) do
-                local targetWater = (descriptor.capacity or 0) * ratio
-                Adapter.writeDescriptorWaterAmount(descriptor, targetWater, networkFluidType)
-            end
+            -- Gravity settle: water pools to the lowest floors first (relocation). A single-floor
+            -- component reduces to the classic per-pool equalization, so one floor is unchanged.
+            GravityFlow.settle(containers, totalWater, networkFluidType)
         elseif fluidTypeCount > 1 then
             Logger.warn("Skipping mixed-fluid network with " .. tostring(fluidTypeCount) .. " fluid types")
+        end
+    end
+end
+
+-- No purifier on the tile: one-way passthrough of the IN network's single fluid into the OUT network.
+-- `dt` is the elapsed in-game minutes for this sub-step; rates are per-minute and scaled by it.
+local function processPassthroughRouter(inSquare, outSquare, dt)
+    local avail, fluidType = NetworkAccess.availableToPull(inSquare)
+    if not fluidType or avail <= 0 then
+        return
+    end
+    local headroom = NetworkAccess.availableToPush(outSquare, fluidType)
+    if headroom <= 0 then
+        return
+    end
+    local transfer = math.min(Constants.ROUTER_TRANSFER_RATE * dt, avail, headroom)
+    if transfer <= 0 then
+        return
+    end
+    local drawn = NetworkAccess.drawFluidAtSquare(inSquare, fluidType, transfer)
+    if drawn and drawn > 0 then
+        NetworkAccess.fillFluidAtSquare(outSquare, fluidType, drawn)
+    end
+end
+
+-- Purifier-container on the tile: IN network -> IN buffer -> convert -> OUT buffer -> OUT network.
+-- Water always flows one way, IN side -> OUT side. Intake pulls ONLY TAINTED water and ONLY from the
+-- router's IN network; output pushes clean water ONLY into the OUT network. It never draws clean water
+-- (no need to purify it) and never pulls anything back off the OUT side. Intake happens with or without
+-- power (the tainted water still enters the buffer); only converting it to clean needs power + filter.
+--
+-- Step order is OUTPUT -> CONVERT -> INTAKE on purpose: draining the output side FIRST and refilling
+-- the intake side LAST leaves water resident in both buffers between ticks, so the tanks actually hold
+-- (and the readout shows) a real level instead of being fully cycled to 0 every tick; water just takes
+-- one extra tick to traverse.
+-- `dt` is the elapsed in-game minutes for this sub-step; the per-minute rates are scaled by it so the
+-- purifier moves the same amount per game-minute no matter how often we tick.
+local function processPurifierRouter(purifier, inSquare, outSquare, dt)
+    -- 1. Output: push the (clean) OUT buffer into the OUT network.
+    local outAmount = Purifier.getOutAmount(purifier)
+    if outAmount > 0 then
+        local pushHeadroom = NetworkAccess.availableToPush(outSquare, "Water")
+        local push = math.min(Constants.PURIFIER_OUTPUT_RATE * dt, outAmount, pushHeadroom)
+        if push > 0 then
+            local filled = NetworkAccess.fillFluidAtSquare(outSquare, "Water", push)
+            if filled and filled > 0 then
+                Purifier.removeOut(purifier, filled)
+            end
+        end
+    end
+
+    -- 2. Convert: move IN -> OUT. Tainted needs power AND filter life; clean water always passes.
+    local inAmount = Purifier.getInAmount(purifier)
+    if inAmount > 0 then
+        local outHeadroom = Constants.PURIFIER_BUFFER_CAPACITY - Purifier.getOutAmount(purifier)
+        if outHeadroom > 0 then
+            local move = math.min(Constants.PURIFIER_CONVERT_RATE * dt, inAmount, outHeadroom)
+            if Purifier.isInTainted(purifier) then
+                -- Cleaning tainted water needs power AND a filter with life left. Every unit converted
+                -- wears the filter; at 0 condition it stops cleaning (the water waits in IN) until the
+                -- player repairs it. moveInToOut clamps to what is actually in IN, so wear by that.
+                if Purifier.canFilter(purifier) then
+                    local before = Purifier.getInAmount(purifier)
+                    Purifier.moveInToOut(purifier, move)   -- lands in the OUT buffer as clean Water
+                    Purifier.wearFilter(purifier, before - Purifier.getInAmount(purifier))
+                end
+                -- tainted + not powered / clogged filter: stays in the IN buffer until it can be cleaned
+            else
+                Purifier.moveInToOut(purifier, move)       -- clean water always passes through
+            end
+        end
+    end
+
+    -- 3. Intake: pull ONLY TAINTED water, and ONLY from the router's IN network. The purifier exists to
+    -- clean tainted water, so it never draws clean water (which needs no purifying) and never pulls
+    -- anything off the OUT side -- inSquare is the IN side. This runs with or without power (the water
+    -- still enters the buffer); only converting it to clean later needs power + filter life.
+    local avail, fluidType = NetworkAccess.availableToPull(inSquare)
+    if fluidType == "TaintedWater" and avail > 0 then
+        local curIn = Purifier.getInAmount(purifier)
+        -- Pull into an empty buffer or one already holding tainted water (it is always tainted now).
+        if curIn <= 0 or Purifier.isInTainted(purifier) then
+            local headroom = Constants.PURIFIER_BUFFER_CAPACITY - curIn
+            local pull = math.min(Constants.PURIFIER_INTAKE_RATE * dt, avail, headroom)
+            if pull > 0 then
+                local drawn = NetworkAccess.drawFluidAtSquare(inSquare, "TaintedWater", pull)
+                if drawn and drawn > 0 then
+                    Purifier.addIn(purifier, drawn, true)
+                end
+            end
+        end
+    end
+end
+
+-- Fluid routers actively move fluid across their boundary in the OUT direction each server tick. A
+-- purifier-container on the tile purifies in transit; otherwise it is a plain one-way passthrough.
+function System.processRouter(router, rx, ry, rz, dt)
+    dt = dt or 1.0
+    local out = Router.getOutOffset(router)
+    if not out then
+        return
+    end
+
+    local inSquare = getSquare(rx - out.dx, ry - out.dy, rz)
+    local outSquare = getSquare(rx + out.dx, ry + out.dy, rz)
+    if not inSquare or not outSquare then
+        return
+    end
+
+    -- Scan the whole purifier footprint from the router tile (the tank's modData may live on a footprint
+    -- tile other than the router/anchor tile). Missing it here would silently run a plain passthrough.
+    local purifier = Purifier.findForRouterSquare(getSquare(rx, ry, rz))
+    if purifier then
+        processPurifierRouter(purifier, inSquare, outSquare, dt)
+    else
+        processPassthroughRouter(inSquare, outSquare, dt)
+    end
+end
+
+-- `dt` = elapsed in-game minutes since routers were last processed (defaults to a 1-minute step).
+function System.processRouters(dt)
+    dt = dt or 1.0
+    if dt <= 0 then
+        return
+    end
+    local state = State.ensure()
+    for _, pipeData in pairs(state.pipes) do
+        if pipeData.metadata and pipeData.metadata.router == true then
+            local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
+            local router = square and Router.findOnSquare(square)
+            if router then
+                System.processRouter(router, pipeData.x, pipeData.y, pipeData.z, dt)
+            end
         end
     end
 end
@@ -221,8 +359,8 @@ function System.tick()
     end
 end
 
-function System.registerPipeAt(x, y, z)
-    State.registerPipe(x, y, z)
+function System.registerPipeAt(x, y, z, metadata)
+    State.registerPipe(x, y, z, metadata)
     System.rebuild()
     System.refreshPlumbedEndpoints()
     if isSinglePlayer() then
@@ -347,6 +485,13 @@ local function onEveryTenMinutes()
 end
 
 local function onEveryOneMinute()
+    -- Routers process once per in-game minute (rates are per-minute; dt defaults to 1.0). This is the
+    -- cheap cadence -- no per-frame OnTick work -- at the cost of the readout updating once a minute.
+    local okRouters, errRouters = pcall(System.processRouters)
+    if not okRouters then
+        Logger.error("Router processing failed: " .. tostring(errRouters))
+    end
+
     local ok, err = pcall(System.refreshPlumbedEndpoints)
     if not ok then
         Logger.error("Endpoint plumbing refresh failed: " .. tostring(err))
@@ -433,6 +578,20 @@ local function onClientCommand(module, command, player, args)
         else
             GeneratorFuel.unplumb(generator)
         end
+        return
+    end
+
+    -- Filter repair: the client's timed action has already consumed the repair kit from its inventory;
+    -- the server just resets the (authoritative) filter condition on the purifier and re-syncs it.
+    if command == "repairPurifier" then
+        local square = resolveCommandSquare(args)
+        local purifier = square and Purifier.findOnSquare(square)
+        if not purifier then
+            Logger.warn("Repair purifier command: no purifier at "
+                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
+            return
+        end
+        Purifier.repairFilter(purifier)
         return
     end
 

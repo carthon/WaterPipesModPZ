@@ -123,21 +123,54 @@ local function getRawWorldFluidAmount(worldObject)
         or 0
 end
 
+-- Tainted water in this game is (usually) the plain "Water" fluid carrying a tainted flag -- it is set
+-- via setTaintedWater() -- so getFluidTypeString() reports "Water" and the taint is invisible unless we
+-- ALSO read the flag. The flag can live on the world object, its FluidContainer, or the primary fluid.
+local function isTaintedFlagSet(worldObject, fluidContainer, primaryFluid)
+    if readBoolean(worldObject, "isTaintedWater") == true then return true end
+    if readBoolean(fluidContainer, "isTaintedWater") == true then return true end
+    if readBoolean(primaryFluid, "isTaintedWater") == true then return true end
+    if readBoolean(primaryFluid, "isTainted") == true then return true end
+    return false
+end
+
+-- Normalise a fluid type string so tainted water always resolves to "TaintedWater", whether it is a
+-- distinct "TaintedWater" fluid or "Water" + a tainted flag. Returns the (possibly corrected) type.
+local function normalizeFluidType(typeString, worldObject, fluidContainer, primaryFluid)
+    if type(typeString) == "string" and typeString ~= "" then
+        if string.find(string.lower(typeString), "tainted") then
+            return "TaintedWater"
+        end
+        if typeString == "Water" and isTaintedFlagSet(worldObject, fluidContainer, primaryFluid) then
+            return "TaintedWater"
+        end
+        return typeString
+    end
+    if isTaintedFlagSet(worldObject, fluidContainer, primaryFluid) then
+        return "TaintedWater"
+    end
+    return nil
+end
+
 local function readRawWorldFluidType(worldObject)
     local fluidContainer = getWorldFluidContainer(worldObject)
+    local typeString, primaryFluid = nil, nil
     if fluidContainer and fluidContainer.getPrimaryFluid then
-        local ok, primaryFluid = pcall(fluidContainer.getPrimaryFluid, fluidContainer)
-        if ok and primaryFluid and primaryFluid.getFluidTypeString then
-            local okType, fluidTypeString = pcall(primaryFluid.getFluidTypeString, primaryFluid)
-            if okType and type(fluidTypeString) == "string" then
-                return fluidTypeString
+        local ok, pf = pcall(fluidContainer.getPrimaryFluid, fluidContainer)
+        if ok and pf then
+            primaryFluid = pf
+            if pf.getFluidTypeString then
+                local okType, fts = pcall(pf.getFluidTypeString, pf)
+                if okType and type(fts) == "string" then
+                    typeString = fts
+                end
             end
         end
     end
 
-    local tainted = readBoolean(worldObject, "isTaintedWater")
-    if tainted ~= nil and tainted then
-        return "TaintedWater"
+    local normalized = normalizeFluidType(typeString, worldObject, fluidContainer, primaryFluid)
+    if normalized then
+        return normalized
     end
 
     if getRawWorldFluidAmount(worldObject) > 0 and readBoolean(worldObject, "hasWater") then
@@ -298,19 +331,23 @@ end
 function Adapter.readWorldFluidType(worldObject)
     worldObject = resolveFluidTarget(worldObject)
     local fluidContainer = getWorldFluidContainer(worldObject)
+    local typeString, primaryFluid = nil, nil
     if fluidContainer and fluidContainer.getPrimaryFluid then
-        local ok, primaryFluid = pcall(fluidContainer.getPrimaryFluid, fluidContainer)
-        if ok and primaryFluid and primaryFluid.getFluidTypeString then
-            local okType, fluidTypeString = pcall(primaryFluid.getFluidTypeString, primaryFluid)
-            if okType and type(fluidTypeString) == "string" then
-                return fluidTypeString
+        local ok, pf = pcall(fluidContainer.getPrimaryFluid, fluidContainer)
+        if ok and pf then
+            primaryFluid = pf
+            if pf.getFluidTypeString then
+                local okType, fts = pcall(pf.getFluidTypeString, pf)
+                if okType and type(fts) == "string" then
+                    typeString = fts
+                end
             end
         end
     end
 
-    local tainted = readBoolean(worldObject, "isTaintedWater")
-    if tainted ~= nil and tainted then
-        return "TaintedWater"
+    local normalized = normalizeFluidType(typeString, worldObject, fluidContainer, primaryFluid)
+    if normalized then
+        return normalized
     end
 
     if Adapter.readWorldFluidAmount(worldObject) > 0 and readBoolean(worldObject, "hasWater") then

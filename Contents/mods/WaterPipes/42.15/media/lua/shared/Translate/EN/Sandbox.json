@@ -1,7 +1,11 @@
 {
     "Sandbox_WaterPipes": "Water Pipes",
+    "Sandbox_WaterPipes_RealisticPurification": "Realistic water purification",
+    "Sandbox_WaterPipes_RealisticPurification_tooltip": "When on, taps no longer purify tainted water automatically: tainted water stays tainted until you run it through a purifier tile. Default: off, so taps serve clean water as before.",
     "Sandbox_WaterPipes_GeneratorRefuelThreshold": "Generator auto-refuel threshold (%)",
     "Sandbox_WaterPipes_GeneratorRefuelThreshold_tooltip": "A plumbed generator pulls fuel from the network once its tank drops below this percentage of its capacity. Set to 0 to disable auto-refuelling.",
     "Sandbox_WaterPipes_GeneratorRefuelTarget": "Generator auto-refuel target (%)",
-    "Sandbox_WaterPipes_GeneratorRefuelTarget_tooltip": "When auto-refuelling, the generator is topped up to this percentage of its tank (100 = full)."
+    "Sandbox_WaterPipes_GeneratorRefuelTarget_tooltip": "When auto-refuelling, the generator is topped up to this percentage of its tank (100 = full).",
+    "Sandbox_WaterPipes_PurifierFilterWear": "Purifier filter wear rate (%)",
+    "Sandbox_WaterPipes_PurifierFilterWear_tooltip": "How fast the electric purifier's filter wears out with use, as a percentage of the default rate. 100 = default (a full filter cleans about 5000 units of tainted water before it needs repair). 200 = wears twice as fast, 50 = half as fast. Set to 0 so filters never wear out and never need repairing."
 }

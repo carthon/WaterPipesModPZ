@@ -26,6 +26,17 @@ local function edgeFromFacing(params)
     return (params and params.facing == "w") and "W" or "N"
 end
 
+-- Router OUT direction from the build-cursor facing (chosen by rotating with R). The engine passes
+-- facing as lowercase n/e/s/w; be tolerant of case.
+local function facingToDirection(params)
+    local facing = params and params.facing
+    facing = type(facing) == "string" and string.lower(facing) or "n"
+    if facing == "e" then return "E" end
+    if facing == "s" then return "S" end
+    if facing == "w" then return "W" end
+    return "N"
+end
+
 local function getModData(worldObject)
     if worldObject and worldObject.getModData then
         local ok, modData = pcall(worldObject.getModData, worldObject)
@@ -74,7 +85,7 @@ end
 
 -- ===== OnCreate (server / single-player) =====
 
-local function markAndRegister(thumpable, surface, riser, edge, hidden)
+local function markAndRegister(thumpable, surface, riser, edge, hidden, router, routerDirection)
     if not thumpable then
         return
     end
@@ -88,6 +99,11 @@ local function markAndRegister(thumpable, surface, riser, edge, hidden)
         modData[Constants.PIPE_RISER_EDGE_MODDATA_KEY] = edge or nil
         -- Concealed variant: baked in at build; clients render it with a transparent tile.
         modData[Constants.PIPE_HIDDEN_MODDATA_KEY] = hidden and true or nil
+        -- Router variant: a flow boundary; the OUT direction is chosen by rotating (R) at build time.
+        modData[Constants.ROUTER_MODDATA_KEY] = router and true or nil
+        if router then
+            modData[Constants.ROUTER_DIRECTION_KEY] = routerDirection or Constants.ROUTER_DEFAULT_DIRECTION
+        end
     end
     if thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)
@@ -100,7 +116,9 @@ local function markAndRegister(thumpable, surface, riser, edge, hidden)
                 tostring(edge), square:getX(), square:getY(), square:getZ()))
         end
         -- registerPipeAt rebuilds the network, refreshes plumbed endpoints and runs the autotile.
-        WaterPipes.System.registerPipeAt(square:getX(), square:getY(), square:getZ())
+        -- Routers pass metadata so the graph rebuild can isolate them as flow boundaries.
+        WaterPipes.System.registerPipeAt(square:getX(), square:getY(), square:getZ(),
+            router and { router = true } or nil)
     end
 end
 
@@ -120,6 +138,86 @@ end
 
 function Build.riserHiddenOnCreate(params)
     markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_WALLCOVER, true, edgeFromFacing(params), true)
+end
+
+-- Purifier-containers: NON-pipe objects placed on a router tile. They hold two buffers (IN tainted /
+-- OUT clean) and the router purifies water in transit through them; they never register as pipes.
+local function markPurifierContainer(thumpable, tier)
+    if not thumpable then
+        return
+    end
+    local modData = getModData(thumpable)
+    if modData then
+        modData[Constants.PURIFIER_MODDATA_KEY] = tier
+        modData[Constants.PURIFIER_IN_AMOUNT_KEY] = 0
+        modData[Constants.PURIFIER_OUT_AMOUNT_KEY] = 0
+        modData[Constants.PURIFIER_FILTER_CONDITION_KEY] = Constants.PURIFIER_FILTER_MAX_CONDITION
+    end
+    if thumpable.transmitModData then
+        pcall(thumpable.transmitModData, thumpable)
+    end
+end
+
+function Build.electricContainerOnCreate(params)
+    markPurifierContainer(params and params.thumpable, Constants.PURIFIER_TIER_ELECTRIC)
+end
+
+-- The tall tank clips through anything overhead: refuse placement if a floor sits on the tile directly
+-- above. (Pipes and routers are floor-level and CAN hide under structures; the visible tank cannot.)
+local function hasStructureAbove(square)
+    if not square or not getCell then
+        return false
+    end
+    local cell = getCell()
+    if not cell or not cell.getGridSquare then
+        return false
+    end
+    local above = cell:getGridSquare(square:getX(), square:getY(), square:getZ() + 1)
+    if not above or not above.getFloor then
+        return false
+    end
+    local ok, floor = pcall(above.getFloor, above)
+    return ok and floor ~= nil
+end
+
+-- The purifier is a 2x2 multi-tile tank. The engine validates EVERY footprint tile and requires ALL
+-- of them to pass, so the router requirement must apply to exactly ONE tile -- the anchor -- not to all
+-- four (otherwise the player would need a router under every tile). The anchor is the cursor/origin tile
+-- (grid 0,0), which draws the top/back quadrant sprite (_36); it is where OnCreate tags the purifier and
+-- where the runtime pairs router<->purifier on the SAME square. The other three tiles only need to be
+-- clear, which the engine already checks -- for them we just return true.
+function Build.purifierContainerOnIsValid(params)
+    local square = params and params.square
+    if not square then
+        return false
+    end
+    -- Identify the anchor tile by the per-tile sprite the engine is validating.
+    local tileInfo = params.tileInfo
+    local spriteName = tileInfo and tileInfo.getSpriteName and tileInfo:getSpriteName()
+    if spriteName ~= Constants.PURIFIER_TANK_TOP_SPRITE then
+        return true   -- a non-anchor footprint tile: no router needed here
+    end
+    -- Anchor tile: needs the (single, central) router, no existing purifier, and clear headroom so the
+    -- tall tank does not clip through a floor above.
+    local Router = WaterPipes.Router
+    local Purifier = WaterPipes.Purifier
+    if not Router or not Router.hasRouterOnSquare(square) then
+        return false
+    end
+    if Purifier and Purifier.findOnSquare(square) then
+        return false
+    end
+    if hasStructureAbove(square) then
+        return false
+    end
+    return true
+end
+
+-- Fluid router: a floor pipe that is a flow boundary (splits the network into IN and OUT sides). The
+-- OUT direction comes from the build-cursor facing (rotate with R while placing).
+function Build.routerOnCreate(params)
+    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, true,
+        facingToDirection(params))
 end
 
 -- Global alias used by the entity SpriteConfig OnCreate/OnIsValid dotted paths.

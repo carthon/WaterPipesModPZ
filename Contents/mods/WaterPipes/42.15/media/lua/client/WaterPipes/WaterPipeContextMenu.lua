@@ -6,12 +6,18 @@ require "WaterPipes/ISPlumbWaterPipeEndpoint"
 require "WaterPipes/ISPlumbWaterPipeGenerator"
 require "WaterPipes/GeneratorFuel"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/Purifier"
+require "WaterPipes/Router"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/Logger"
 -- Client-side: loads PipeAutotile so it registers its OnObjectAdded/LoadGridsquare hooks and each
 -- client recomputes pipe connection sprites locally (the shape is never sent over the network).
 require "WaterPipes/PipeAutotile"
 require "WaterPipes/API"
+require "WaterPipes/WaterPipesPurifierWindow"
+require "WaterPipes/WaterPipesPurifierSound"
+require "WaterPipes/ISRepairWaterPurifier"
+require "WaterPipes/ISOpenWaterPurifier"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.ContextMenu = WaterPipes.ContextMenu or {}
@@ -23,6 +29,8 @@ local GeneratorFuel = WaterPipes.GeneratorFuel
 local Logger = WaterPipes.Logger
 local NetworkAccess = WaterPipes.NetworkAccess
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local Purifier = WaterPipes.Purifier
+local Router = WaterPipes.Router
 local PipeAutotile = WaterPipes.PipeAutotile
 local ContextMenu = WaterPipes.ContextMenu
 ContextMenu.originalOnPlumbItem = ContextMenu.originalOnPlumbItem or ISWorldObjectContextMenu.onPlumbItem
@@ -75,6 +83,7 @@ local HIGHLIGHT_TICKS = 480 -- ~8s at 60fps; auto-clears the highlight
 local COLOR_PIPE = { r = 0.95, g = 0.20, b = 0.20, a = 1.0 }      -- red
 local COLOR_SOURCE = { r = 0.20, g = 0.95, b = 0.30, a = 1.0 }    -- green: provides fluid
 local COLOR_CONSUMER = { r = 0.30, g = 0.60, b = 1.00, a = 1.0 }  -- blue: draws fluid (out-network)
+local COLOR_ROUTER = { r = 1.00, g = 0.75, b = 0.10, a = 1.0 }    -- amber: fluid router (boundary)
 
 local function findPipeInWorldObjects(worldobjects)
     if not worldobjects then
@@ -92,6 +101,77 @@ local function findPipeInWorldObjects(worldobjects)
         end
     end
     return nil
+end
+
+-- ===== Purifier tiles (status readout + filter-cartridge replacement) =====
+
+-- The purifier is a 2x2 tank whose modData lives only on the ANCHOR (min-corner / back) tile, but the
+-- player will often right-click the visible body (a non-anchor tile). The footprint extends +x/+y from
+-- the anchor, so from any of the four tiles the anchor sits within the 2x2 block up-and-left of it --
+-- scan that block so "Open Purifier" shows from anywhere on the tank.
+local PURIFIER_BLOCK_OFFSETS = { { 0, 0 }, { -1, 0 }, { 0, -1 }, { -1, -1 } }
+
+local function findPurifierInWorldObjects(worldobjects)
+    if not worldobjects then
+        return nil
+    end
+    local cell = getCell and getCell() or nil
+    for _, worldObject in ipairs(worldobjects) do
+        if Purifier.isPurifier(worldObject) then
+            return worldObject
+        end
+        local square = worldObject and worldObject.getSquare and worldObject:getSquare() or nil
+        if square then
+            for _, off in ipairs(PURIFIER_BLOCK_OFFSETS) do
+                local nsq = square
+                if off[1] ~= 0 or off[2] ~= 0 then
+                    nsq = cell and cell:getGridSquare(square:getX() + off[1], square:getY() + off[2], square:getZ())
+                end
+                local purifier = nsq and Purifier.findOnSquare(nsq)
+                if purifier then
+                    return purifier
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- Open the purifier readout window (buffers, running status, filtering rate).
+function ContextMenu.openPurifier(playerObj, purifierObject)
+    if not purifierObject or not WaterPipesPurifierWindow then
+        return
+    end
+    -- Resolve the router/anchor tile of the purifier's 2x2 footprint so the window reads the SAME buffers
+    -- the server processes on that tile (findForRouterSquare). The footprint extends +x/+y from the anchor
+    -- (which carries the router), so from any tank tile the anchor is this tile or up-and-left of it.
+    local anchorSquare = nil
+    local sq = purifierObject.getSquare and purifierObject:getSquare() or nil
+    local cell = getCell and getCell() or nil
+    if sq then
+        for _, off in ipairs({ { 0, 0 }, { -1, 0 }, { 0, -1 }, { -1, -1 } }) do
+            local nsq = sq
+            if off[1] ~= 0 or off[2] ~= 0 then
+                nsq = cell and cell:getGridSquare(sq:getX() + off[1], sq:getY() + off[2], sq:getZ())
+            end
+            if nsq and Router.hasRouterOnSquare(nsq) and Purifier.findForRouterSquare(nsq) then
+                anchorSquare = nsq
+                break
+            end
+        end
+    end
+
+    -- Walk the character over to the tank, then open the window on arrival. If it is unreachable, just
+    -- open it in place so the readout is never blocked.
+    if luautils.walkAdjObject(playerObj, purifierObject, true) then
+        ISTimedActionQueue.add(ISOpenWaterPurifier:new(playerObj, purifierObject, anchorSquare))
+    else
+        WaterPipesPurifierWindow.openFor(purifierObject, anchorSquare)
+    end
+end
+
+local function addPurifierOptions(context, playerObj, purifierObject)
+    context:addOption(getText("ContextMenu_WaterPipesOpenPurifier"), playerObj, ContextMenu.openPurifier, purifierObject)
 end
 
 local function setHighlight(worldObject, playerNum, on, color)
@@ -167,6 +247,23 @@ function ContextMenu.showNetwork(playerObj, pipeObject)
                 ContextMenu.revealedHiddenPipes[#ContextMenu.revealedHiddenPipes + 1] = pipe
             end
             trackAndHighlight(pipe, playerNum, COLOR_PIPE)
+        end
+    end
+
+    -- Routers bounding this network (amber). They are excluded from the traversal, so surface any
+    -- router sitting on a square adjacent to a shown pipe.
+    local cell = getCell and getCell() or nil
+    if cell then
+        local routerSeen = {}
+        for _, sq in ipairs(pipeSquares or {}) do
+            for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
+                local nsq = cell:getGridSquare(sq:getX() + offset.x, sq:getY() + offset.y, sq:getZ() + offset.z)
+                local router = nsq and Router.findOnSquare(nsq)
+                if router and not routerSeen[tostring(router)] then
+                    routerSeen[tostring(router)] = true
+                    trackAndHighlight(router, playerNum, COLOR_ROUTER)
+                end
+            end
         end
     end
 
@@ -292,6 +389,23 @@ function ContextMenu.unplumbGenerator(playerObj, generatorObject)
     if luautils.walkAdjObject(playerObj, generatorObject, true) then
         ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
         ISTimedActionQueue.add(ISPlumbWaterPipeGenerator:new(playerObj, generatorObject, wrench, false))
+    end
+end
+
+-- Walk to the purifier, equip the wrench and queue the filter-repair action (consumes the repair kit).
+function ContextMenu.repairPurifier(playerObj, purifierObject)
+    if not playerObj or not purifierObject then
+        return
+    end
+
+    local wrench = getPipeWrench(playerObj)
+    if not wrench then
+        return
+    end
+
+    if luautils.walkAdjObject(playerObj, purifierObject, true) then
+        ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
+        ISTimedActionQueue.add(ISRepairWaterPurifier:new(playerObj, purifierObject, wrench))
     end
 end
 
@@ -565,6 +679,29 @@ local function onServerCommand(module, command, args)
     end
 end
 
+-- Tooltip for a disabled "Repair filter" option: current condition + the missing requirements.
+local function buildRepairTooltip(purifierObject, hasKit, hasWrench)
+    local tooltip = ISWorldObjectContextMenu.addToolTip()
+    tooltip:setName(getText("ContextMenu_WaterPipesRepairFilter"))
+    local lines = {}
+    local condition = math.floor(Purifier.getFilterCondition(purifierObject) + 0.5)
+    lines[#lines + 1] = getText("Tooltip_WaterPipesFilterCondition", condition)
+    lines[#lines + 1] = " "
+    lines[#lines + 1] = getText("Tooltip_WaterPipesRepairNeeds")
+    if not hasWrench then
+        local name = getItemNameFromFullType(Constants.PIPE_TOOL_TYPE) or "Pipe Wrench"
+        lines[#lines + 1] = "  1 x " .. name
+    end
+    if not hasKit then
+        for _, entry in ipairs(Constants.PURIFIER_REPAIR_ITEMS) do
+            local name = getItemNameFromFullType(entry.type) or entry.type
+            lines[#lines + 1] = "  " .. (entry.count or 1) .. " x " .. name
+        end
+    end
+    tooltip.description = table.concat(lines, " <LINE> ")
+    return tooltip
+end
+
 function ContextMenu.doMenu(player, context, worldobjects, test)
     if test and ISWorldObjectContextMenu.Test then
         return true
@@ -606,9 +743,14 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     local hasShowNetworkOption = pipeObject ~= nil
     local hasHideNetworkOption = #ContextMenu.highlightedObjects > 0
 
+    -- Purifier: an "Open Purifier" option that pops the readout window (buffers / status / rate).
+    local purifierObject = findPurifierInWorldObjects(worldobjects)
+    local hasPurifierOption = purifierObject ~= nil
+
     if not hasUnplumbOption and not hasModPlumbOption
         and not hasGeneratorPlumbOption and not hasGeneratorUnplumbOption
         and not hasShowNetworkOption and not hasHideNetworkOption
+        and not hasPurifierOption
         and not isDebugActive() then
         return false
     end
@@ -640,6 +782,23 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
 
     if hasHideNetworkOption then
         context:addOption(getText("ContextMenu_WaterPipesHideNetwork"), playerObj, ContextMenu.hideNetwork)
+    end
+
+    if hasPurifierOption then
+        addPurifierOptions(context, playerObj, purifierObject)
+
+        -- "Repair filter" appears only once the filter has worn below full. Enabled when the player
+        -- carries a pipe wrench and the repair kit; otherwise shown disabled with a requirements tooltip.
+        if Purifier.needsRepair(purifierObject) then
+            local option = context:addOption(getText("ContextMenu_WaterPipesRepairFilter"),
+                playerObj, ContextMenu.repairPurifier, purifierObject)
+            local hasWrench = playerHasPipeWrench(playerObj)
+            local hasKit = ISRepairWaterPurifier.hasRepairKit(playerObj:getInventory())
+            if not hasWrench or not hasKit then
+                option.notAvailable = true
+                option.toolTip = buildRepairTooltip(purifierObject, hasKit, hasWrench)
+            end
+        end
     end
 
     if isDebugActive() then
