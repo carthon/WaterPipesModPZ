@@ -4,6 +4,7 @@ WaterPipes.Irrigation = WaterPipes.Irrigation or {}
 require "WaterPipes/Constants"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/Pressure"
 
 local Constants = WaterPipes.Constants
 local Irrigation = WaterPipes.Irrigation
@@ -172,6 +173,50 @@ function Irrigation.litresFor(waterLevels)
     return math.max(waterLevels or 0, 0) * Constants.IRRIGATION_LITRES_PER_WATER_LEVEL
 end
 
+-- ===== Debug logging =====
+-- Off by default. The debug overlay flips it on so every watering event lands in console.txt with
+-- the tile, the amount and the source -- which is how you tell "not watering" from "watering, but
+-- too slowly to see".
+Irrigation.debugLog = false
+
+local function debugLog(fmt, ...)
+    if Irrigation.debugLog and WaterPipes.Logger then
+        WaterPipes.Logger.log("[irrigation] " .. string.format(fmt, ...))
+    end
+end
+
+-- ===== Live emitter status (for the overlay; never waters) =====
+
+-- Everything the overlay needs about one emitter, computed instantly with no time passing: whether it
+-- CAN water right now and, if not, why. This is the real diagnostic -- a sprinkler with no pump
+-- reads "needs 20.0, has 1.0" the moment you look, instead of you waiting an hour to see nothing.
+function Irrigation.getEmitterStatus(worldObject, square)
+    local isDrip = Irrigation.isDrip(worldObject)
+    local isSprinkler = Irrigation.isSprinkler(worldObject)
+    if not isDrip and not isSprinkler then
+        return nil
+    end
+
+    local NetworkAccess = WaterPipes.NetworkAccess
+    local kind = isDrip and Constants.PRESSURE_KIND_DRIP or Constants.PRESSURE_KIND_SPRINKLER
+    local status = {
+        kind = kind,
+        pressure = NetworkAccess.getPressureAtSquare(square, kind),
+        minimum = WaterPipes.Pressure.minimumFor(kind),
+        burst = isDrip and Irrigation.isDripBurst(worldObject) or false,
+    }
+
+    -- Is there actually water to draw here? (A dry network makes an emitter idle even at full pressure.)
+    local available, fluidTypeName = NetworkAccess.availableToPull(square, kind)
+    status.hasWater = fluidTypeName ~= nil
+        and (fluidTypeName == "Water" or fluidTypeName == "TaintedWater")
+        and (available or 0) > 0
+
+    status.reaches = status.pressure ~= nil and status.pressure >= status.minimum
+    status.active = status.reaches and status.hasWater and not status.burst
+    return status
+end
+
 -- ===== The irrigation pass =====
 
 local function isWaterFluid(fluidTypeName)
@@ -220,11 +265,16 @@ function Irrigation.processDrip(drip, square, dtHours)
     end
 
     local want = Constants.DRIP_WATER_PER_HOUR * math.max(dtHours or 0, 0)
-    local drawn = drawWater(square, Irrigation.litresFor(want), Constants.PRESSURE_KIND_DRIP)
+    local drawn, fluidTypeName = drawWater(square, Irrigation.litresFor(want), Constants.PRESSURE_KIND_DRIP)
     if drawn <= 0 then
+        debugLog("drip %d,%d,%d: reachable but drew no water (network dry?)",
+            square:getX(), square:getY(), square:getZ())
         return
     end
-    addWater(plant, drawn / Constants.IRRIGATION_LITRES_PER_WATER_LEVEL)
+    local added = addWater(plant, drawn / Constants.IRRIGATION_LITRES_PER_WATER_LEVEL)
+    debugLog("drip %d,%d,%d: +%.1f waterLvl (now %.1f) from %s",
+        square:getX(), square:getY(), square:getZ(), added, plant.waterLvl or 0,
+        tostring(fluidTypeName))
 end
 
 local function sprinklerNoiseEnabled()
@@ -256,6 +306,8 @@ function Irrigation.processSprinkler(sprinkler, square, dtHours)
     local litres = Irrigation.litresFor(perTile) * Constants.SPRINKLER_WASTE_TILES
     local drawn = drawWater(square, litres, Constants.PRESSURE_KIND_SPRINKLER)
     if drawn <= 0 then
+        debugLog("sprinkler %d,%d,%d: has %.1f pressure but drew no water (network dry?)",
+            square:getX(), square:getY(), square:getZ(), pressure)
         return
     end
 
@@ -263,14 +315,18 @@ function Irrigation.processSprinkler(sprinkler, square, dtHours)
     local ratio = litres > 0 and (drawn / litres) or 0
     local x, y, z = square:getX(), square:getY(), square:getZ()
     local radius = Constants.SPRINKLER_RADIUS
+    local wateredTiles = 0
     for dx = -radius, radius do
         for dy = -radius, radius do
             local plant = thirstyPlantOn(getCellSquare(x + dx, y + dy, z))
             if plant then
                 addWater(plant, perTile * ratio)
+                wateredTiles = wateredTiles + 1
             end
         end
     end
+    debugLog("sprinkler %d,%d,%d: watered %d crop(s) in 3x3 at %.0f%% delivery",
+        x, y, z, wateredTiles, ratio * 100)
 
     if sprinklerNoiseEnabled() and addSound then
         pcall(addSound, sprinkler, x, y, z,

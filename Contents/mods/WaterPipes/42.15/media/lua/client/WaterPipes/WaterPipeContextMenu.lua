@@ -12,6 +12,7 @@ require "WaterPipes/NetworkAccess"
 require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Irrigation"
+require "WaterPipes/WaterPipesIrrigationDebug"
 require "WaterPipes/ISRepairWaterDrip"
 require "WaterPipes/Logger"
 -- Client-side: loads PipeAutotile so it registers its OnObjectAdded/LoadGridsquare hooks and each
@@ -37,6 +38,7 @@ local Purifier = WaterPipes.Purifier
 local Router = WaterPipes.Router
 local Pressure = WaterPipes.Pressure
 local Irrigation = WaterPipes.Irrigation
+local IrrigationDebug = WaterPipes.IrrigationDebug
 local PipeAutotile = WaterPipes.PipeAutotile
 local ContextMenu = WaterPipes.ContextMenu
 ContextMenu.originalOnPlumbItem = ContextMenu.originalOnPlumbItem or ISWorldObjectContextMenu.onPlumbItem
@@ -584,6 +586,30 @@ local function buildPressureDebugTooltip(square)
     return tooltip
 end
 
+function ContextMenu.toggleIrrigationOverlay(playerObj)
+    if not isDebugActive() then
+        return
+    end
+    IrrigationDebug.toggle()
+end
+
+-- Force an irrigation pass right now with a big dt, so crops jump instead of creeping. Server-owned
+-- (the farming system lives there), so in MP it goes through a command; in SP we run it directly.
+function ContextMenu.runIrrigationNow(playerObj)
+    if not isDebugActive() then
+        return
+    end
+    local dt = 2.0   -- two hours of watering in one shot: a clearly visible jump
+    if isClient() then
+        sendClientCommand(playerObj, "WaterPipes", "runIrrigation", { dt = dt })
+    else
+        pcall(Irrigation.run, dt)
+    end
+    if playerObj and HaloTextHelper then
+        HaloTextHelper.addText(playerObj, "Water Pipes: ran irrigation pass")
+    end
+end
+
 local function addDebugMenu(context, subMenu, playerObj, endpointObject, square)
     if not isDebugActive() then
         return
@@ -600,6 +626,12 @@ local function addDebugMenu(context, subMenu, playerObj, endpointObject, square)
         local option = debugSubMenu:addOption("Inspect Pressure", playerObj, ContextMenu.inspectPressure, square)
         option.toolTip = buildPressureDebugTooltip(square)
     end
+    -- Irrigation visibility: a live tint over crops (water level) and emitters (active/starved), plus
+    -- an on-demand pass so you can watch crops fill without waiting for the hourly tick.
+    local overlayName = IrrigationDebug.isEnabled()
+        and "Irrigation Overlay: ON" or "Irrigation Overlay: OFF"
+    debugSubMenu:addOption(overlayName, playerObj, ContextMenu.toggleIrrigationOverlay)
+    debugSubMenu:addOption("Run Irrigation Now (+2h)", playerObj, ContextMenu.runIrrigationNow)
     if endpointObject then
         debugSubMenu:addOption("Dump Plumbing Diagnostics", playerObj, ContextMenu.dumpPlumbingDiagnostics, endpointObject)
         debugSubMenu:addOption("Dump Adapter Diagnostics", playerObj, ContextMenu.dumpAdapterDiagnostics, endpointObject)

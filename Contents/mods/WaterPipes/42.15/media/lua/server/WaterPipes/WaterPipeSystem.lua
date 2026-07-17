@@ -685,6 +685,17 @@ local function onClientCommand(module, command, player, args)
         return
     end
 
+    -- Debug: force an irrigation pass immediately, so a tester can watch crops fill without waiting
+    -- for the hourly tick. dt comes from the client (hours of watering to apply in one shot).
+    if command == "runIrrigation" then
+        local dt = args and tonumber(args.dt) or 1.0
+        local ok, err = pcall(Irrigation.run, dt)
+        if not ok then
+            Logger.error("Manual irrigation pass failed: " .. tostring(err))
+        end
+        return
+    end
+
     if command == "forceGlobalWaterShutoff" then
         System.forceGlobalWaterShutoff()
         System.tick()
