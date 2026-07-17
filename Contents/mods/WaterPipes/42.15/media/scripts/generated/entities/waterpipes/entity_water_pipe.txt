@@ -167,6 +167,155 @@ module WaterPipes
         }
     }
 
+    entity WaterPump
+    {
+        component SpriteConfig
+        {
+            isThumpable = false,
+            OnCreate = WaterPipesBuild.pumpOnCreate,
+            OnIsValid = WaterPipesBuild.pumpOnIsValid,
+            face N
+            {
+                layer
+                {
+                    row = industry_02_53,
+                }
+            }
+            face E
+            {
+                layer
+                {
+                    row = industry_02_52,
+                }
+            }
+        }
+        component CraftRecipe
+        {
+            timedAction = BuildLowNoTool,
+            time = 180,
+            category = Piping,
+            Tooltip = Tooltip_craft_WaterPumpDesc,
+            inputs
+            {
+                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
+                item 2 [Base.MetalPipe],
+                item 1 [Base.SheetMetal],
+                item 1 [Base.ElectronicsScrap],
+                item 1 [Base.Wire],
+            }
+        }
+    }
+
+    entity WaterPipeDrip
+    {
+        component SpriteConfig
+        {
+            isThumpable = false,
+            OnCreate = WaterPipesBuild.dripOnCreate,
+            OnIsValid = WaterPipesBuild.dripOnIsValid,
+            face N
+            {
+                layer
+                {
+                    row = industry_02_21,
+                }
+            }
+            face E
+            {
+                layer
+                {
+                    row = industry_02_20,
+                }
+            }
+        }
+        component CraftRecipe
+        {
+            timedAction = BuildLowNoTool,
+            time = 60,
+            category = Piping,
+            Tooltip = Tooltip_craft_WaterPipeDripDesc,
+            inputs
+            {
+                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
+                item 1 [Base.MetalPipe],
+            }
+        }
+    }
+
+    entity WaterPipeSprinkler
+    {
+        component SpriteConfig
+        {
+            isThumpable = false,
+            OnCreate = WaterPipesBuild.sprinklerOnCreate,
+            OnIsValid = WaterPipesBuild.sprinklerOnIsValid,
+            face N
+            {
+                layer
+                {
+                    row = industry_02_24,
+                }
+            }
+            face E
+            {
+                layer
+                {
+                    row = industry_02_26,
+                }
+            }
+        }
+        component CraftRecipe
+        {
+            timedAction = BuildLowNoTool,
+            time = 100,
+            category = Piping,
+            Tooltip = Tooltip_craft_WaterPipeSprinklerDesc,
+            inputs
+            {
+                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
+                item 1 [Base.MetalPipe],
+                item 1 [Base.SheetMetal],
+            }
+        }
+    }
+
+    entity WaterPressureGauge
+    {
+        component SpriteConfig
+        {
+            isThumpable = false,
+            OnCreate = WaterPipesBuild.gaugeOnCreate,
+            OnIsValid = WaterPipesBuild.gaugeOnIsValid,
+            face N
+            {
+                layer
+                {
+                    row = industry_01_4,
+                }
+            }
+            face W
+            {
+                layer
+                {
+                    row = industry_01_5,
+                }
+            }
+        }
+        component CraftRecipe
+        {
+            timedAction = BuildWallNoTool,
+            time = 80,
+            category = Piping,
+            Tooltip = Tooltip_craft_WaterPressureGaugeDesc,
+            inputs
+            {
+                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
+                item 1 [Base.MetalPipe],
+                item 1 [Base.ElectronicsScrap],
+            }
+        }
+    }
+
     entity WaterPipeRouter
     {
         component SpriteConfig

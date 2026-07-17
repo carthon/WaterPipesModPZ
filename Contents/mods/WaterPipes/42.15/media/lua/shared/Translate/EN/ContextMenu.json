@@ -3,5 +3,10 @@
     "ContextMenu_WaterPipesShowNetwork": "Show pipe network",
     "ContextMenu_WaterPipesHideNetwork": "Hide pipe network",
     "ContextMenu_WaterPipesOpenPurifier": "Open Purifier",
-    "ContextMenu_WaterPipesRepairFilter": "Repair filter"
+    "ContextMenu_WaterPipesRepairFilter": "Repair filter",
+    "ContextMenu_WaterPipesReadGauge": "Pressure gauge",
+    "ContextMenu_WaterPipesRepairDrip": "Repair drip emitter",
+    "ContextMenu_WaterPipesRouterPressureNone": "Pressure limit: none",
+    "ContextMenu_WaterPipesRouterPressureSet": "Pressure limit: %1",
+    "ContextMenu_WaterPipesRouterPressureValue": "%1 m of head"
 }

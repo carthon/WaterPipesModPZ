@@ -3,5 +3,10 @@
     "ContextMenu_WaterPipesShowNetwork": "Mostrar red de tuberías",
     "ContextMenu_WaterPipesHideNetwork": "Ocultar red de tuberías",
     "ContextMenu_WaterPipesOpenPurifier": "Abrir purificador",
-    "ContextMenu_WaterPipesRepairFilter": "Reparar filtro"
+    "ContextMenu_WaterPipesRepairFilter": "Reparar filtro",
+    "ContextMenu_WaterPipesReadGauge": "Manómetro",
+    "ContextMenu_WaterPipesRepairDrip": "Reparar gotero",
+    "ContextMenu_WaterPipesRouterPressureNone": "Límite de presión: ninguno",
+    "ContextMenu_WaterPipesRouterPressureSet": "Límite de presión: %1",
+    "ContextMenu_WaterPipesRouterPressureValue": "%1 m de columna"
 }

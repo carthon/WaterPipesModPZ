@@ -15,6 +15,8 @@ require "WaterPipes/Purifier"
 require "WaterPipes/GravityFlow"
 require "WaterPipes/Router"
 require "WaterPipes/NetworkAccess"
+require "WaterPipes/Pump"
+require "WaterPipes/Irrigation"
 require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
 
@@ -32,6 +34,8 @@ local Purifier = WaterPipes.Purifier
 local GravityFlow = WaterPipes.GravityFlow
 local Router = WaterPipes.Router
 local NetworkAccess = WaterPipes.NetworkAccess
+local Pump = WaterPipes.Pump
+local Irrigation = WaterPipes.Irrigation
 local State = WaterPipes.State
 local System = WaterPipes.System
 
@@ -317,6 +321,51 @@ function System.processRouters(dt)
     end
 end
 
+-- A powered pump next to a well or open water injects fluid into its network. It is NOT a container:
+-- a well holds 10 000 L and open water is infinite, so letting either join the network as storage
+-- would leave rebalanceSummary smearing them across every pipe and the network permanently full.
+-- Bounded injection is the same shape the purifier's intake step already uses.
+function System.processPump(pump, square, dt)
+    local source = Pump.findSource(pump)
+    if not source then
+        return   -- booster only: nothing to draw from, but it still adds head to its zone
+    end
+
+    -- Ask the network what it can take FIRST, so we never pull water out of a well and lose it.
+    local headroom = NetworkAccess.availableToPush(square, source.fluidType)
+    local wanted = math.min(Pump.intakeFor(dt), headroom)
+    if wanted <= 0 then
+        return
+    end
+
+    local taken = Pump.drawFromSource(source, wanted)
+    if taken <= 0 then
+        return
+    end
+
+    local added = NetworkAccess.fillFluidAtSquare(square, source.fluidType, taken)
+    if added < taken then
+        -- The network took less than we drew (a race with another consumer, or a mixed-fluid
+        -- refusal). Put the remainder back rather than quietly destroying it.
+        Pump.refundToSource(source, taken - added)
+    end
+end
+
+function System.processPumps(dt)
+    dt = dt or 1.0
+    if dt <= 0 then
+        return
+    end
+    local state = State.ensure()
+    for _, pipeData in pairs(state.pipes) do
+        local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
+        local pump = square and Pump.findOnSquare(square)
+        if pump and Pump.isPowered(pump) then
+            System.processPump(pump, square, dt)
+        end
+    end
+end
+
 function System.refreshPlumbedEndpoints()
     local state = State.ensure()
     local coordinates = {}
@@ -492,9 +541,24 @@ local function onEveryOneMinute()
         Logger.error("Router processing failed: " .. tostring(errRouters))
     end
 
+    local okPumps, errPumps = pcall(System.processPumps)
+    if not okPumps then
+        Logger.error("Pump processing failed: " .. tostring(errPumps))
+    end
+
     local ok, err = pcall(System.refreshPlumbedEndpoints)
     if not ok then
         Logger.error("Endpoint plumbing refresh failed: " .. tostring(err))
+    end
+end
+
+-- Irrigation runs hourly, not per minute: crops drain 1 waterLvl every 5 in-game hours, so anything
+-- faster would be pure overhead. It is also the only place pressure is computed for emitters, which
+-- keeps that cost pinned to the slowest cadence in the mod.
+local function onEveryHours()
+    local ok, err = pcall(Irrigation.run, 1.0)
+    if not ok then
+        Logger.error("Irrigation pass failed: " .. tostring(err))
     end
 end
 
@@ -595,6 +659,32 @@ local function onClientCommand(module, command, player, args)
         return
     end
 
+    -- Same contract as repairPurifier: the client already spent the kit, the server owns the state.
+    if command == "repairDrip" then
+        local square = resolveCommandSquare(args)
+        local drip = square and Irrigation.findDripOnSquare(square)
+        if not drip then
+            Logger.warn("Repair drip command: no drip emitter at "
+                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
+            return
+        end
+        Irrigation.repairDrip(drip)
+        return
+    end
+
+    -- Router pressure ceiling: server-authoritative so every client sees the same regulated zone.
+    if command == "setRouterPressure" then
+        local square = resolveCommandSquare(args)
+        local router = square and Router.findOnSquare(square)
+        if not router then
+            Logger.warn("Set router pressure command: no router at "
+                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
+            return
+        end
+        Router.setPressureCeiling(router, args and args.pressure)
+        return
+    end
+
     if command == "forceGlobalWaterShutoff" then
         System.forceGlobalWaterShutoff()
         System.tick()
@@ -619,6 +709,10 @@ if Events then
 
     if Events.EveryOneMinute then
         Events.EveryOneMinute.Add(onEveryOneMinute)
+    end
+
+    if Events.EveryHours then
+        Events.EveryHours.Add(onEveryHours)
     end
 
     if Events.OnDestroyIsoThumpable then

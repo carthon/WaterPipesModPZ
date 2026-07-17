@@ -20,5 +20,12 @@
     "IGUI_WaterPipes_SoundEnabled": "Sonidos de las máquinas",
     "IGUI_WaterPipes_SoundEnabled_tooltip": "Zumbido ambiental en bucle de las máquinas en marcha, como el purificador eléctrico mientras tiene electricidad. Desactívalo para silencio total.",
     "IGUI_WaterPipes_SoundVolume": "Volumen de sonido de las máquinas (%)",
-    "IGUI_WaterPipes_SoundVolume_tooltip": "Volumen de los sonidos de las máquinas del mod, de 0 (silencio) a 100 (máximo)."
+    "IGUI_WaterPipes_SoundVolume_tooltip": "Volumen de los sonidos de las máquinas del mod, de 0 (silencio) a 100 (máximo).",
+    "IGUI_WaterPipesPressureModelOff": "La presión está desactivada en las opciones de sandbox de esta partida.",
+    "IGUI_WaterPipesGaugeNoSupply": "No llega suministro a este punto.",
+    "IGUI_WaterPipesGaugeReading": "Presión aquí: %1 m de columna",
+    "IGUI_WaterPipesGaugeSprinklerOk": "Suficiente para un aspersor.",
+    "IGUI_WaterPipesGaugeSprinklerLow": "Insuficiente para un aspersor (necesita %1). Añade una bomba.",
+    "IGUI_WaterPipesGaugeDripRisk": "Demasiada para un gotero (revienta por encima de %1). Pon un enrutador en medio y fíjale un límite.",
+    "IGUI_WaterPipesDripBurst": "Reventado por exceso de presión. Sigue conduciendo agua, pero ha dejado de regar."
 }

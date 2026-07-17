@@ -85,4 +85,78 @@ function Router.getOutOffset(worldObject)
     return DIR_OFFSET[Router.getDirection(worldObject)]
 end
 
+-- ===== Pressure regulation =====
+-- A router already stops pressure crossing it, which makes it the one place a player can put a
+-- ceiling on a zone. Set it from the context menu; the OUT-side zone then runs at
+-- min(incoming head, ceiling). It can only ever REDUCE -- see Router.applyCeiling.
+
+function Router.getPressureCeiling(worldObject)
+    local modData = getModData(worldObject)
+    local value = modData and modData[Constants.ROUTER_PRESSURE_KEY]
+    if type(value) == "number" and value >= 0 then
+        return value
+    end
+    return nil   -- unset: pass the incoming head straight through
+end
+
+function Router.setPressureCeiling(worldObject, value)
+    local modData = getModData(worldObject)
+    if not modData then
+        return
+    end
+    if type(value) ~= "number" or value < 0 then
+        modData[Constants.ROUTER_PRESSURE_KEY] = Constants.ROUTER_PRESSURE_UNSET
+    else
+        modData[Constants.ROUTER_PRESSURE_KEY] =
+            math.min(math.max(value, 0), Constants.ROUTER_PRESSURE_MAX)
+    end
+    if worldObject.transmitModData then
+        pcall(worldObject.transmitModData, worldObject)
+    end
+end
+
+-- A reducing valve can only ever reduce. This one line is what stops a router from becoming a free
+-- pump: set a router to 25 with 10 coming in and you still get 10, so pumps remain the only way to
+-- CREATE head. Real pressure-reducing valves work exactly this way.
+function Router.applyCeiling(head, ceiling)
+    if not ceiling then
+        return head
+    end
+    return math.min(head, ceiling)
+end
+
+-- The tightest ceiling imposed on a zone by the routers feeding INTO it, or nil if none do.
+--
+-- `boundaryRouters` are the routers the network walk bumped into (each { router, square }), so this
+-- costs nothing but a lookup per boundary. A router regulates only what it PUSHES: we keep it when
+-- its OUT side lands inside this zone, and ignore it when the zone sits on its IN side -- that zone
+-- is upstream, and a reducing valve has no say over what feeds it.
+function Router.ceilingForZone(boundaryRouters, pipeSquares)
+    if not boundaryRouters or #boundaryRouters == 0 or not pipeSquares then
+        return nil
+    end
+
+    local inZone = {}
+    for _, square in ipairs(pipeSquares) do
+        inZone[square:getX() .. ":" .. square:getY() .. ":" .. square:getZ()] = true
+    end
+
+    local tightest = nil
+    for _, entry in ipairs(boundaryRouters) do
+        local out = Router.getOutOffset(entry.router)
+        local square = entry.square
+        if out and square then
+            local key = (square:getX() + out.dx) .. ":" .. (square:getY() + out.dy) .. ":" .. square:getZ()
+            if inZone[key] then
+                local ceiling = Router.getPressureCeiling(entry.router)
+                if ceiling and (not tightest or ceiling < tightest) then
+                    tightest = ceiling
+                end
+            end
+        end
+    end
+
+    return tightest
+end
+
 return Router

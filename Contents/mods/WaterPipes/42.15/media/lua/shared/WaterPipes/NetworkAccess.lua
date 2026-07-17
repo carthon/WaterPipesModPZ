@@ -6,6 +6,8 @@ require "WaterPipes/ContainerAdapter"
 require "WaterPipes/EndpointObjects"
 require "WaterPipes/Logger"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/Pressure"
+require "WaterPipes/Pump"
 require "WaterPipes/Router"
 
 local Adapter = WaterPipes.ContainerAdapter
@@ -14,6 +16,8 @@ local EndpointObjects = WaterPipes.EndpointObjects
 local Logger = WaterPipes.Logger
 local NetworkAccess = WaterPipes.NetworkAccess
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local Pressure = WaterPipes.Pressure
+local Pump = WaterPipes.Pump
 local Router = WaterPipes.Router
 
 local function getCellSquare(x, y, z)
@@ -116,31 +120,70 @@ end
 --   "up"   -> only to HIGHER floors: the sources whose water can drain down to originSquare,
 --   "down" -> only to LOWER floors: where water introduced at originSquare would fall.
 -- Same-floor (horizontal) links always conduct both ways.
+--
+-- Returns (pipeSquares, hopsByKey, zone). hopsByKey is the min hop count from originSquare to each
+-- pipe square, which is all the pressure model needs from the traversal: head loss is friction *
+-- hops, and the elevation term depends only on the endpoints (see Constants.lua), so minimising loss
+-- is just minimising hops -- no weighted search required.
+--
+-- `zone` carries what the pressure gate needs about this network, gathered as we go: the powered
+-- pumps inside it and the routers bounding it. Both fall out of work the walk already does -- it
+-- must look at every square's pipe objects anyway, and it already asks each one whether it is a
+-- router -- so collecting them here costs nothing, where a second and third pass over the zone
+-- would have tripled the cost of every draw query.
+--
+-- Draw queries pass "both" and let the pressure gate do the filtering; "up" survives only for
+-- callers that want the old gravity-reachable set without pricing it. See buildSummaryFromSquare.
 local function collectPipeSquaresFromSquare(originSquare, verticalMode)
     if not originSquare then
-        return {}
+        return {}, {}, { pumps = {}, boundaryRouters = {} }
     end
 
     verticalMode = verticalMode or "both"
 
     local visited = {}
     local queue = {}
+    local hops = {}
     local pipeSquares = {}
+    local zone = { pumps = {}, boundaryRouters = {} }
+    local routerSeen = {}
 
-    local function tryAdd(square)
+    local function tryAdd(square, distance)
+        if not square or not hasPipeOnSquare(square) then
+            return
+        end
+
         -- Routers are flow boundaries: the network never traverses through one, so the IN side and
-        -- OUT side resolve to separate networks.
-        if square and hasPipeOnSquare(square) and not Router.hasRouterOnSquare(square)
-            and addSquare(visited, square) then
-            queue[#queue + 1] = square
-            pipeSquares[#pipeSquares + 1] = square
+        -- OUT side resolve to separate networks. A router we bump into bounds THIS zone, and may be
+        -- regulating it -- which we can only tell once we know the zone's full extent.
+        local router = Router.findOnSquare(square)
+        if router then
+            local key = squareKey(square)
+            if not routerSeen[key] then
+                routerSeen[key] = true
+                zone.boundaryRouters[#zone.boundaryRouters + 1] = { router = router, square = square }
+            end
+            return
+        end
+
+        if not addSquare(visited, square) then
+            return
+        end
+
+        queue[#queue + 1] = square
+        hops[squareKey(square)] = distance
+        pipeSquares[#pipeSquares + 1] = square
+
+        local pump = Pump.findOnSquare(square)
+        if pump then
+            zone.pumps[#zone.pumps + 1] = pump
         end
     end
 
     -- Same-floor cardinal neighbours (both ways) + cross-floor riser neighbours filtered by gravity.
-    local function addNeighborsOf(x, y, z)
+    local function addNeighborsOf(x, y, z, distance)
         for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
-            tryAdd(getCellSquare(x + offset.x, y + offset.y, z))
+            tryAdd(getCellSquare(x + offset.x, y + offset.y, z), distance)
         end
         for _, coord in ipairs(PipeObjectUtils.getRiserVerticalNeighborCoords(x, y, z)) do
             local keep = true
@@ -150,22 +193,25 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode)
                 keep = coord.z < z
             end
             if keep then
-                tryAdd(getCellSquare(coord.x, coord.y, coord.z))
+                tryAdd(getCellSquare(coord.x, coord.y, coord.z), distance)
             end
         end
     end
 
-    tryAdd(originSquare)
-    addNeighborsOf(originSquare:getX(), originSquare:getY(), originSquare:getZ())
+    -- The origin is often a fixture (sink, generator) with no pipe of its own, so its neighbours are
+    -- seeded unconditionally -- tryAdd would drop the whole search otherwise.
+    tryAdd(originSquare, 0)
+    addNeighborsOf(originSquare:getX(), originSquare:getY(), originSquare:getZ(), 1)
 
     local index = 1
     while index <= #queue do
         local current = queue[index]
         index = index + 1
-        addNeighborsOf(current:getX(), current:getY(), current:getZ())
+        local distance = hops[squareKey(current)] or 0
+        addNeighborsOf(current:getX(), current:getY(), current:getZ(), distance + 1)
     end
 
-    return pipeSquares
+    return pipeSquares, hops, zone
 end
 
 local function collectConnectedPipeSquares(endpointObject)
@@ -175,15 +221,18 @@ local function collectConnectedPipeSquares(endpointObject)
     return collectPipeSquaresFromSquare(endpointObject:getSquare())
 end
 
-local function collectStorageDescriptors(pipeSquares)
+local function collectStorageDescriptors(pipeSquares, hops)
     local scannedSquares = {}
     local descriptors = {}
 
     -- A container counts only when it shares its tile with a pipe (same square), not by adjacency.
     for _, pipeSquare in ipairs(pipeSquares) do
         if addSquare(scannedSquares, pipeSquare) then
+            -- How far this container sits from the origin, so the pressure gate can price the run.
+            local distance = hops and hops[squareKey(pipeSquare)] or 0
             local squareDescriptors = Adapter.collectSquareContainers(pipeSquare)
             for key, descriptor in pairs(squareDescriptors) do
+                descriptor.pipeHops = distance
                 descriptors[key] = descriptor
             end
         end
@@ -206,20 +255,87 @@ local function normalizeDescriptorList(descriptorMap)
     return descriptors
 end
 
-local function buildSummaryFromSquare(originSquare, verticalMode)
+-- Drop the sources that cannot push their water to a `kind` consumer at originSquare, and record the
+-- best head any surviving source delivers. A source that sits too far away, or too low with no pump
+-- to lift it, simply is not part of this consumer's supply.
+local function applyPressureGate(descriptors, originSquare, kind, pumpHead, ceiling)
+    local enabled = Pressure.isEnabled()
+    local minimum = Pressure.minimumFor(kind)
+    local consumerZ = originSquare:getZ()
+    local best = nil
+    local reachable = {}
+
+    for _, descriptor in ipairs(descriptors) do
+        local head = Router.applyCeiling(
+            Pressure.delivered(descriptor.z, consumerZ, descriptor.pipeHops, kind, pumpHead), ceiling)
+        if not enabled or head >= minimum then
+            descriptor.pressure = head
+            reachable[#reachable + 1] = descriptor
+            if not best or head > best then
+                best = head
+            end
+        end
+    end
+
+    return reachable, best
+end
+
+-- Which containers can fluid entering at originSquare actually reach? Only lift is priced (see
+-- Pressure.canFillTo): with no pump this is exactly the old gravity fill, and with one the water
+-- climbs as many floors as the pump's head allows.
+local function applyFillGate(descriptors, originSquare, pumpHead)
+    local originZ = originSquare:getZ()
+    local reachable = {}
+    for _, descriptor in ipairs(descriptors) do
+        if Pressure.canFillTo(originZ, descriptor.z, pumpHead) then
+            reachable[#reachable + 1] = descriptor
+        end
+    end
+    return reachable
+end
+
+-- kind (Constants.PRESSURE_KIND_*) picks the friction coefficient, since head loss scales with flow:
+-- a tap sipping loses far less per tile than a sprinkler running wide open. Passing a kind is what
+-- marks this as a DRAW query: the pressure gate runs and pumps are counted.
+-- Passing fill = true marks a FILL query, which is gated on lift instead.
+--
+-- Draw queries traverse "both" rather than "up", because a pump in the basement pushing water
+-- upstairs is a legitimate build that an ascending-only search would never find. The pressure gate
+-- reproduces gravity on its own (a source one floor down delivers -2 m.c.a. and is dropped), so
+-- nothing is lost. The one liberty it takes: a route that climbs over a hump higher than its source
+-- is allowed. Real closed pipes do siphon over humps up to ~10 m, so this is right below ~3 floors
+-- and merely generous above that -- and above that you almost certainly have a pump anyway.
+local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill)
     if not originSquare then
         return nil
     end
 
-    local pipeSquares = collectPipeSquaresFromSquare(originSquare, verticalMode)
+    local pipeSquares, hops, zone = collectPipeSquaresFromSquare(originSquare, verticalMode)
     if #pipeSquares == 0 then
         return nil
     end
 
-    local descriptorMap = collectStorageDescriptors(pipeSquares)
+    local descriptorMap = collectStorageDescriptors(pipeSquares, hops)
     local descriptors = normalizeDescriptorList(descriptorMap)
     if #descriptors == 0 then
         return nil
+    end
+
+    -- Visualization asks for neither gate and sees the whole physical network.
+    local pressure = nil
+    if kind or fill then
+        local pumpHead = Pump.headForPumps(zone.pumps)
+        if fill then
+            descriptors = applyFillGate(descriptors, originSquare, pumpHead)
+        else
+            -- A router pushing into this zone can cap it (never raise it), which is how a drip line
+            -- survives downstream of a pump.
+            local ceiling = Router.ceilingForZone(zone.boundaryRouters, pipeSquares)
+            descriptors, pressure = applyPressureGate(descriptors, originSquare, kind, pumpHead, ceiling)
+        end
+        if #descriptors == 0 then
+            return nil
+        end
     end
 
     local totalAmount = 0
@@ -255,6 +371,8 @@ local function buildSummaryFromSquare(originSquare, verticalMode)
         isMixed = fluidTypeCount > 1,
         isWater = fluidTypeName == "Water" or fluidTypeName == "TaintedWater",
         isTainted = fluidTypeName == "TaintedWater",
+        -- Best head (m.c.a.) any reachable source delivers here; nil unless this was a draw query.
+        pressure = pressure,
     }
 end
 
@@ -267,7 +385,7 @@ local function buildSummary(endpointObject)
     local originSquare = endpointObject.getSquare and endpointObject:getSquare() or nil
     -- A tap draws only water that can reach it under gravity: its own floor plus anything above that
     -- drains down to it. Water on a lower floor cannot climb up, so it is excluded.
-    local summary = buildSummaryFromSquare(originSquare, "up")
+    local summary = buildSummaryFromSquare(originSquare, "both", Constants.PRESSURE_KIND_TAP)
     if summary then
         summary.endpoint = endpointObject
     end
@@ -299,7 +417,7 @@ end
 -- Square-based access for non-endpoint consumers (e.g. generators pulling Petrol).
 function NetworkAccess.getFluidSummaryAtSquare(originSquare)
     -- A square-based consumer (generator, API read) sees the fluid that can reach it under gravity.
-    return buildSummaryFromSquare(originSquare, "up")
+    return buildSummaryFromSquare(originSquare, "both", Constants.PRESSURE_KIND_TAP)
 end
 
 -- For visualization: the pipe squares reachable from a square + the container descriptors on them.
@@ -307,15 +425,95 @@ end
 function NetworkAccess.getNetworkFromSquare(originSquare)
     -- Visualization: show the whole physically-connected network (both directions), not just the
     -- gravity-reachable part.
-    local pipeSquares = collectPipeSquaresFromSquare(originSquare, "both")
-    local descriptors = normalizeDescriptorList(collectStorageDescriptors(pipeSquares))
+    local pipeSquares, hops = collectPipeSquaresFromSquare(originSquare, "both")
+    local descriptors = normalizeDescriptorList(collectStorageDescriptors(pipeSquares, hops))
     return pipeSquares, descriptors
+end
+
+-- Best head (m.c.a.) available to a `kind` consumer standing on `square`, or nil when nothing can
+-- reach it. Public because the pump, the sprinkler and the gauge all need to ask the same question.
+function NetworkAccess.getPressureAtSquare(square, kind)
+    local summary = buildSummaryFromSquare(square, "both", kind or Constants.PRESSURE_KIND_TAP)
+    return summary and summary.pressure or nil
+end
+
+-- Everything the pressure model knows about one point, for the debug readout. The gauge answers
+-- "how much?"; this answers "why?" -- it breaks out every term that fed the number, so a surprising
+-- reading can be traced to the source, hop count, pump or router ceiling responsible for it.
+-- One walk serves the whole report.
+function NetworkAccess.getPressureReport(square)
+    if not square then
+        return nil
+    end
+
+    local pipeSquares, hops, zone = collectPipeSquaresFromSquare(square, "both")
+    local report = {
+        enabled = Pressure.isEnabled(),
+        model = Pressure.model(),
+        pipeCount = #pipeSquares,
+        pumpCount = #zone.pumps,
+        poweredPumps = 0,
+        boundaryRouters = #zone.boundaryRouters,
+        sources = {},
+        kinds = {},
+    }
+
+    for _, pump in ipairs(zone.pumps) do
+        if Pump.isPowered(pump) then
+            report.poweredPumps = report.poweredPumps + 1
+        end
+    end
+    report.pumpHead = Pump.headForPumps(zone.pumps)
+    report.ceiling = Router.ceilingForZone(zone.boundaryRouters, pipeSquares)
+
+    if #pipeSquares == 0 then
+        return report
+    end
+
+    local descriptors = normalizeDescriptorList(collectStorageDescriptors(pipeSquares, hops))
+    report.containerCount = #descriptors
+
+    -- Per source: what it holds and the head it actually lands here with (tap flow).
+    local consumerZ = square:getZ()
+    for _, descriptor in ipairs(descriptors) do
+        report.sources[#report.sources + 1] = {
+            key = tostring(descriptor.key),
+            z = descriptor.z,
+            hops = descriptor.pipeHops,
+            amount = descriptor.waterAmount,
+            capacity = descriptor.capacity,
+            fluidType = descriptor.fluidType,
+            head = Router.applyCeiling(Pressure.delivered(descriptor.z, consumerZ,
+                descriptor.pipeHops, Constants.PRESSURE_KIND_TAP, report.pumpHead), report.ceiling),
+        }
+    end
+
+    -- Per consumer kind: the head the best source delivers, and whether that clears its minimum.
+    for _, kind in ipairs({ Constants.PRESSURE_KIND_TAP, Constants.PRESSURE_KIND_DRIP,
+        Constants.PRESSURE_KIND_SPRINKLER }) do
+        local best = nil
+        for _, descriptor in ipairs(descriptors) do
+            local head = Router.applyCeiling(Pressure.delivered(descriptor.z, consumerZ,
+                descriptor.pipeHops, kind, report.pumpHead), report.ceiling)
+            if not best or head > best then
+                best = head
+            end
+        end
+        report.kinds[kind] = {
+            head = best,
+            minimum = Pressure.minimumFor(kind),
+            friction = Pressure.frictionFor(kind),
+            ok = best ~= nil and best >= Pressure.minimumFor(kind),
+        }
+    end
+
+    return report
 end
 
 -- Router intake helper: which single fluid (and how much) can be PULLED from the network reachable
 -- upward from `square` (gravity-consumer view). Returns (amount, fluidTypeName) or (0, nil).
-function NetworkAccess.availableToPull(square)
-    local summary = buildSummaryFromSquare(square, "up")
+function NetworkAccess.availableToPull(square, kind)
+    local summary = buildSummaryFromSquare(square, "both", kind or Constants.PRESSURE_KIND_TAP)
     if not summary or summary.isMixed or (summary.totalAmount or 0) <= 0 then
         return 0, nil
     end
@@ -325,7 +523,7 @@ end
 -- Router output helper: how much `fluidType` can be PUSHED into the network reachable downward from
 -- `square` (gravity-fill view). Returns the free headroom, or 0 if full / mixed / incompatible fluid.
 function NetworkAccess.availableToPush(square, fluidType)
-    local summary = buildSummaryFromSquare(square, "down")
+    local summary = buildSummaryFromSquare(square, "both", nil, true)
     if not summary or summary.isMixed then
         return 0
     end
@@ -343,9 +541,9 @@ end
 -- Draw up to `amount` of `requiredFluidType` from the network reachable from `originSquare`.
 -- Only works on a single-fluid network whose fluid matches requiredFluidType. Returns the
 -- amount actually drawn (rebalanced out of the network's containers).
-function NetworkAccess.drawFluidAtSquare(originSquare, requiredFluidType, amount)
-    -- Drawing is consumption: only fluid that can reach this square under gravity is available.
-    local summary = buildSummaryFromSquare(originSquare, "up")
+function NetworkAccess.drawFluidAtSquare(originSquare, requiredFluidType, amount, kind)
+    -- Drawing is consumption: only fluid whose head reaches this square is available.
+    local summary = buildSummaryFromSquare(originSquare, "both", kind or Constants.PRESSURE_KIND_TAP)
     if not summary or summary.isMixed or (summary.totalAmount or 0) <= 0 then
         return 0
     end
@@ -370,8 +568,8 @@ function NetworkAccess.fillFluidAtSquare(originSquare, fluidType, amount)
         return 0
     end
 
-    -- Water introduced into the network flows DOWN from here.
-    local summary = buildSummaryFromSquare(originSquare, "down")
+    -- Water introduced here settles downhill -- or climbs, if a pump in this zone has the head.
+    local summary = buildSummaryFromSquare(originSquare, "both", nil, true)
     if not summary or summary.isMixed then
         return 0
     end

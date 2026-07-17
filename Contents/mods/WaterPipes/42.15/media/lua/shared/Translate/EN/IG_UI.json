@@ -20,5 +20,12 @@
     "IGUI_WaterPipes_SoundEnabled": "Machine sounds",
     "IGUI_WaterPipes_SoundEnabled_tooltip": "Looping ambient hum played by working machines, such as the electric purifier while it is powered. Turn off for total silence.",
     "IGUI_WaterPipes_SoundVolume": "Machine sound volume (%)",
-    "IGUI_WaterPipes_SoundVolume_tooltip": "Volume of the mod's machine sounds, from 0 (silent) to 100 (loudest)."
+    "IGUI_WaterPipes_SoundVolume_tooltip": "Volume of the mod's machine sounds, from 0 (silent) to 100 (loudest).",
+    "IGUI_WaterPipesPressureModelOff": "Pressure is switched off in this game's sandbox options.",
+    "IGUI_WaterPipesGaugeNoSupply": "No supply reaches this point.",
+    "IGUI_WaterPipesGaugeReading": "Pressure here: %1 m of head",
+    "IGUI_WaterPipesGaugeSprinklerOk": "Enough for a sprinkler.",
+    "IGUI_WaterPipesGaugeSprinklerLow": "Not enough for a sprinkler (needs %1). Add a pump.",
+    "IGUI_WaterPipesGaugeDripRisk": "Too much for a drip emitter (bursts above %1). Put a router in between and set a limit.",
+    "IGUI_WaterPipesDripBurst": "Blown out by too much pressure. It still carries water, but it has stopped watering."
 }

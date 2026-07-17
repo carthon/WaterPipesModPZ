@@ -37,3 +37,99 @@ option WaterPipes.PurifierFilterWear
     page = WaterPipes,
     translation = WaterPipes_PurifierFilterWear,
 }
+
+option WaterPipes.PressureModel
+{
+    type = enum,
+    numValues = 3,
+    default = 1,
+    page = WaterPipes,
+    translation = WaterPipes_PressureModel,
+    valueTranslation = WaterPipes_PressureModel_Values,
+}
+
+option WaterPipes.PressurePerLevel
+{
+    type = integer,
+    min = 0,
+    max = 200,
+    default = 30,
+    page = WaterPipes,
+    translation = WaterPipes_PressurePerLevel,
+}
+
+option WaterPipes.PressureContainerBase
+{
+    type = integer,
+    min = 0,
+    max = 200,
+    default = 10,
+    page = WaterPipes,
+    translation = WaterPipes_PressureContainerBase,
+}
+
+option WaterPipes.PressureFrictionScale
+{
+    type = integer,
+    min = 0,
+    max = 500,
+    default = 100,
+    page = WaterPipes,
+    translation = WaterPipes_PressureFrictionScale,
+}
+
+option WaterPipes.PumpHead
+{
+    type = integer,
+    min = 0,
+    max = 1000,
+    default = 250,
+    page = WaterPipes,
+    translation = WaterPipes_PumpHead,
+}
+
+option WaterPipes.PumpSuctionLimit
+{
+    type = integer,
+    min = 0,
+    max = 500,
+    default = 70,
+    page = WaterPipes,
+    translation = WaterPipes_PumpSuctionLimit,
+}
+
+option WaterPipes.PumpIntakeRate
+{
+    type = integer,
+    min = 0,
+    max = 500,
+    default = 20,
+    page = WaterPipes,
+    translation = WaterPipes_PumpIntakeRate,
+}
+
+option WaterPipes.PumpFromWaterBodies
+{
+    type = boolean,
+    default = true,
+    page = WaterPipes,
+    translation = WaterPipes_PumpFromWaterBodies,
+}
+
+option WaterPipes.DripBurstPressure
+{
+    type = integer,
+    min = 0,
+    max = 1000,
+    default = 150,
+    page = WaterPipes,
+    translation = WaterPipes_DripBurstPressure,
+}
+
+option WaterPipes.SprinklerNoise
+{
+    type = boolean,
+    default = true,
+    page = WaterPipes,
+    translation = WaterPipes_SprinklerNoise,
+}

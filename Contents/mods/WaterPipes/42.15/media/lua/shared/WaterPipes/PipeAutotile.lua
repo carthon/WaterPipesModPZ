@@ -97,6 +97,31 @@ local function isRiser(worldObject)
     return modData and modData[Constants.PIPE_RISER_MODDATA_KEY] == true or false
 end
 
+-- Fixed sprite for the pipe variants that are devices rather than plumbing: pump, drip emitter and
+-- sprinkler. Each has exactly one E/W and one N/S cell, so the build axis picks it and the
+-- neighbour mask is irrelevant. Returns nil for an ordinary pipe, which then autotiles as usual.
+-- Read straight from modData rather than through the device modules, to keep this file free of
+-- requires it does not otherwise need.
+local DEVICE_SPRITES = {
+    [Constants.PUMP_MODDATA_KEY] = { ew = Constants.PUMP_SPRITE_EW, ns = Constants.PUMP_SPRITE_NS },
+    [Constants.DRIP_MODDATA_KEY] = { ew = Constants.DRIP_SPRITE_EW, ns = Constants.DRIP_SPRITE_NS },
+    [Constants.SPRINKLER_MODDATA_KEY] = { ew = Constants.SPRINKLER_SPRITE_EW, ns = Constants.SPRINKLER_SPRITE_NS },
+}
+
+local function deviceSprite(worldObject)
+    local modData = modDataOf(worldObject)
+    if not modData then
+        return nil
+    end
+    for key, sprites in pairs(DEVICE_SPRITES) do
+        if modData[key] == true then
+            return modData[Constants.PIPE_AXIS_MODDATA_KEY] == Constants.PIPE_AXIS_NS
+                and sprites.ns or sprites.ew
+        end
+    end
+    return nil
+end
+
 -- Apply a sprite to a pipe only if it changed (client-cosmetic: never transmitted).
 local function setSpriteIfChanged(worldObject, sprite)
     if not sprite or spriteName(worldObject) == sprite then
@@ -226,6 +251,15 @@ function PipeAutotile.refreshFloorPipeAt(x, y, z)
     -- Routers keep a fixed device sprite (the IN->OUT band) and never autotile.
     if Router.isRouter(pipe) then
         setSpriteIfChanged(pipe, Router.spriteFor(pipe))
+        return
+    end
+
+    -- Devices (pump, drip emitter, sprinkler) keep a fixed sprite chosen by their build axis. They
+    -- still conduct and still count as a floor connection for their neighbours -- only their own
+    -- sprite is pinned, because each has just one E/W and one N/S art cell, no corners or tees.
+    local device = deviceSprite(pipe)
+    if device then
+        setSpriteIfChanged(pipe, device)
         return
     end
 
