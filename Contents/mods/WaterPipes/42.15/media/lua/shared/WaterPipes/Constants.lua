@@ -142,6 +142,28 @@ Constants.ADAPTER_SOURCE_SPRITE = "carpentry_02_54"
 Constants.ADAPTER_SOURCE_HIDDEN_SPRITE = "waterpipes_01_20"
 Constants.MAX_FINITE_FLUID_CAPACITY = 9999
 
+-- Appliances that use water to run but manage it themselves (a washing machine only needs its own
+-- FluidContainer non-empty to start a cycle, and its cycle logic never touches fluid). They carry the
+-- waterPiped flag, so in principle the endpoint detection already sees them -- but that flag is read
+-- from the live sprite and is not reliable on every washer model, which let them slip through to the
+-- storage path where the network overwrote their water. Matched by class instead:
+--   * container detection EXCLUDES them (never storage),
+--   * endpoint detection INCLUDES them (a plumbable consumer, like a sink),
+-- so a pipe on a washer's tile lets you plumb it and it draws its wash water from the network.
+--
+-- Known limitation (accepted): once the mirror puts water into the washer's own FluidContainer, the
+-- vanilla RIGHT-CLICK menu suppresses the washer's Turn On / change-mode submenu (its context-menu
+-- builder bails out early when the tile "has something to interact with", i.e. drawable water). The
+-- washer is still fully operable from the inventory/loot window, where those controls remain -- so
+-- this is a cosmetic loss of the redundant right-click path, not a loss of function. Feeding it
+-- without a filled container would require a phantom water-source object above the tile, which the
+-- mod deliberately removed (WorldDictionary risk); not worth it for a redundant menu.
+Constants.WATER_APPLIANCE_CLASSES = {
+    "IsoClothingWasher",
+    "IsoCombinationWasherDryer",
+    "IsoStackedWasherDryer",
+}
+
 Constants.CARDINAL_OFFSETS = {
     { x = 1, y = 0, z = 0 },
     { x = -1, y = 0, z = 0 },
