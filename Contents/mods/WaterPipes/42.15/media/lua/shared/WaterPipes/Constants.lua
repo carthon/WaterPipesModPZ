@@ -150,6 +150,14 @@ Constants.MAX_FINITE_FLUID_CAPACITY = 9999
 --   * container detection EXCLUDES them (never storage),
 --   * endpoint detection INCLUDES them (a plumbable consumer, like a sink),
 -- so a pipe on a washer's tile lets you plumb it and it draws its wash water from the network.
+--
+-- Known limitation (accepted): once the mirror puts water into the washer's own FluidContainer, the
+-- vanilla RIGHT-CLICK menu suppresses the washer's Turn On / change-mode submenu (its context-menu
+-- builder bails out early when the tile "has something to interact with", i.e. drawable water). The
+-- washer is still fully operable from the inventory/loot window, where those controls remain -- so
+-- this is a cosmetic loss of the redundant right-click path, not a loss of function. Feeding it
+-- without a filled container would require a phantom water-source object above the tile, which the
+-- mod deliberately removed (WorldDictionary risk); not worth it for a redundant menu.
 Constants.WATER_APPLIANCE_CLASSES = {
     "IsoClothingWasher",
     "IsoCombinationWasherDryer",
