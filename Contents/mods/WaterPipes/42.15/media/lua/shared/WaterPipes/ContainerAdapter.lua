@@ -77,23 +77,16 @@ local function isExcludedWorldObject(worldObject)
     return modData and modData[Constants.ADAPTER_SOURCE_MODDATA_KEY] == true or false
 end
 
--- Appliances that OWN their water (a washing machine fills/empties itself as part of its function) hold
--- a FluidContainer inherited from IsoObject, so the duck-typed detection below would happily adopt them
--- as network storage -- and then rebalanceSummary overwrites their water every tick, so they can never
--- reach the level they need to run. They are none of the storage vessels this mod means to plumb, so we
--- exclude the classes outright. All three extend IsoObject directly with no shared washer superclass,
--- so each is matched on its own. (The plain dryer holds no water and never trips the detection.)
-local EXCLUDED_APPLIANCE_CLASSES = {
-    "IsoClothingWasher",
-    "IsoCombinationWasherDryer",
-    "IsoStackedWasherDryer",
-}
-
+-- Water appliances (washing machines) hold a FluidContainer inherited from IsoObject, so the
+-- duck-typed detection below would adopt them as network STORAGE and rebalanceSummary would overwrite
+-- their water every tick -- so they could never reach the level they need to run. They are consumers,
+-- not vessels: EndpointObjects recognises the same class list as plumbable endpoints instead. Here we
+-- just keep them out of the storage path. Constants.WATER_APPLIANCE_CLASSES is the shared source.
 local function isExcludedAppliance(worldObject)
     if not worldObject or not instanceof then
         return false
     end
-    for _, className in ipairs(EXCLUDED_APPLIANCE_CLASSES) do
+    for _, className in ipairs(Constants.WATER_APPLIANCE_CLASSES) do
         local ok, isInstance = pcall(instanceof, worldObject, className)
         if ok and isInstance then
             return true

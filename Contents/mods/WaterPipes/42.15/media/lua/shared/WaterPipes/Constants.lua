@@ -142,6 +142,20 @@ Constants.ADAPTER_SOURCE_SPRITE = "carpentry_02_54"
 Constants.ADAPTER_SOURCE_HIDDEN_SPRITE = "waterpipes_01_20"
 Constants.MAX_FINITE_FLUID_CAPACITY = 9999
 
+-- Appliances that use water to run but manage it themselves (a washing machine only needs its own
+-- FluidContainer non-empty to start a cycle, and its cycle logic never touches fluid). They carry the
+-- waterPiped flag, so in principle the endpoint detection already sees them -- but that flag is read
+-- from the live sprite and is not reliable on every washer model, which let them slip through to the
+-- storage path where the network overwrote their water. Matched by class instead:
+--   * container detection EXCLUDES them (never storage),
+--   * endpoint detection INCLUDES them (a plumbable consumer, like a sink),
+-- so a pipe on a washer's tile lets you plumb it and it draws its wash water from the network.
+Constants.WATER_APPLIANCE_CLASSES = {
+    "IsoClothingWasher",
+    "IsoCombinationWasherDryer",
+    "IsoStackedWasherDryer",
+}
+
 Constants.CARDINAL_OFFSETS = {
     { x = 1, y = 0, z = 0 },
     { x = -1, y = 0, z = 0 },
