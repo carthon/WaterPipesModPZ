@@ -28,9 +28,10 @@ local Router = WaterPipes.Router
 -- the IN and OUT sides must never see each other -- otherwise an OUT-side tap could pull the raw
 -- tainted water straight off the IN side and bypass purification entirely.
 --
--- Bare, it is an inline PRESSURE-REDUCING VALVE: water flows through it and the downstream side runs
--- at whatever ceiling the player set. That is what real plumbing does, and it is why a sprinkler on a
--- tank-less branch can still draw from the main network.
+-- Bare, it is an inline PRESSURE-REDUCING VALVE: water flows through it and leaves its outlet at
+-- whatever ceiling the player set, then keeps losing head down the branch like any other run. That is
+-- what real plumbing does, and it is why a sprinkler on a tank-less branch can still draw from the
+-- main network.
 local function routerIsHardBoundary(routerSquare)
     if Purifier and Purifier.findForRouterSquare and Purifier.findForRouterSquare(routerSquare) then
         return true
@@ -146,6 +147,64 @@ end
 --   "down" -> only to LOWER floors: where water introduced at originSquare would fall.
 -- Same-floor (horizontal) links always conduct both ways.
 --
+-- ===== Regulator chains =====
+--
+-- The walk starts at the CONSUMER and runs outward, so every square is reached through some sequence
+-- of regulators. That sequence is what prices the square, and it is stored as a linked chain: each
+-- node is one router crossing (its setting, its height, and how far it sits from the consumer), and
+-- `parent` walks back toward the consumer. The root node is the unregulated stretch the consumer
+-- itself stands in.
+--
+-- A chain node also owns the pumps found on the squares it covers, which is what lets a pump be
+-- placed on the right side of a regulator: pumps hanging off a node are UPSTREAM of that node's valve
+-- and cannot push past it, while everything on the way back to the consumer boosts freely.
+local function newChain(parent, ceiling, hops, z)
+    return { parent = parent, ceiling = ceiling, hops = hops, z = z, pumps = {} }
+end
+
+-- Head from the pumps standing between `chain` and the consumer, inclusive of the chain's own
+-- stretch. Cached per node: a network with two routers and forty pipes asks this once per node.
+local function chainPumpHead(chain)
+    if not chain then
+        return 0
+    end
+    if not chain.pumpHead then
+        chain.pumpHead = chainPumpHead(chain.parent) + Pump.headForPumps(chain.pumps)
+    end
+    return chain.pumpHead
+end
+
+-- What a source at (z, hops) on `chain` actually delivers to a `kind` consumer at consumerZ: the
+-- unregulated head, then held down by every valve on the way, each priced from where it stands.
+local function headThroughChain(sourceZ, consumerZ, hops, kind, chain)
+    local head = Pressure.delivered(sourceZ, consumerZ, hops, kind, chainPumpHead(chain))
+    local node = chain
+    while node do
+        if node.ceiling then
+            local capped = Pressure.atRegulator(node.ceiling, node.z, consumerZ, node.hops, kind,
+                chainPumpHead(node.parent))
+            if capped < head then
+                head = capped
+            end
+        end
+        node = node.parent
+    end
+    return head
+end
+
+-- The tightest raw setting on a chain, for readouts that want to name the regulator responsible.
+local function chainTightestCeiling(chain)
+    local tightest = nil
+    local node = chain
+    while node do
+        if node.ceiling and (not tightest or node.ceiling < tightest) then
+            tightest = node.ceiling
+        end
+        node = node.parent
+    end
+    return tightest
+end
+
 -- Returns (pipeSquares, hopsByKey, zone). hopsByKey is the min hop count from originSquare to each
 -- pipe square, which is all the pressure model needs from the traversal: head loss is friction *
 -- hops, and the elevation term depends only on the endpoints (see Constants.lua), so minimising loss
@@ -171,11 +230,12 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
     local visited = {}
     local queue = {}
     local hops = {}
-    local ceilings = {}   -- tightest router ceiling crossed on the way to each square (nil = none)
+    local chains = {}   -- regulator chain each square was reached through (see newChain)
     local pipeSquares = {}
-    local zone = { pumps = {} }
+    local rootChain = newChain(nil, nil, 0, originSquare:getZ())
+    local zone = { pumps = {}, rootChain = rootChain }
 
-    local function tryAdd(square, distance, ceiling)
+    local function tryAdd(square, distance, chain)
         if not square or not hasPipeOnSquare(square) or Router.hasRouterOnSquare(square) then
             return
         end
@@ -187,19 +247,22 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
         local key = squareKey(square)
         queue[#queue + 1] = square
         hops[key] = distance
-        ceilings[key] = ceiling
+        chains[key] = chain
         pipeSquares[#pipeSquares + 1] = square
 
         local pump = Pump.findOnSquare(square)
         if pump then
             zone.pumps[#zone.pumps + 1] = pump
+            -- Also filed under the stretch it stands in, so the regulator arithmetic knows which side
+            -- of which valve it is on.
+            chain.pumps[#chain.pumps + 1] = pump
         end
     end
 
     -- Crossing a bare router, one way only: we may step from its OUT side back to its IN side, which
     -- is a consumer reaching upstream for water. The reverse (IN side reaching downstream) would be
     -- backflow, so it stays blocked and the router keeps its one-way meaning.
-    local function tryCrossRouter(routerSquare, fromX, fromY, fromZ, distance, ceiling)
+    local function tryCrossRouter(routerSquare, fromX, fromY, fromZ, distance, chain)
         if not conduct or routerIsHardBoundary(routerSquare) then
             return
         end
@@ -216,31 +279,33 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
             return
         end
 
+        -- `distance` is the hop the router tile itself occupies, which is exactly how far its outlet
+        -- sits from the consumer -- the length the regulated head then has to travel back.
+        local nextChain = chain
         local ceilingHere = Router.getPressureCeiling(router)
-        local nextCeiling = ceiling
-        if ceilingHere and (not nextCeiling or ceilingHere < nextCeiling) then
-            nextCeiling = ceilingHere
+        if ceilingHere then
+            nextChain = newChain(chain, ceilingHere, distance, rz)
         end
 
         -- +1 for the router tile itself, which sits in the run but is never a network square.
-        tryAdd(getCellSquare(rx - out.dx, ry - out.dy, rz), distance + 1, nextCeiling)
+        tryAdd(getCellSquare(rx - out.dx, ry - out.dy, rz), distance + 1, nextChain)
     end
 
-    local function visit(square, fromX, fromY, fromZ, distance, ceiling)
+    local function visit(square, fromX, fromY, fromZ, distance, chain)
         if not square then
             return
         end
         if Router.hasRouterOnSquare(square) then
-            tryCrossRouter(square, fromX, fromY, fromZ, distance, ceiling)
+            tryCrossRouter(square, fromX, fromY, fromZ, distance, chain)
             return
         end
-        tryAdd(square, distance, ceiling)
+        tryAdd(square, distance, chain)
     end
 
     -- Same-floor cardinal neighbours (both ways) + cross-floor riser neighbours filtered by gravity.
-    local function addNeighborsOf(x, y, z, distance, ceiling)
+    local function addNeighborsOf(x, y, z, distance, chain)
         for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
-            visit(getCellSquare(x + offset.x, y + offset.y, z), x, y, z, distance, ceiling)
+            visit(getCellSquare(x + offset.x, y + offset.y, z), x, y, z, distance, chain)
         end
         for _, coord in ipairs(PipeObjectUtils.getRiserVerticalNeighborCoords(x, y, z)) do
             local keep = true
@@ -250,15 +315,15 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
                 keep = coord.z < z
             end
             if keep then
-                visit(getCellSquare(coord.x, coord.y, coord.z), x, y, z, distance, ceiling)
+                visit(getCellSquare(coord.x, coord.y, coord.z), x, y, z, distance, chain)
             end
         end
     end
 
     -- The origin is often a fixture (sink, generator) with no pipe of its own, so its neighbours are
     -- seeded unconditionally -- tryAdd would drop the whole search otherwise.
-    tryAdd(originSquare, 0, nil)
-    addNeighborsOf(originSquare:getX(), originSquare:getY(), originSquare:getZ(), 1, nil)
+    tryAdd(originSquare, 0, rootChain)
+    addNeighborsOf(originSquare:getX(), originSquare:getY(), originSquare:getZ(), 1, rootChain)
 
     local index = 1
     while index <= #queue do
@@ -266,10 +331,10 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
         index = index + 1
         local key = squareKey(current)
         addNeighborsOf(current:getX(), current:getY(), current:getZ(),
-            (hops[key] or 0) + 1, ceilings[key])
+            (hops[key] or 0) + 1, chains[key])
     end
 
-    return pipeSquares, hops, zone, ceilings
+    return pipeSquares, hops, zone, chains
 end
 
 local function collectConnectedPipeSquares(endpointObject)
@@ -279,7 +344,7 @@ local function collectConnectedPipeSquares(endpointObject)
     return collectPipeSquaresFromSquare(endpointObject:getSquare())
 end
 
-local function collectStorageDescriptors(pipeSquares, hops, ceilings)
+local function collectStorageDescriptors(pipeSquares, hops, chains)
     local scannedSquares = {}
     local descriptors = {}
 
@@ -288,13 +353,13 @@ local function collectStorageDescriptors(pipeSquares, hops, ceilings)
         if addSquare(scannedSquares, pipeSquare) then
             local key = squareKey(pipeSquare)
             -- How far this container sits from the origin, so the pressure gate can price the run,
-            -- and the tightest regulator standing between the two (nil when nothing regulates it).
+            -- and the regulators standing between the two (nil when nothing regulates it).
             local distance = hops and hops[key] or 0
-            local ceiling = ceilings and ceilings[key] or nil
+            local chain = chains and chains[key] or nil
             local squareDescriptors = Adapter.collectSquareContainers(pipeSquare)
             for descriptorKey, descriptor in pairs(squareDescriptors) do
                 descriptor.pipeHops = distance
-                descriptor.pressureCeiling = ceiling
+                descriptor.pressureChain = chain
                 descriptors[descriptorKey] = descriptor
             end
         end
@@ -320,11 +385,11 @@ end
 -- Drop the sources that cannot push their water to a `kind` consumer at originSquare, and record the
 -- best head any surviving source delivers. A source that sits too far away, or too low with no pump
 -- to lift it, simply is not part of this consumer's supply.
--- The ceiling is applied PER SOURCE, using the tightest regulator between that source and the
--- consumer: water arriving through a router set to 12 lands at 12, while a barrel on the consumer's
--- own side is untouched. Simplification worth knowing: the cap is applied to the finished head, so a
--- pump beyond a regulator cannot push past its setting -- which is exactly what a regulator is for.
-local function applyPressureGate(descriptors, originSquare, kind, pumpHead)
+-- Regulators are applied PER SOURCE, using the chain of routers between that source and the consumer:
+-- water arriving through a router set to 12 leaves the valve at 12 and then loses head over the run
+-- home, while a barrel on the consumer's own side is untouched.
+-- No pumpHead argument: each source's chain already carries the pumps that are allowed to help it.
+local function applyPressureGate(descriptors, originSquare, kind)
     local enabled = Pressure.isEnabled()
     local minimum = Pressure.minimumFor(kind)
     local consumerZ = originSquare:getZ()
@@ -332,9 +397,8 @@ local function applyPressureGate(descriptors, originSquare, kind, pumpHead)
     local reachable = {}
 
     for _, descriptor in ipairs(descriptors) do
-        local head = Router.applyCeiling(
-            Pressure.delivered(descriptor.z, consumerZ, descriptor.pipeHops, kind, pumpHead),
-            descriptor.pressureCeiling)
+        local head = headThroughChain(descriptor.z, consumerZ, descriptor.pipeHops, kind,
+            descriptor.pressureChain)
         if not enabled or head >= minimum then
             descriptor.pressure = head
             reachable[#reachable + 1] = descriptor
@@ -379,13 +443,13 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill)
 
     -- Only a draw reaches through a bare router; fills and visualization keep every router solid.
     local conduct = kind ~= nil and not fill
-    local pipeSquares, hops, zone, ceilings =
+    local pipeSquares, hops, zone, chains =
         collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
     if #pipeSquares == 0 then
         return nil
     end
 
-    local descriptorMap = collectStorageDescriptors(pipeSquares, hops, ceilings)
+    local descriptorMap = collectStorageDescriptors(pipeSquares, hops, chains)
     local descriptors = normalizeDescriptorList(descriptorMap)
     if #descriptors == 0 then
         return nil
@@ -398,7 +462,7 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill)
         if fill then
             descriptors = applyFillGate(descriptors, originSquare, pumpHead)
         else
-            descriptors, pressure = applyPressureGate(descriptors, originSquare, kind, pumpHead)
+            descriptors, pressure = applyPressureGate(descriptors, originSquare, kind)
         end
         if #descriptors == 0 then
             return nil
@@ -513,7 +577,7 @@ function NetworkAccess.getPressureReport(square)
         return nil
     end
 
-    local pipeSquares, hops, zone, ceilings = collectPipeSquaresFromSquare(square, "both", true)
+    local pipeSquares, hops, zone, chains = collectPipeSquaresFromSquare(square, "both", true)
     local report = {
         enabled = Pressure.isEnabled(),
         model = Pressure.model(),
@@ -535,7 +599,7 @@ function NetworkAccess.getPressureReport(square)
         return report
     end
 
-    local descriptors = normalizeDescriptorList(collectStorageDescriptors(pipeSquares, hops, ceilings))
+    local descriptors = normalizeDescriptorList(collectStorageDescriptors(pipeSquares, hops, chains))
     report.containerCount = #descriptors
 
     -- Per source: what it holds and the head it actually lands here with (tap flow).
@@ -548,10 +612,9 @@ function NetworkAccess.getPressureReport(square)
             amount = descriptor.waterAmount,
             capacity = descriptor.capacity,
             fluidType = descriptor.fluidType,
-            ceiling = descriptor.pressureCeiling,
-            head = Router.applyCeiling(Pressure.delivered(descriptor.z, consumerZ,
-                descriptor.pipeHops, Constants.PRESSURE_KIND_TAP, report.pumpHead),
-                descriptor.pressureCeiling),
+            ceiling = chainTightestCeiling(descriptor.pressureChain),
+            head = headThroughChain(descriptor.z, consumerZ, descriptor.pipeHops,
+                Constants.PRESSURE_KIND_TAP, descriptor.pressureChain),
         }
     end
 
@@ -560,8 +623,8 @@ function NetworkAccess.getPressureReport(square)
         Constants.PRESSURE_KIND_SPRINKLER }) do
         local best = nil
         for _, descriptor in ipairs(descriptors) do
-            local head = Router.applyCeiling(Pressure.delivered(descriptor.z, consumerZ,
-                descriptor.pipeHops, kind, report.pumpHead), descriptor.pressureCeiling)
+            local head = headThroughChain(descriptor.z, consumerZ, descriptor.pipeHops, kind,
+                descriptor.pressureChain)
             if not best or head > best then
                 best = head
             end

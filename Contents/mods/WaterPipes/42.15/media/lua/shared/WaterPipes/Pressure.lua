@@ -115,6 +115,26 @@ function Pressure.delivered(sourceZ, consumerZ, hops, kind, pumpHead)
         + math.max(pumpHead or 0, 0)
 end
 
+-- Head that a pressure-reducing valve set to `ceiling` actually lands with, `hops` tiles downstream
+-- of itself at z = regulatorZ.
+--
+-- A regulator fixes the head at ITS OUTLET, not everywhere behind it. Past the valve the water keeps
+-- paying friction for distance and keeps gaining or losing height, exactly as it does coming off a
+-- source -- so the valve is priced as a fresh source that happens to deliver `ceiling`. That is why
+-- this is Pressure.delivered with `ceiling` in place of the container base: same physics, different
+-- origin. Capping the finished head instead (what this replaced) made a whole regulated branch sit at
+-- the setting no matter how long it was, which no real pipe does.
+--
+-- `pumpHead` is only the pumps standing BETWEEN the valve and the consumer. A pump upstream of a
+-- regulator cannot push past it -- that is what a regulator is for -- but one downstream re-pressurises
+-- its own branch, so you can hold the mains at 10 and still run sprinklers off a booster.
+function Pressure.atRegulator(ceiling, regulatorZ, consumerZ, hops, kind, pumpHead)
+    return (ceiling or 0)
+        + Pressure.levelHead() * ((regulatorZ or 0) - (consumerZ or 0))
+        - Pressure.frictionFor(kind) * math.max(hops or 0, 0)
+        + math.max(pumpHead or 0, 0)
+end
+
 -- Can a source at (sourceZ, hops) drive a `kind` consumer at consumerZ?
 -- With the model off every physically-connected source qualifies, which restores the behaviour from
 -- before pressure existed.

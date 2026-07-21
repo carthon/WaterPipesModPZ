@@ -93,8 +93,12 @@ end
 
 -- ===== Pressure regulation =====
 -- A router already stops pressure crossing it, which makes it the one place a player can put a
--- ceiling on a zone. Set it from the context menu; the OUT-side zone then runs at
--- min(incoming head, ceiling). It can only ever REDUCE -- see Router.applyCeiling.
+-- ceiling on a zone. Set it from the context menu; the setting is the head AT THE VALVE OUTLET, and
+-- from there the water loses head over distance and height like any other run -- so a branch does not
+-- sit at the setting all the way to its far end. The arithmetic is Pressure.atRegulator; this module
+-- only stores the number. It can only ever REDUCE: the unregulated head is always one of the terms
+-- the consumer takes the minimum of, so setting 25 on a line carrying 10 still gives 10. Pumps
+-- BEHIND the valve stay behind it; a pump in front of it re-pressurises its own branch.
 
 function Router.getPressureCeiling(worldObject)
     local modData = getModData(worldObject)
@@ -119,16 +123,6 @@ function Router.setPressureCeiling(worldObject, value)
     if worldObject.transmitModData then
         pcall(worldObject.transmitModData, worldObject)
     end
-end
-
--- A reducing valve can only ever reduce. This one line is what stops a router from becoming a free
--- pump: set a router to 25 with 10 coming in and you still get 10, so pumps remain the only way to
--- CREATE head. Real pressure-reducing valves work exactly this way.
-function Router.applyCeiling(head, ceiling)
-    if not ceiling then
-        return head
-    end
-    return math.min(head, ceiling)
 end
 
 return Router
