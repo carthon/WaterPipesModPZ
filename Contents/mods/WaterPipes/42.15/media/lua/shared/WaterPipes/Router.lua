@@ -8,9 +8,15 @@ local Constants = WaterPipes.Constants
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Router = WaterPipes.Router
 
--- A fluid router is a floor pipe flagged in modData. It is a network BOUNDARY: the graph and the
--- gravity traversal never conduct through it, so the IN-side pipes and OUT-side pipes stay two
--- separate networks. The active IN->container->OUT transfer (with the direction) lands in step 4.
+-- A fluid router is a floor pipe flagged in modData, and it is two devices in one depending on what
+-- sits on its tile:
+--   * bare      -> an inline PRESSURE-REDUCING VALVE. A draw reaches through it to the upstream
+--                  network (one way: OUT side back to IN side, never the reverse), and whatever it
+--                  feeds runs at min(incoming head, ceiling).
+--   * with a tank (the purifier) -> a HARD BOUNDARY. The fluid is being transformed there, so the
+--                  two sides must never see each other, and water crosses only through that tank.
+-- The crossing itself lives in NetworkAccess (it is a property of the walk); this module owns the
+-- router's identity, its IN->OUT direction and its ceiling.
 
 local function getModData(worldObject)
     if not worldObject or not worldObject.getModData then
@@ -123,40 +129,6 @@ function Router.applyCeiling(head, ceiling)
         return head
     end
     return math.min(head, ceiling)
-end
-
--- The tightest ceiling imposed on a zone by the routers feeding INTO it, or nil if none do.
---
--- `boundaryRouters` are the routers the network walk bumped into (each { router, square }), so this
--- costs nothing but a lookup per boundary. A router regulates only what it PUSHES: we keep it when
--- its OUT side lands inside this zone, and ignore it when the zone sits on its IN side -- that zone
--- is upstream, and a reducing valve has no say over what feeds it.
-function Router.ceilingForZone(boundaryRouters, pipeSquares)
-    if not boundaryRouters or #boundaryRouters == 0 or not pipeSquares then
-        return nil
-    end
-
-    local inZone = {}
-    for _, square in ipairs(pipeSquares) do
-        inZone[square:getX() .. ":" .. square:getY() .. ":" .. square:getZ()] = true
-    end
-
-    local tightest = nil
-    for _, entry in ipairs(boundaryRouters) do
-        local out = Router.getOutOffset(entry.router)
-        local square = entry.square
-        if out and square then
-            local key = (square:getX() + out.dx) .. ":" .. (square:getY() + out.dy) .. ":" .. square:getZ()
-            if inZone[key] then
-                local ceiling = Router.getPressureCeiling(entry.router)
-                if ceiling and (not tightest or ceiling < tightest) then
-                    tightest = ceiling
-                end
-            end
-        end
-    end
-
-    return tightest
 end
 
 return Router

@@ -520,11 +520,9 @@ local function describePressureReport(report, square)
         return lines
     end
 
-    add("Zone: %d pipes, %d containers, %d/%d pumps powered, %d boundary routers",
-        report.pipeCount, report.containerCount or 0, report.poweredPumps, report.pumpCount,
-        report.boundaryRouters)
+    add("Reach: %d pipes, %d containers, %d/%d pumps powered",
+        report.pipeCount, report.containerCount or 0, report.poweredPumps, report.pumpCount)
     add("Pump head: +%.1f", report.pumpHead or 0)
-    add("Router ceiling: %s", report.ceiling and string.format("%.1f", report.ceiling) or "none")
 
     add(" ")
     add("Head by consumer (best source, after ceiling):")
@@ -544,9 +542,13 @@ local function describePressureReport(report, square)
         add("  none")
     end
     for _, source in ipairs(report.sources) do
-        add("  z=%d hops=%d  %.1f/%.1f %s  ->  %6.2f",
+        -- A source reached through a regulator shows the ceiling that capped it, so a surprising
+        -- head can be traced to the router responsible.
+        add("  z=%d hops=%d  %.1f/%.1f %s  %s->  %6.2f",
             source.z or 0, source.hops or 0, source.amount or 0, source.capacity or 0,
-            tostring(source.fluidType), source.head or 0)
+            tostring(source.fluidType),
+            source.ceiling and string.format("[cap %.1f] ", source.ceiling) or "",
+            source.head or 0)
     end
 
     return lines
