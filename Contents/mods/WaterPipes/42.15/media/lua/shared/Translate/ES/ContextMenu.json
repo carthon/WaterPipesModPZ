@@ -6,7 +6,5 @@
     "ContextMenu_WaterPipesRepairFilter": "Reparar filtro",
     "ContextMenu_WaterPipesReadGauge": "Manómetro",
     "ContextMenu_WaterPipesRepairDrip": "Reparar gotero",
-    "ContextMenu_WaterPipesRouterPressureNone": "Límite de presión: ninguno",
-    "ContextMenu_WaterPipesRouterPressureSet": "Límite de presión: %1",
-    "ContextMenu_WaterPipesRouterPressureValue": "%1 m de columna"
+    "ContextMenu_WaterPipesRouterPressureOpen": "Fijar límite de presión..."
 }

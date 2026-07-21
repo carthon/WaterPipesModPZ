@@ -27,5 +27,11 @@
     "IGUI_WaterPipesGaugeSprinklerOk": "Enough for a sprinkler.",
     "IGUI_WaterPipesGaugeSprinklerLow": "Not enough for a sprinkler (needs %1). Add a pump.",
     "IGUI_WaterPipesGaugeDripRisk": "Too much for a drip emitter (bursts above %1). Put a router in between and set a limit.",
-    "IGUI_WaterPipesDripBurst": "Blown out by too much pressure. It still carries water, but it has stopped watering."
+    "IGUI_WaterPipesDripBurst": "Blown out by too much pressure. It still carries water, but it has stopped watering.",
+    "IGUI_WaterPipesRouterPressureTitle": "Pressure limit",
+    "IGUI_WaterPipesRouterPressureHint": "Cap the pressure this router passes downstream:",
+    "IGUI_WaterPipesRouterPressureCurrent": "Currently set to: %1",
+    "IGUI_WaterPipesRouterPressureNoLimit": "No limit",
+    "IGUI_WaterPipesRouterPressureApply": "Apply",
+    "IGUI_WaterPipesClose": "Close"
 }

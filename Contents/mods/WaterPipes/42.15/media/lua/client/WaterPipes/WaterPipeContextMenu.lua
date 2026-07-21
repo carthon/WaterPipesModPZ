@@ -13,6 +13,7 @@ require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Irrigation"
 require "WaterPipes/WaterPipesIrrigationDebug"
+require "WaterPipes/WaterPipesRouterPressureWindow"
 require "WaterPipes/ISRepairWaterDrip"
 require "WaterPipes/Logger"
 -- Client-side: loads PipeAutotile so it registers its OnObjectAdded/LoadGridsquare hooks and each
@@ -939,29 +940,17 @@ local function buildGaugeTooltip(square)
     return tooltip
 end
 
--- A router's ceiling is offered as a short list rather than a text box: the useful range is small
--- and every value is one click, which beats typing a number into a dialog.
+-- The ceiling is set in its own little dialog (slider plus a typed field) rather than a menu of
+-- fixed steps: the useful values sit against real thresholds -- a drip emitter bursts above 15.0,
+-- a sprinkler needs 20.0 -- so the player needs to land on an exact number, not the nearest five.
 local function addRouterPressureMenu(context, playerObj, router)
-    local current = Router.getPressureCeiling(router)
-    local rootName = current
-        and getText("ContextMenu_WaterPipesRouterPressureSet", formatHead(current))
-        or getText("ContextMenu_WaterPipesRouterPressureNone")
-    local rootOption = context:addOption(rootName, playerObj, nil)
-    local subMenu = ISContextMenu:getNew(context)
-    context:addSubMenu(rootOption, subMenu)
+    context:addOption(getText("ContextMenu_WaterPipesRouterPressureOpen"), playerObj,
+        ContextMenu.openRouterPressure, router)
+end
 
-    local unlimited = subMenu:addOption(getText("ContextMenu_WaterPipesRouterPressureNone"),
-        playerObj, ContextMenu.setRouterPressure, router, Constants.ROUTER_PRESSURE_UNSET)
-    if not current then
-        unlimited.iconTexture = getTexture("media/ui/Tick_Mark.png")
-    end
-
-    for value = Constants.ROUTER_PRESSURE_STEP, Constants.ROUTER_PRESSURE_MAX, Constants.ROUTER_PRESSURE_STEP do
-        local option = subMenu:addOption(getText("ContextMenu_WaterPipesRouterPressureValue", value),
-            playerObj, ContextMenu.setRouterPressure, router, value)
-        if current and math.abs(current - value) < 0.01 then
-            option.iconTexture = getTexture("media/ui/Tick_Mark.png")
-        end
+function ContextMenu.openRouterPressure(playerObj, router)
+    if router and WaterPipesRouterPressureWindow then
+        WaterPipesRouterPressureWindow.openFor(router)
     end
 end
 

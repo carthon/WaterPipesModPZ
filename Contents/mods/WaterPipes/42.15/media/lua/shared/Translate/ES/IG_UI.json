@@ -27,5 +27,11 @@
     "IGUI_WaterPipesGaugeSprinklerOk": "Suficiente para un aspersor.",
     "IGUI_WaterPipesGaugeSprinklerLow": "Insuficiente para un aspersor (necesita %1). Añade una bomba.",
     "IGUI_WaterPipesGaugeDripRisk": "Demasiada para un gotero (revienta por encima de %1). Pon un enrutador en medio y fíjale un límite.",
-    "IGUI_WaterPipesDripBurst": "Reventado por exceso de presión. Sigue conduciendo agua, pero ha dejado de regar."
+    "IGUI_WaterPipesDripBurst": "Reventado por exceso de presión. Sigue conduciendo agua, pero ha dejado de regar.",
+    "IGUI_WaterPipesRouterPressureTitle": "Límite de presión",
+    "IGUI_WaterPipesRouterPressureHint": "Limita la presión que este enrutador deja pasar:",
+    "IGUI_WaterPipesRouterPressureCurrent": "Ahora mismo: %1",
+    "IGUI_WaterPipesRouterPressureNoLimit": "Sin límite",
+    "IGUI_WaterPipesRouterPressureApply": "Aplicar",
+    "IGUI_WaterPipesClose": "Cerrar"
 }
