@@ -187,8 +187,13 @@ Constants.PRESSURE_MODEL_OFF = 3            -- pre-pressure behaviour: pure grav
 -- jobs: a surface pump can only SUCK water up about 7 m (atmospheric pressure caps it at 10.33 m,
 -- ~7-8 m in practice) but can PUSH it 25 m and more. That is why deep wells use submersible pumps.
 Constants.PUMP_MODDATA_KEY = "waterpipesPump"
-Constants.PUMP_SPRITE_EW = "industry_02_52"   -- vanilla industry_02 machine, E/W axis
-Constants.PUMP_SPRITE_NS = "industry_02_53"   -- ...and its N/S mirror
+-- Our OWN tiles, not vanilla ones. The art is the same machine copied into the waterpipes atlas;
+-- what changed is who owns the tiledef. The vanilla originals (industry_02_52/53) carry an
+-- AmbientSound property, and a sprite with AmbientSound is rebuilt down the engine's ambient-emitter
+-- path on chunk load, which never resolves a modded entity script -- so every saved pump came back
+-- as "EntityScript not found". Same story for the gauge below.
+Constants.PUMP_SPRITE_EW = "waterpipes_01_28"   -- floor machine, E/W axis
+Constants.PUMP_SPRITE_NS = "waterpipes_01_29"   -- ...and its N/S mirror
 Constants.PUMP_HEAD = 25.0                  -- m.c.a. added; a domestic pressure set is ~2.5 bar
 Constants.PUMP_SUCTION_LIMIT = 7.0          -- m.c.a. it can lift a source from below (~2 floors)
 Constants.PUMP_INTAKE_RATE = 20             -- litres per in-game minute; a real pump does 33-50
@@ -271,8 +276,8 @@ Constants.IRRIGATION_MAX_WATER_LEVEL = 100
 -- ===== Pressure gauge =====
 -- Pressure is otherwise an invisible number; this is the only way the player can see it.
 Constants.GAUGE_MODDATA_KEY = "waterpipesGauge"
-Constants.GAUGE_SPRITE_N = "industry_01_4"    -- vanilla vented wall box, North wall
-Constants.GAUGE_SPRITE_W = "industry_01_5"    -- ...and the West wall mirror
+Constants.GAUGE_SPRITE_N = "waterpipes_01_30"   -- vented wall box, North wall (see PUMP_SPRITE_EW)
+Constants.GAUGE_SPRITE_W = "waterpipes_01_31"   -- ...and the West wall mirror
 Constants.GAUGE_READ_DISTANCE = 2             -- matches ISFluidUtil.isoMaxPanelDist
 
 Constants.CARDINAL_OFFSETS = {
