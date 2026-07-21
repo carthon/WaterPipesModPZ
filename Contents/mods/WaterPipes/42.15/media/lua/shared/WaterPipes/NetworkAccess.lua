@@ -5,6 +5,7 @@ require "WaterPipes/Constants"
 require "WaterPipes/ContainerAdapter"
 require "WaterPipes/EndpointObjects"
 require "WaterPipes/Logger"
+require "WaterPipes/Mains"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
@@ -15,6 +16,7 @@ local Adapter = WaterPipes.ContainerAdapter
 local Constants = WaterPipes.Constants
 local EndpointObjects = WaterPipes.EndpointObjects
 local Logger = WaterPipes.Logger
+local Mains = WaterPipes.Mains
 local NetworkAccess = WaterPipes.NetworkAccess
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Pressure = WaterPipes.Pressure
@@ -159,30 +161,41 @@ end
 -- placed on the right side of a regulator: pumps hanging off a node are UPSTREAM of that node's valve
 -- and cannot push past it, while everything on the way back to the consumer boosts freely.
 local function newChain(parent, ceiling, hops, z)
-    return { parent = parent, ceiling = ceiling, hops = hops, z = z, pumps = {} }
+    return { parent = parent, ceiling = ceiling, hops = hops, z = z, pumps = {}, mains = false }
 end
 
--- Head from the pumps standing between `chain` and the consumer, inclusive of the chain's own
--- stretch. Cached per node: a network with two routers and forty pipes asks this once per node.
-local function chainPumpHead(chain)
+-- Head available between `chain` and the consumer, inclusive of the chain's own stretch. Cached per
+-- node: a network with two routers and forty pipes asks this once per node.
+--
+-- Pumps ADD UP -- they sit in series, and buying a second one is meant to buy more head. The mains
+-- does not: two inlets on the same town supply are the same supply, so it is taken once, whichever
+-- stretch it was found in.
+local function chainHead(chain)
     if not chain then
         return 0
     end
-    if not chain.pumpHead then
-        chain.pumpHead = chainPumpHead(chain.parent) + Pump.headForPumps(chain.pumps)
+    if not chain.headCache then
+        local parentPumps, parentMains = 0, 0
+        if chain.parent then
+            chainHead(chain.parent)
+            parentPumps, parentMains = chain.parent.pumpHead, chain.parent.mainsHead
+        end
+        chain.pumpHead = parentPumps + Pump.headForPumps(chain.pumps)
+        chain.mainsHead = math.max(parentMains, chain.mains and Mains.head() or 0)
+        chain.headCache = chain.pumpHead + chain.mainsHead
     end
-    return chain.pumpHead
+    return chain.headCache
 end
 
 -- What a source at (z, hops) on `chain` actually delivers to a `kind` consumer at consumerZ: the
 -- unregulated head, then held down by every valve on the way, each priced from where it stands.
 local function headThroughChain(sourceZ, consumerZ, hops, kind, chain)
-    local head = Pressure.delivered(sourceZ, consumerZ, hops, kind, chainPumpHead(chain))
+    local head = Pressure.delivered(sourceZ, consumerZ, hops, kind, chainHead(chain))
     local node = chain
     while node do
         if node.ceiling then
             local capped = Pressure.atRegulator(node.ceiling, node.z, consumerZ, node.hops, kind,
-                chainPumpHead(node.parent))
+                chainHead(node.parent))
             if capped < head then
                 head = capped
             end
@@ -222,7 +235,7 @@ end
 -- visualization pass false and keep the old behaviour, where every router is a wall.
 local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
     if not originSquare then
-        return {}, {}, { pumps = {} }, {}
+        return {}, {}, { pumps = {}, mains = {} }, {}
     end
 
     verticalMode = verticalMode or "both"
@@ -233,7 +246,7 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
     local chains = {}   -- regulator chain each square was reached through (see newChain)
     local pipeSquares = {}
     local rootChain = newChain(nil, nil, 0, originSquare:getZ())
-    local zone = { pumps = {}, rootChain = rootChain }
+    local zone = { pumps = {}, mains = {}, rootChain = rootChain }
 
     local function tryAdd(square, distance, chain)
         if not square or not hasPipeOnSquare(square) or Router.hasRouterOnSquare(square) then
@@ -256,6 +269,14 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
             -- Also filed under the stretch it stands in, so the regulator arithmetic knows which side
             -- of which valve it is on.
             chain.pumps[#chain.pumps + 1] = pump
+        end
+
+        -- A plumbed fixture that still has town water behind it is an inlet: same accounting as a
+        -- pump, so a regulator holds it down exactly the same way.
+        local mains = Mains.findOnSquare(square)
+        if mains then
+            zone.mains[#zone.mains + 1] = mains
+            chain.mains = true
         end
     end
 
@@ -458,9 +479,14 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill)
     -- Visualization asks for neither gate and sees the whole physical network.
     local pressure = nil
     if kind or fill then
-        local pumpHead = Pump.headForPumps(zone.pumps)
+        -- How far water entering here can be pushed UPHILL. Fills are not regulated (a fill query
+        -- never crosses a router), so the whole zone's lift counts, mains included.
+        local liftHead = Pump.headForPumps(zone.pumps)
+        if #zone.mains > 0 then
+            liftHead = liftHead + Mains.head()
+        end
         if fill then
-            descriptors = applyFillGate(descriptors, originSquare, pumpHead)
+            descriptors = applyFillGate(descriptors, originSquare, liftHead)
         else
             descriptors, pressure = applyPressureGate(descriptors, originSquare, kind)
         end
@@ -584,6 +610,7 @@ function NetworkAccess.getPressureReport(square)
         pipeCount = #pipeSquares,
         pumpCount = #zone.pumps,
         poweredPumps = 0,
+        mainsCount = #zone.mains,
         sources = {},
         kinds = {},
     }
@@ -594,6 +621,7 @@ function NetworkAccess.getPressureReport(square)
         end
     end
     report.pumpHead = Pump.headForPumps(zone.pumps)
+    report.mainsHead = #zone.mains > 0 and Mains.head() or 0
 
     if #pipeSquares == 0 then
         return report

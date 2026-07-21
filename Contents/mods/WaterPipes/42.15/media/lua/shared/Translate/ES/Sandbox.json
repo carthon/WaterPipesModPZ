@@ -30,5 +30,11 @@
     "Sandbox_WaterPipes_DripBurstPressure": "Presión que revienta un gotero (décimas)",
     "Sandbox_WaterPipes_DripBurstPressure_tooltip": "Por encima de esta presión un gotero revienta y deja de regar hasta que lo reparas, igual que uno real. En décimas de metro de columna de agua: 150 = 15.0, muy por debajo de los 25.0 de una bomba, así que una bomba en la misma línea te reventará los goteros salvo que pongas un enrutador en medio y le fijes un límite. Pon 0 para que los goteros nunca revienten.",
     "Sandbox_WaterPipes_SprinklerNoise": "Los aspersores hacen ruido",
-    "Sandbox_WaterPipes_SprinklerNoise_tooltip": "Si se activa, un aspersor en marcha atrae zombis, que es el precio de regar toda un área de golpe. Desactívalo si prefieres regar en silencio."
+    "Sandbox_WaterPipes_SprinklerNoise_tooltip": "Si se activa, un aspersor en marcha atrae zombis, que es el precio de regar toda un área de golpe. Desactívalo si prefieres regar en silencio.",
+    "Sandbox_WaterPipes_MainsSupply": "El agua municipal llena la red",
+    "Sandbox_WaterPipes_MainsSupply_tooltip": "Mientras el suministro siga dado, un fregadero o una ducha fontaneados alimentan tus tuberias en vez de limitarse a consumir de ellas: llenan tus contenedores y mantienen la red a presion de acometida, asi que los aspersores funcionan sin bomba hasta el dia del corte. Desactivalo para volver al comportamiento anterior, donde fontanear un fixture le quitaba el agua municipal sin dar nada a cambio.",
+    "Sandbox_WaterPipes_MainsHead": "Presion del agua municipal (decimas)",
+    "Sandbox_WaterPipes_MainsHead_tooltip": "Presion a la que la acometida mantiene la red, en decimas de metro de columna de agua. 250 = 25.0, el extremo bajo de lo que da una red municipal real. Un aspersor necesita 20.0, asi que por defecto la acometida mueve aspersores ella sola. Bajalo si quieres que las bombas sigan importando antes del corte.",
+    "Sandbox_WaterPipes_MainsIntakeRate": "Caudal del agua municipal (litros por minuto)",
+    "Sandbox_WaterPipes_MainsIntakeRate_tooltip": "Cuanta agua mete la acometida en tu red cada minuto de juego. 60 = 3600 litros por hora, el triple que una bomba, porque la red municipal es la fuente mas gorda que hay. Bajalo si llenar toda tu reserva antes del corte te parece demasiado facil."
 }

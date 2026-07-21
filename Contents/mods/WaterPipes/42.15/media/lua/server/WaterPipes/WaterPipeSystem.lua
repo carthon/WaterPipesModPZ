@@ -15,6 +15,7 @@ require "WaterPipes/Purifier"
 require "WaterPipes/GravityFlow"
 require "WaterPipes/Router"
 require "WaterPipes/NetworkAccess"
+require "WaterPipes/Mains"
 require "WaterPipes/Pump"
 require "WaterPipes/Irrigation"
 require "WaterPipes/API"
@@ -34,6 +35,7 @@ local Purifier = WaterPipes.Purifier
 local GravityFlow = WaterPipes.GravityFlow
 local Router = WaterPipes.Router
 local NetworkAccess = WaterPipes.NetworkAccess
+local Mains = WaterPipes.Mains
 local Pump = WaterPipes.Pump
 local Irrigation = WaterPipes.Irrigation
 local State = WaterPipes.State
@@ -366,6 +368,32 @@ function System.processPumps(dt)
     end
 end
 
+-- A plumbed fixture that still has town water behind it fills the network. Simpler than the pump:
+-- the mains is not a container we can overdraw, so there is nothing to draw first and nothing to
+-- refund -- we ask the network what it can take and hand it exactly that.
+function System.processMains(square, dt)
+    local wanted = math.min(Mains.intakeFor(dt),
+        NetworkAccess.availableToPush(square, "Water"))
+    if wanted <= 0 then
+        return
+    end
+    NetworkAccess.fillFluidAtSquare(square, "Water", wanted)
+end
+
+function System.processAllMains(dt)
+    dt = dt or 1.0
+    if dt <= 0 or not Mains.isEnabled() then
+        return
+    end
+    local state = State.ensure()
+    for _, pipeData in pairs(state.pipes) do
+        local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
+        if square and Mains.findOnSquare(square) then
+            System.processMains(square, dt)
+        end
+    end
+end
+
 function System.refreshPlumbedEndpoints()
     local state = State.ensure()
     local coordinates = {}
@@ -544,6 +572,11 @@ local function onEveryOneMinute()
     local okPumps, errPumps = pcall(System.processPumps)
     if not okPumps then
         Logger.error("Pump processing failed: " .. tostring(errPumps))
+    end
+
+    local okMains, errMains = pcall(System.processAllMains)
+    if not okMains then
+        Logger.error("Mains supply processing failed: " .. tostring(errMains))
     end
 
     local ok, err = pcall(System.refreshPlumbedEndpoints)

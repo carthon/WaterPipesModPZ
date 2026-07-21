@@ -30,5 +30,11 @@
     "Sandbox_WaterPipes_DripBurstPressure": "Pressure that bursts a drip emitter (tenths)",
     "Sandbox_WaterPipes_DripBurstPressure_tooltip": "Above this pressure a drip emitter blows out and stops watering until you repair it, just like a real one. In tenths of a metre of water column: 150 = 15.0, well under a pump's 25.0, so a pump on the same line will burst your emitters unless you put a router in between and set a limit. Set to 0 so emitters never burst.",
     "Sandbox_WaterPipes_SprinklerNoise": "Sprinklers make noise",
-    "Sandbox_WaterPipes_SprinklerNoise_tooltip": "When on, a running sprinkler attracts zombies, which is the price you pay for watering a whole area at once. Turn it off if you would rather irrigate quietly."
+    "Sandbox_WaterPipes_SprinklerNoise_tooltip": "When on, a running sprinkler attracts zombies, which is the price you pay for watering a whole area at once. Turn it off if you would rather irrigate quietly.",
+    "Sandbox_WaterPipes_MainsSupply": "Town water fills the network",
+    "Sandbox_WaterPipes_MainsSupply_tooltip": "While the water service is still running, a plumbed sink or shower feeds your pipes instead of just drawing from them: it fills your containers and holds the network at mains pressure, so sprinklers run without a pump until the day the water is cut. Turn this off to keep the old behaviour, where plumbing a fixture switched its town water off and gave nothing back.",
+    "Sandbox_WaterPipes_MainsHead": "Town water pressure (tenths)",
+    "Sandbox_WaterPipes_MainsHead_tooltip": "Pressure the town supply holds the network at, in tenths of a metre of water column. 250 = 25.0, the low end of what a real municipal main runs. A sprinkler needs 20.0, so at the default the mains runs sprinklers on its own. Lower it if you want pumps to still matter before the shutoff.",
+    "Sandbox_WaterPipes_MainsIntakeRate": "Town water intake rate (litres per minute)",
+    "Sandbox_WaterPipes_MainsIntakeRate_tooltip": "How much water the town supply pushes into your network each in-game minute. 60 = 3600 litres an hour, three times a pump, because the mains is the fattest source in the game. Lower it if filling your whole reserve before the shutoff feels too easy."
 }

@@ -202,6 +202,16 @@ Constants.WELL_SCRIPT_NAME = "Base.Well"
 -- across every pipe and the network would read as permanently full. The pump INJECTS from them at a
 -- bounded rate instead, the same shape as the purifier's intake step.
 
+-- ===== Town water supply (the mains) =====
+-- Plumbing a fixture turns the engine's infinite city water off on it, so before this the network
+-- could only ever LOSE from the mains. Now a plumbed fixture is an inlet while the service runs: it
+-- fills the network at a bounded rate and holds the whole zone at mains pressure, which is what makes
+-- the shutoff day an event instead of a footnote. See Mains.lua for how the service is detected.
+Constants.MAINS_HEAD = 25.0                 -- m.c.a.; real municipal mains run 20-40
+Constants.MAINS_INTAKE_RATE = 60            -- litres per in-game minute: the fattest source there is
+Constants.MAINS_INFINITE_AMOUNT = 10000     -- the marker isWaterInfinite() reports (see Mains.lua)
+Constants.MAINS_PROBE_TTL_MS = 5000         -- how long a "is the service on?" answer is reused
+
 -- ===== Router pressure regulator =====
 -- A router already splits the network in two, so pressure cannot cross it either. That makes it the
 -- natural place to REGULATE: the player sets a ceiling and the OUT-side zone runs at it.

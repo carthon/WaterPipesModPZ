@@ -133,3 +133,31 @@ option WaterPipes.SprinklerNoise
     page = WaterPipes,
     translation = WaterPipes_SprinklerNoise,
 }
+
+option WaterPipes.MainsSupply
+{
+    type = boolean,
+    default = true,
+    page = WaterPipes,
+    translation = WaterPipes_MainsSupply,
+}
+
+option WaterPipes.MainsHead
+{
+    type = integer,
+    min = 0,
+    max = 1000,
+    default = 250,
+    page = WaterPipes,
+    translation = WaterPipes_MainsHead,
+}
+
+option WaterPipes.MainsIntakeRate
+{
+    type = integer,
+    min = 0,
+    max = 1000,
+    default = 60,
+    page = WaterPipes,
+    translation = WaterPipes_MainsIntakeRate,
+}
