@@ -5,6 +5,7 @@
     "ContextMenu_WaterPipesOpenPurifier": "Open Purifier",
     "ContextMenu_WaterPipesRepairFilter": "Repair filter",
     "ContextMenu_WaterPipesReadGauge": "Pressure gauge",
+    "ContextMenu_WaterPipesCheckEmitter": "Check irrigation emitter",
     "ContextMenu_WaterPipesRepairDrip": "Repair drip emitter",
     "ContextMenu_WaterPipesRouterPressureOpen": "Set pressure limit..."
 }

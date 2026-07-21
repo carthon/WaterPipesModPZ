@@ -5,6 +5,7 @@
     "ContextMenu_WaterPipesOpenPurifier": "Abrir purificador",
     "ContextMenu_WaterPipesRepairFilter": "Reparar filtro",
     "ContextMenu_WaterPipesReadGauge": "Manómetro",
+    "ContextMenu_WaterPipesCheckEmitter": "Comprobar emisor de riego",
     "ContextMenu_WaterPipesRepairDrip": "Reparar gotero",
     "ContextMenu_WaterPipesRouterPressureOpen": "Fijar límite de presión..."
 }

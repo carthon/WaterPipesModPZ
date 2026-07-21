@@ -865,6 +865,12 @@ local function findDripInWorldObjects(worldobjects)
     return findFlaggedPipeInWorldObjects(worldobjects, Irrigation.isDrip)
 end
 
+local function findEmitterInWorldObjects(worldobjects)
+    return findFlaggedPipeInWorldObjects(worldobjects, function(worldObject)
+        return Irrigation.isDrip(worldObject) or Irrigation.isSprinkler(worldObject)
+    end)
+end
+
 local function findGaugeInWorldObjects(worldobjects)
     if not worldobjects then
         return nil
@@ -912,6 +918,11 @@ end
 
 -- The gauge is a readout, not a machine: everything it knows fits in a tooltip, so it needs no
 -- window of its own. Pressure is otherwise an invisible number -- this is where the player sees it.
+--
+-- It reports the pressure and nothing else. It used to also advise on sprinklers and drip emitters,
+-- but a gauge cannot know what is downstream of it: it read the pressure on ITS tile and then talked
+-- about crops that might be twenty tiles and a regulator away. Emitters answer for themselves now --
+-- see buildEmitterTooltip.
 local function buildGaugeTooltip(square)
     local tooltip = ISWorldObjectContextMenu.addToolTip()
     tooltip:setName(getText("ContextMenu_WaterPipesReadGauge"))
@@ -921,18 +932,47 @@ local function buildGaugeTooltip(square)
         lines[#lines + 1] = getText("IGUI_WaterPipesPressureModelOff")
     else
         local tap = NetworkAccess.getPressureAtSquare(square, Constants.PRESSURE_KIND_TAP)
-        if not tap then
-            lines[#lines + 1] = getText("IGUI_WaterPipesGaugeNoSupply")
+        lines[#lines + 1] = tap and getText("IGUI_WaterPipesGaugeReading", formatHead(tap))
+            or getText("IGUI_WaterPipesGaugeNoSupply")
+    end
+
+    tooltip.description = table.concat(lines, " <LINE> ")
+    return tooltip
+end
+
+-- Emitters diagnose themselves. The pressure that decides whether a drip or a sprinkler runs is the
+-- pressure ON ITS OWN TILE at ITS OWN flow rate -- a sprinkler loses head four times faster than a
+-- tap, so a gauge reading taken elsewhere never answered the question the player was actually asking.
+local function buildEmitterTooltip(emitterObject)
+    local tooltip = ISWorldObjectContextMenu.addToolTip()
+    tooltip:setName(getText("ContextMenu_WaterPipesCheckEmitter"))
+
+    local status = Irrigation.getEmitterStatus(emitterObject, emitterObject:getSquare())
+    local lines = {}
+
+    if not status then
+        lines[#lines + 1] = getText("IGUI_WaterPipesEmitterUnknown")
+    elseif status.burst then
+        -- A burst emitter is a plumbing fault, not a pressure reading: say so and stop.
+        lines[#lines + 1] = getText("IGUI_WaterPipesEmitterBurst")
+    else
+        lines[#lines + 1] = status.pressure
+            and getText("IGUI_WaterPipesEmitterPressure", formatHead(status.pressure))
+            or getText("IGUI_WaterPipesEmitterNoSupply")
+
+        if not status.reaches then
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterLow", formatHead(status.minimum))
+        elseif not status.hasWater then
+            -- Pressure is fine, the pipes are simply empty. Different problem, different fix.
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterDry")
         else
-            lines[#lines + 1] = getText("IGUI_WaterPipesGaugeReading", formatHead(tap))
-            lines[#lines + 1] = " "
-            local sprinkler = NetworkAccess.getPressureAtSquare(square, Constants.PRESSURE_KIND_SPRINKLER)
-            lines[#lines + 1] = sprinkler and getText("IGUI_WaterPipesGaugeSprinklerOk")
-                or getText("IGUI_WaterPipesGaugeSprinklerLow", formatHead(Constants.PRESSURE_MIN_SPRINKLER))
-            local burst = Irrigation.burstPressure()
-            if burst and tap > burst then
-                lines[#lines + 1] = getText("IGUI_WaterPipesGaugeDripRisk", formatHead(burst))
-            end
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterWatering")
+        end
+
+        -- Only worth mentioning on a drip, and only while the line is genuinely over the limit.
+        local burst = Irrigation.burstPressure()
+        if Irrigation.isDrip(emitterObject) and burst and (status.pressure or 0) > burst then
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterBurstRisk", formatHead(burst))
         end
     end
 
@@ -1029,11 +1069,15 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     local dripObject = findDripInWorldObjects(worldobjects)
     local hasDripRepairOption = dripObject ~= nil and Irrigation.isDripBurst(dripObject)
 
+    local emitterObject = findEmitterInWorldObjects(worldobjects)
+    local hasEmitterOption = emitterObject ~= nil
+
     if not hasUnplumbOption and not hasModPlumbOption
         and not hasGeneratorPlumbOption and not hasGeneratorUnplumbOption
         and not hasShowNetworkOption and not hasHideNetworkOption
         and not hasPurifierOption
         and not hasRouterPressureOption and not hasGaugeOption and not hasDripRepairOption
+        and not hasEmitterOption
         and not isDebugActive() then
         return false
     end
@@ -1092,6 +1136,12 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         local option = context:addOption(getText("ContextMenu_WaterPipesReadGauge"), playerObj, nil)
         option.notAvailable = true   -- a gauge is read, not operated: the tooltip IS the readout
         option.toolTip = buildGaugeTooltip(gaugeObject:getSquare())
+    end
+
+    if hasEmitterOption then
+        local option = context:addOption(getText("ContextMenu_WaterPipesCheckEmitter"), playerObj, nil)
+        option.notAvailable = true   -- like the gauge: this is a readout, the tooltip IS the answer
+        option.toolTip = buildEmitterTooltip(emitterObject)
     end
 
     if hasDripRepairOption then

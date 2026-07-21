@@ -212,7 +212,11 @@ function Irrigation.getEmitterStatus(worldObject, square)
         and (fluidTypeName == "Water" or fluidTypeName == "TaintedWater")
         and (available or 0) > 0
 
-    status.reaches = status.pressure ~= nil and status.pressure >= status.minimum
+    -- With the pressure model off every connected emitter qualifies, exactly as the irrigation pass
+    -- itself decides (Pressure.canReach short-circuits) -- otherwise the readout would call an emitter
+    -- starved while it was happily watering.
+    status.reaches = status.pressure ~= nil
+        and (not WaterPipes.Pressure.isEnabled() or status.pressure >= status.minimum)
     status.active = status.reaches and status.hasWater and not status.burst
     return status
 end
