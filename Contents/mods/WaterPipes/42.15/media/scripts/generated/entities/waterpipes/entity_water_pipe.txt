@@ -217,14 +217,14 @@ module WaterPipes
             {
                 layer
                 {
-                    row = industry_02_21,
+                    row = waterpipes_01_41,
                 }
             }
             face E
             {
                 layer
                 {
-                    row = industry_02_20,
+                    row = waterpipes_01_40,
                 }
             }
         }
@@ -253,14 +253,14 @@ module WaterPipes
             {
                 layer
                 {
-                    row = industry_02_24,
+                    row = waterpipes_01_43,
                 }
             }
             face E
             {
                 layer
                 {
-                    row = industry_02_26,
+                    row = waterpipes_01_42,
                 }
             }
         }
