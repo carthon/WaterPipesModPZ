@@ -207,6 +207,10 @@ Constants.WELL_SCRIPT_NAME = "Base.Well"
 -- could only ever LOSE from the mains. Now a plumbed fixture is an inlet while the service runs: it
 -- fills the network at a bounded rate and holds the whole zone at mains pressure, which is what makes
 -- the shutoff day an event instead of a footnote. See Mains.lua for how the service is detected.
+-- The mains is a PRESSURE FLOOR, not another pump. A utility holds its main at a set pressure and
+-- every connection to it sits at that pressure, so a live inlet puts the whole zone at this number
+-- whatever the distance -- it is not added on top of a source's own head, and two inlets are still
+-- one supply. A regulator can still hold it down, because a valve regulates what flows THROUGH it.
 Constants.MAINS_HEAD = 25.0                 -- m.c.a.; real municipal mains run 20-40
 Constants.MAINS_INTAKE_RATE = 60            -- litres per in-game minute: the fattest source there is
 Constants.MAINS_INFINITE_AMOUNT = 10000     -- the marker isWaterInfinite() reports (see Mains.lua)

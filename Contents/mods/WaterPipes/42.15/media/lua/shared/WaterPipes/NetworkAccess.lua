@@ -164,38 +164,57 @@ local function newChain(parent, ceiling, hops, z)
     return { parent = parent, ceiling = ceiling, hops = hops, z = z, pumps = {}, mains = false }
 end
 
--- Head available between `chain` and the consumer, inclusive of the chain's own stretch. Cached per
--- node: a network with two routers and forty pipes asks this once per node.
---
--- Pumps ADD UP -- they sit in series, and buying a second one is meant to buy more head. The mains
--- does not: two inlets on the same town supply are the same supply, so it is taken once, whichever
--- stretch it was found in.
-local function chainHead(chain)
+-- Head the pumps between `chain` and the consumer add, inclusive of the chain's own stretch. Pumps ADD
+-- UP: they sit in series, and buying a second one is meant to buy more head. Cached per node, so a
+-- network with two routers and forty pipes asks this once per node.
+local function chainPumpHead(chain)
     if not chain then
         return 0
     end
-    if not chain.headCache then
-        local parentPumps, parentMains = 0, 0
-        if chain.parent then
-            chainHead(chain.parent)
-            parentPumps, parentMains = chain.parent.pumpHead, chain.parent.mainsHead
-        end
-        chain.pumpHead = parentPumps + Pump.headForPumps(chain.pumps)
-        chain.mainsHead = math.max(parentMains, chain.mains and Mains.head() or 0)
-        chain.headCache = chain.pumpHead + chain.mainsHead
+    if not chain.pumpHead then
+        chain.pumpHead = chainPumpHead(chain.parent) + Pump.headForPumps(chain.pumps)
     end
-    return chain.headCache
+    return chain.pumpHead
+end
+
+-- Is there a live town-water inlet between `chain` and the consumer? The mains is NOT another pump: a
+-- utility holds its main at a set pressure and every connection to it sits at that pressure, so it is
+-- a FLOOR under the whole run rather than something added on top of the source's own head. Two inlets
+-- are the same town supply, which falls out of this for free -- a floor cannot be applied twice.
+-- Deliberately uncached, unlike chainPumpHead: `chain.mains` is still being set as the walk finds
+-- squares, and a chain is at most a handful of nodes long, so caching would buy nothing and could
+-- freeze a `false` taken before the inlet was reached.
+local function chainHasMains(chain)
+    if not chain then
+        return false
+    end
+    return chain.mains or chainHasMains(chain.parent)
+end
+
+-- Everything a source on `chain` gets for free, applied to a head it computed on its own.
+local function applyChainSupply(head, chain)
+    if chainHasMains(chain) then
+        return math.max(head, Mains.head())
+    end
+    return head
 end
 
 -- What a source at (z, hops) on `chain` actually delivers to a `kind` consumer at consumerZ: the
 -- unregulated head, then held down by every valve on the way, each priced from where it stands.
 local function headThroughChain(sourceZ, consumerZ, hops, kind, chain)
-    local head = Pressure.delivered(sourceZ, consumerZ, hops, kind, chainHead(chain))
+    local head = applyChainSupply(
+        Pressure.delivered(sourceZ, consumerZ, hops, kind, chainPumpHead(chain)), chain)
+
     local node = chain
     while node do
         if node.ceiling then
-            local capped = Pressure.atRegulator(node.ceiling, node.z, consumerZ, node.hops, kind,
-                chainHead(node.parent))
+            -- A valve is priced from where it stands, and then gets whatever is BETWEEN it and the
+            -- consumer: pumps in front of it boost its branch, and an inlet in front of it holds that
+            -- branch at mains pressure no matter what the valve is set to. It cannot regulate a supply
+            -- that joins downstream of itself -- only what flows through it.
+            local capped = applyChainSupply(
+                Pressure.atRegulator(node.ceiling, node.z, consumerZ, node.hops, kind,
+                    chainPumpHead(node.parent)), node.parent)
             if capped < head then
                 head = capped
             end
@@ -480,10 +499,11 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill)
     local pressure = nil
     if kind or fill then
         -- How far water entering here can be pushed UPHILL. Fills are not regulated (a fill query
-        -- never crosses a router), so the whole zone's lift counts, mains included.
+        -- never crosses a router), so the whole zone's lift counts. The mains is a floor here too:
+        -- a live inlet holds the network at its pressure, which is lift the pumps do not have to find.
         local liftHead = Pump.headForPumps(zone.pumps)
         if #zone.mains > 0 then
-            liftHead = liftHead + Mains.head()
+            liftHead = math.max(liftHead, Mains.head())
         end
         if fill then
             descriptors = applyFillGate(descriptors, originSquare, liftHead)

@@ -11,8 +11,9 @@ local Mains = WaterPipes.Mains
 -- Plumbing a fixture switches the engine's infinite city water OFF on it, which used to mean that
 -- connecting your kitchen sink on day 3 made it WORSE than leaving it alone. Now the opposite: while
 -- the service is still running, a plumbed fixture is an inlet. It fills the network's containers at a
--- bounded rate and it pressurises the whole zone, so sprinklers run without a pump right up to the
--- day the water is cut. That day then actually means something.
+-- bounded rate and it holds the whole zone at mains pressure -- flat, whatever the distance, the way
+-- a utility main behaves -- so sprinklers run without a pump right up to the day the water is cut.
+-- That day then actually means something.
 --
 -- ===== How we know the service is still on =====
 --
@@ -52,8 +53,9 @@ function Mains.isEnabled()
     return true
 end
 
--- Head the supply holds the network at. Real mains run 20-40 m.c.a.; stored in tenths so an integer
--- sandbox slider can say 25.0.
+-- Pressure the supply holds the network at. This is a FLOOR under the whole zone, not head added on
+-- top of a source -- see the mains block in Constants.lua. Real mains run 20-40 m.c.a.; stored in
+-- tenths so an integer sandbox slider can say 25.0.
 function Mains.head()
     local sv = SandboxVars and SandboxVars.WaterPipes
     local v = sv and sv.MainsHead
