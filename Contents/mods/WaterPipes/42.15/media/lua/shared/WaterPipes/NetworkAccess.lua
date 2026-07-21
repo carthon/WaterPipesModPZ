@@ -36,8 +36,13 @@ local function routerIsHardBoundary(routerSquare)
         return true
     end
     -- Any other vessel parked on the crossing buffers the flow, so treat it as a boundary too.
+    -- Iterate rather than use next(): PZ's Lua does not expose next, and the descriptors are a
+    -- string-keyed map so # would not work either.
     local containers = Adapter.collectSquareContainers(routerSquare)
-    return next(containers) ~= nil
+    for _ in pairs(containers) do
+        return true
+    end
+    return false
 end
 
 local function getCellSquare(x, y, z)
