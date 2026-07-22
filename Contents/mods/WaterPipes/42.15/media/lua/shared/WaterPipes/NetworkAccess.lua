@@ -532,9 +532,25 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill)
         end
     end
 
+    -- TAINTED WINS. A network holding both clean and tainted water is not "mixed", it is tainted:
+    -- one litre of dirty water in the line is enough, which is what contamination means and what a
+    -- player expects after wiring a filthy barrel into a clean run. Before this, two water types made
+    -- the network `isMixed`, and a mixed network refuses to deliver anything at all -- so connecting a
+    -- tainted barrel did not dirty the water, it silently killed the whole network.
+    --
+    -- Only the WATER FAMILY collapses this way. Petrol sitting beside water is not contamination, it
+    -- is a ruined tank, and that stays the hard refusal it always was.
+    local allWater = true
     for candidateFluidType in pairs(fluidTypes) do
         fluidTypeCount = fluidTypeCount + 1
         fluidTypeName = candidateFluidType
+        if not isWaterTypeName(candidateFluidType) then
+            allWater = false
+        end
+    end
+    if fluidTypeCount > 1 and allWater then
+        fluidTypeCount = 1
+        fluidTypeName = "TaintedWater"
     end
 
     return {
@@ -574,6 +590,29 @@ local function fluidNameMatches(actual, required)
         return false
     end
     return string.lower(actual) == string.lower(required)
+end
+
+-- What a network already holding `current` becomes once `incoming` is added, or nil if the two must
+-- not meet at all.
+--
+-- Inside the water family the answer is always "yes, and tainted wins". The asymmetry is the point:
+-- tipping tainted water into a clean line ruins it, and tipping clean water into a tainted line does
+-- NOT rinse it out. Contamination only travels one way, which is what makes the purifier the only
+-- road back. Outside the water family nothing merges -- petrol still refuses to meet water.
+local function mergeFluidNames(current, incoming)
+    if not current then
+        return incoming
+    end
+    if not incoming then
+        return current
+    end
+    if fluidNameMatches(current, incoming) then
+        return current
+    end
+    if isWaterTypeName(current) and isWaterTypeName(incoming) then
+        return "TaintedWater"
+    end
+    return nil
 end
 
 local function rebalanceSummary(summary, remainingAmount)
@@ -709,8 +748,10 @@ function NetworkAccess.availableToPush(square, fluidType)
     if headroom <= 0 then
         return 0
     end
+    -- Clean water may always join a tainted line (it just becomes tainted); only a genuinely
+    -- incompatible fluid is refused.
     if (summary.totalAmount or 0) > 0 and summary.fluidTypeName
-        and not fluidNameMatches(summary.fluidTypeName, fluidType) then
+        and not mergeFluidNames(summary.fluidTypeName, fluidType) then
         return 0
     end
     return headroom
@@ -757,9 +798,11 @@ function NetworkAccess.fillFluidAtSquare(originSquare, fluidType, amount)
         return 0
     end
 
-    -- A non-empty network must already hold the same fluid, otherwise we'd mix it.
-    if (summary.totalAmount or 0) > 0 and summary.fluidTypeName
-        and not fluidNameMatches(summary.fluidTypeName, fluidType) then
+    -- A non-empty network takes the incoming fluid only if the two can share a pipe. Water and
+    -- tainted water always can -- the result is tainted -- so this now refuses nothing but a real
+    -- fluid clash (petrol into water).
+    local merged = mergeFluidNames(summary.fluidTypeName, fluidType)
+    if (summary.totalAmount or 0) > 0 and summary.fluidTypeName and not merged then
         return 0
     end
 
@@ -768,10 +811,9 @@ function NetworkAccess.fillFluidAtSquare(originSquare, fluidType, amount)
         return 0
     end
 
-    -- An empty network adopts the incoming fluid type.
-    if (summary.totalAmount or 0) <= 0 then
-        summary.fluidTypeName = fluidType
-    end
+    -- An empty network adopts the incoming fluid type; a stocked one takes the merged result, which
+    -- is what turns the whole line tainted the moment dirty water is pushed into it.
+    summary.fluidTypeName = (summary.totalAmount or 0) <= 0 and fluidType or merged
 
     rebalanceSummary(summary, (summary.totalAmount or 0) + added)
     return added
@@ -854,7 +896,8 @@ function NetworkAccess.restoreFluid(endpointObject, amount, fluidTypeName)
         return 0
     end
 
-    if summary.totalAmount > 0 and summary.fluidTypeName and summary.fluidTypeName ~= fluidTypeName then
+    local merged = mergeFluidNames(summary.fluidTypeName, fluidTypeName)
+    if summary.totalAmount > 0 and summary.fluidTypeName and not merged then
         return 0
     end
 
@@ -865,7 +908,7 @@ function NetworkAccess.restoreFluid(endpointObject, amount, fluidTypeName)
         return 0
     end
 
-    summary.fluidTypeName = summary.fluidTypeName or fluidTypeName
+    summary.fluidTypeName = merged or fluidTypeName
     rebalanceSummary(summary, summary.totalAmount + restored)
     return restored
 end
