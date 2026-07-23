@@ -1,12 +1,16 @@
 {
-    "WaterPipe": "Tubería de agua",
-    "WaterPipeRiser": "Tubería vertical",
-    "WaterPipeHidden": "Tubería de agua oculta",
-    "WaterPipeRiserHidden": "Tubería vertical oculta",
+    "WaterPipe": "Tubería de fluidos",
+    "WaterPipeRiser": "Tubería vertical de fluidos",
+    "WaterPipeHidden": "Tubería de fluidos oculta",
+    "WaterPipeRiserHidden": "Tubería vertical de fluidos oculta",
     "WaterPurifierFilter": "Purificador de agua (filtro)",
     "WaterPurifierFire": "Destilador de agua (fuego)",
     "WaterPurifierElectric": "Destilador de agua (eléctrico)",
     "WaterPipeRouter": "Enrutador de fluidos",
     "WaterPipes_CraftFilterCartridge": "Fabricar cartucho de filtro de agua",
-    "WaterPipes_ForgeMetalPipe": "Forjar una tubería de metal"
+    "WaterPipes_ForgeMetalPipe": "Forjar una tubería de metal",
+    "WaterPump": "Bomba de agua",
+    "WaterPipeDrip": "Gotero",
+    "WaterPipeSprinkler": "Aspersor",
+    "WaterPressureGauge": "Manómetro"
 }

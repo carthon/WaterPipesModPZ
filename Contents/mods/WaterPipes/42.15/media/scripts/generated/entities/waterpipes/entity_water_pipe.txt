@@ -293,7 +293,7 @@ module WaterPipes
                     row = waterpipes_01_30,
                 }
             }
-            face W
+            face E
             {
                 layer
                 {
@@ -303,7 +303,7 @@ module WaterPipes
         }
         component CraftRecipe
         {
-            timedAction = BuildWallNoTool,
+            timedAction = BuildLowNoTool,
             time = 80,
             category = Piping,
             Tooltip = Tooltip_craft_WaterPressureGaugeDesc,

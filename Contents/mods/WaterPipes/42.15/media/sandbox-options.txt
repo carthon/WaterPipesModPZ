@@ -3,7 +3,7 @@ VERSION = 1,
 option WaterPipes.RealisticPurification
 {
     type = boolean,
-    default = false,
+    default = true,
     page = WaterPipes,
     translation = WaterPipes_RealisticPurification,
 }

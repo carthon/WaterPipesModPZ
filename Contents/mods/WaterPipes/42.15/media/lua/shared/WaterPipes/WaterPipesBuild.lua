@@ -83,7 +83,7 @@ local function squareHasRiserEdge(square, edge)
 end
 
 -- The gauge is not a pipe, so it is not in getPipeObjectsOnSquare; scan the square's objects instead.
-local function squareHasGaugeEdge(square, edge)
+local function squareHasGauge(square)
     if not square or not square.getObjects then
         return false
     end
@@ -93,7 +93,7 @@ local function squareHasGaugeEdge(square, edge)
     end
     for i = 0, objects:size() - 1 do
         local modData = getModData(objects:get(i))
-        if modData and modData[Constants.GAUGE_MODDATA_KEY] == edge then
+        if modData and modData[Constants.GAUGE_MODDATA_KEY] then
             return true
         end
     end
@@ -296,10 +296,12 @@ Build.sprinklerOnIsValid = Build.floorOnIsValid
 -- which is exactly the rule we want here too -- so this is an alias for intent, not for behaviour.
 Build.dripOnIsValid = Build.floorOnIsValid
 
--- The gauge is a wall fixture, not a pipe: it reads the network but never carries fluid, so it never
--- registers and never affects the graph. One per wall edge, like the riser.
+-- The gauge is a dial that sits on a pipe at floor level -- it reads the network but never carries
+-- fluid, so it never registers and never affects the graph. It needs a pipe under it to read, and
+-- there is room for only one per tile.
 function Build.gaugeOnIsValid(params)
-    return not squareHasGaugeEdge(params and params.square, edgeFromFacing(params))
+    local square = params and params.square
+    return squareHasFloorPipe(square) and not squareHasGauge(square)
 end
 
 function Build.gaugeOnCreate(params)
@@ -309,7 +311,7 @@ function Build.gaugeOnCreate(params)
     end
     local modData = getModData(thumpable)
     if modData then
-        modData[Constants.GAUGE_MODDATA_KEY] = edgeFromFacing(params)
+        modData[Constants.GAUGE_MODDATA_KEY] = true
     end
     if thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)
