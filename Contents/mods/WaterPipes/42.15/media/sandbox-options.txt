@@ -197,3 +197,13 @@ option WaterPipes.RainTaintsOpenWater
     page = WaterPipes,
     translation = WaterPipes_RainTaintsOpenWater,
 }
+
+option WaterPipes.HydrantReserve
+{
+    type = integer,
+    min = 0,
+    max = 20000,
+    default = 1000,
+    page = WaterPipes,
+    translation = WaterPipes_HydrantReserve,
+}

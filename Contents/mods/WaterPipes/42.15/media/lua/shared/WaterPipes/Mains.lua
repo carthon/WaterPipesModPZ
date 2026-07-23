@@ -42,6 +42,31 @@ local function getModData(worldObject)
     return ok and modData or nil
 end
 
+-- Is the town water service still running AT ALL, with no fixture to probe? isLiveAt below reads it
+-- off a plumbed sink; a fire hydrant has no FluidContainer to probe, so it needs the raw answer.
+--
+-- This mirrors the clock clause inside IsoObject.isWaterInfinite exactly: the service is on while
+--     worldAgeHours / 24 + (timeSinceApo - 1) * 30 < WaterShutModifier
+-- so if TIS ever retunes the shutoff, this is the one line that has to follow. When the clock cannot
+-- be read (no game time, no sandbox -- i.e. a test harness) it answers "on", which is harmless there.
+function Mains.serviceLive()
+    if not getGameTime then
+        return true
+    end
+    local gt = getGameTime()
+    local ok, ageHours = pcall(gt.getWorldAgeHours, gt)
+    if not ok or type(ageHours) ~= "number" then
+        return true
+    end
+    local sv = SandboxVars
+    local modifier = sv and sv.WaterShutModifier
+    if type(modifier) ~= "number" then
+        return true
+    end
+    local timeSinceApo = (type(sv.TimeSinceApo) == "number" and sv.TimeSinceApo) or 1
+    return (ageHours / 24 + (timeSinceApo - 1) * 30) < modifier
+end
+
 -- ===== Per-save tunables =====
 
 function Mains.isEnabled()

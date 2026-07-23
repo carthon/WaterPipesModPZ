@@ -44,5 +44,7 @@
     "Sandbox_WaterPipes_StagnationDaysOpen": "Days before open water goes bad",
     "Sandbox_WaterPipes_StagnationDaysOpen_tooltip": "How many days an open, rain-catching container (a rain barrel, an uncovered amphora) may sit with no movement before its water turns tainted. Open water spoils in days, so this is the short timer. Set to 0 so open water never goes bad on its own (rain can still taint it).",
     "Sandbox_WaterPipes_RainTaintsOpenWater": "Rain taints open water",
-    "Sandbox_WaterPipes_RainTaintsOpenWater_tooltip": "When on, rain falling on an open container left outside taints its whole network, so uncovered collection is a gamble whenever the weather turns. Turn off if you would rather open containers only spoil from sitting still."
+    "Sandbox_WaterPipes_RainTaintsOpenWater_tooltip": "When on, rain falling on an open container left outside taints its whole network, so uncovered collection is a gamble whenever the weather turns. Turn off if you would rather open containers only spoil from sitting still.",
+    "Sandbox_WaterPipes_HydrantReserve": "Fire hydrant reserve (litres)",
+    "Sandbox_WaterPipes_HydrantReserve_tooltip": "How much water a fire hydrant still holds in its local main once the town water is cut. 1000 by default. While the water service is on the hydrant is mains-fed and effectively bottomless; this is only what is left afterwards, and it drains as you use it. Set to 0 so hydrants run dry the moment the water stops."
 }

@@ -41,5 +41,8 @@
     "IGUI_WaterPipesRouterPressureNoSupply": "No supply reaches this router.",
     "IGUI_WaterPipesRouterPressureNoLimit": "No limit",
     "IGUI_WaterPipesRouterPressureApply": "Apply",
-    "IGUI_WaterPipesClose": "Close"
+    "IGUI_WaterPipesClose": "Close",
+    "IGUI_WaterPipesHydrantMainsFed": "Mains-fed: flows freely while the town water is on.",
+    "IGUI_WaterPipesHydrantReserve": "Water left in the main: %1 L.",
+    "IGUI_WaterPipesHydrantNeedsPipe": "Lay a pipe on its tile to connect it to your network."
 }

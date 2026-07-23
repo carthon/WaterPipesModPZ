@@ -11,6 +11,7 @@ require "WaterPipes/Router"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
+require "WaterPipes/Hydrant"
 require "WaterPipes/Irrigation"
 require "WaterPipes/WaterPipesIrrigationDebug"
 require "WaterPipes/WaterPipesRouterPressureWindow"
@@ -37,6 +38,7 @@ local NetworkAccess = WaterPipes.NetworkAccess
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Purifier = WaterPipes.Purifier
 local Router = WaterPipes.Router
+local Hydrant = WaterPipes.Hydrant
 local Pressure = WaterPipes.Pressure
 local Irrigation = WaterPipes.Irrigation
 local IrrigationDebug = WaterPipes.IrrigationDebug
@@ -887,6 +889,18 @@ local function findGaugeInWorldObjects(worldobjects)
     return nil
 end
 
+local function findHydrantInWorldObjects(worldobjects)
+    if not worldobjects then
+        return nil
+    end
+    for _, worldObject in ipairs(worldobjects) do
+        if Hydrant.isHydrant(worldObject) then
+            return worldObject
+        end
+    end
+    return nil
+end
+
 -- Server-authoritative in MP so every client converges on the same regulated zone; direct in SP.
 function ContextMenu.setRouterPressure(playerObj, router, pressure)
     local square = router and router:getSquare()
@@ -898,6 +912,20 @@ function ContextMenu.setRouterPressure(playerObj, router, pressure)
             { x = square:getX(), y = square:getY(), z = square:getZ(), pressure = pressure })
     else
         Router.setPressureCeiling(router, pressure)
+    end
+end
+
+-- Server-authoritative in MP so every client agrees on which hydrants are flowing; direct in SP.
+function ContextMenu.setHydrantOpen(playerObj, hydrant, open)
+    local square = hydrant and hydrant:getSquare()
+    if not square then
+        return
+    end
+    if isClient() then
+        sendClientCommand(playerObj, "WaterPipes", "setHydrantOpen",
+            { x = square:getX(), y = square:getY(), z = square:getZ(), open = open and true or false })
+    else
+        Hydrant.setOpen(hydrant, open)
     end
 end
 
@@ -977,6 +1005,24 @@ local function buildEmitterTooltip(emitterObject)
         end
     end
 
+    tooltip.description = table.concat(lines, " <LINE> ")
+    return tooltip
+end
+
+-- What the hydrant will do if opened: mains-fed and bottomless while the town service runs, or the
+-- finite local reserve once it is cut. Reminds the player a pipe on the tile is what connects it.
+local function buildHydrantTooltip(hydrant)
+    local tooltip = ISWorldObjectContextMenu.addToolTip()
+    tooltip:setName(getText("ContextMenu_WaterPipesOpenHydrant"))
+    local lines = {}
+    if Hydrant.isMainsFed() then
+        lines[#lines + 1] = getText("IGUI_WaterPipesHydrantMainsFed")
+    else
+        lines[#lines + 1] = getText("IGUI_WaterPipesHydrantReserve",
+            string.format("%.0f", Hydrant.reserve(hydrant)))
+    end
+    lines[#lines + 1] = " "
+    lines[#lines + 1] = getText("IGUI_WaterPipesHydrantNeedsPipe")
     tooltip.description = table.concat(lines, " <LINE> ")
     return tooltip
 end
@@ -1073,12 +1119,17 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     local emitterObject = findEmitterInWorldObjects(worldobjects)
     local hasEmitterOption = emitterObject ~= nil
 
+    -- A street fire hydrant opens and closes with a pipe wrench; once open and piped it feeds the
+    -- network. The option only shows with a wrench in hand.
+    local hydrantObject = findHydrantInWorldObjects(worldobjects)
+    local hasHydrantOption = hydrantObject ~= nil and playerHasPipeWrench(playerObj)
+
     if not hasUnplumbOption and not hasModPlumbOption
         and not hasGeneratorPlumbOption and not hasGeneratorUnplumbOption
         and not hasShowNetworkOption and not hasHideNetworkOption
         and not hasPurifierOption
         and not hasRouterPressureOption and not hasGaugeOption and not hasDripRepairOption
-        and not hasEmitterOption
+        and not hasEmitterOption and not hasHydrantOption
         and not isDebugActive() then
         return false
     end
@@ -1131,6 +1182,15 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
 
     if hasRouterPressureOption then
         addRouterPressureMenu(context, playerObj, routerObject)
+    end
+
+    if hasHydrantOption then
+        local open = Hydrant.isOpen(hydrantObject)
+        local label = open and getText("ContextMenu_WaterPipesCloseHydrant")
+            or getText("ContextMenu_WaterPipesOpenHydrant")
+        local option = context:addOption(label, playerObj, ContextMenu.setHydrantOpen,
+            hydrantObject, not open)
+        option.toolTip = buildHydrantTooltip(hydrantObject)
     end
 
     if hasGaugeOption then

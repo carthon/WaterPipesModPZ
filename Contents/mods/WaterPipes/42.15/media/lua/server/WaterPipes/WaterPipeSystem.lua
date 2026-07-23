@@ -17,6 +17,7 @@ require "WaterPipes/Router"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/Mains"
 require "WaterPipes/Pump"
+require "WaterPipes/Hydrant"
 require "WaterPipes/Stagnation"
 require "WaterPipes/Irrigation"
 require "WaterPipes/API"
@@ -38,6 +39,7 @@ local Router = WaterPipes.Router
 local NetworkAccess = WaterPipes.NetworkAccess
 local Mains = WaterPipes.Mains
 local Pump = WaterPipes.Pump
+local Hydrant = WaterPipes.Hydrant
 local Stagnation = WaterPipes.Stagnation
 local Irrigation = WaterPipes.Irrigation
 local State = WaterPipes.State
@@ -396,6 +398,43 @@ function System.processAllMains(dt)
     end
 end
 
+-- An OPEN hydrant with a pipe on its tile feeds clean water into the network. While the town service
+-- runs it is mains-fed, so its reserve is held full and nothing is deducted; once the water is cut it
+-- draws down the fixed reserve and runs dry. Closed hydrants keep their reserve untouched.
+function System.processHydrant(hydrant, square, dt)
+    local mainsFed = Hydrant.isMainsFed()
+    if mainsFed then
+        Hydrant.setReserve(hydrant, Hydrant.capacity())   -- topped while the main has water
+    end
+
+    local reserve = Hydrant.reserve(hydrant)
+    local available = mainsFed and Hydrant.flowFor(dt) or math.min(Hydrant.flowFor(dt), reserve)
+    local wanted = math.min(available, NetworkAccess.availableToPush(square, "Water"))
+    if wanted <= 0 then
+        return
+    end
+
+    local added = NetworkAccess.fillFluidAtSquare(square, "Water", wanted)
+    if added > 0 and not mainsFed then
+        Hydrant.setReserve(hydrant, reserve - added)
+    end
+end
+
+function System.processHydrants(dt)
+    dt = dt or 1.0
+    if dt <= 0 then
+        return
+    end
+    local state = State.ensure()
+    for _, pipeData in pairs(state.pipes) do
+        local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
+        local hydrant = square and Hydrant.findOnSquare(square)
+        if hydrant and Hydrant.isOpen(hydrant) then
+            System.processHydrant(hydrant, square, dt)
+        end
+    end
+end
+
 -- ===== Water stagnation =====
 
 -- The live water vessels of one network component: descriptor + its square + its FluidContainer,
@@ -688,6 +727,11 @@ local function onEveryOneMinute()
         Logger.error("Mains supply processing failed: " .. tostring(errMains))
     end
 
+    local okHydrants, errHydrants = pcall(System.processHydrants)
+    if not okHydrants then
+        Logger.error("Hydrant processing failed: " .. tostring(errHydrants))
+    end
+
     local ok, err = pcall(System.refreshPlumbedEndpoints)
     if not ok then
         Logger.error("Endpoint plumbing refresh failed: " .. tostring(err))
@@ -849,6 +893,19 @@ local function onClientCommand(module, command, player, args)
             return
         end
         Router.setPressureCeiling(router, args and args.pressure)
+        return
+    end
+
+    -- Hydrant open/close: server-authoritative so every client agrees on which hydrants are flowing.
+    if command == "setHydrantOpen" then
+        local square = resolveCommandSquare(args)
+        local hydrant = square and Hydrant.findOnSquare(square)
+        if not hydrant then
+            Logger.warn("Set hydrant command: no hydrant at "
+                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
+            return
+        end
+        Hydrant.setOpen(hydrant, args and args.open)
         return
     end
 

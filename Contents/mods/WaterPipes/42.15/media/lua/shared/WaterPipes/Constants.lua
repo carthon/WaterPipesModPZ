@@ -207,6 +207,17 @@ Constants.WELL_SCRIPT_NAME = "Base.Well"
 -- across every pipe and the network would read as permanently full. The pump INJECTS from them at a
 -- bounded rate instead, the same shape as the purifier's intake step.
 
+-- ===== Fire hydrants =====
+-- A vanilla street hydrant (a decorative moveable with no water of its own) becomes a network source
+-- once a pipe is laid on its tile and it is opened with a pipe wrench. While the town water service is
+-- still running it is mains-fed and effectively bottomless; the day the water is cut it keeps only the
+-- reserve left in the local main (HYDRANT_RESERVE litres) and drains as it is used. Clean water.
+Constants.HYDRANT_SPRITE = "street_decoration_01_12"     -- vanilla Mov_FireHydrant
+Constants.HYDRANT_OPEN_KEY = "waterpipesHydrantOpen"      -- modData: opened with the wrench
+Constants.HYDRANT_RESERVE_KEY = "waterpipesHydrantReserve" -- modData: litres left once the mains is cut
+Constants.HYDRANT_RESERVE = 1000            -- litres held in the local main after the shutoff
+Constants.HYDRANT_FLOW_RATE = 60            -- litres per in-game minute an open hydrant delivers
+
 -- ===== Water stagnation =====
 -- Standing water goes bad. Every water container carries the world-age hour of its last movement
 -- (any consumption, transfer, rain or mains inflow, caught through OnWaterAmountChange). Once a

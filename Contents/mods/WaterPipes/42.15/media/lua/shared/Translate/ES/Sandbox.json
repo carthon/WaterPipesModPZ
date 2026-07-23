@@ -44,5 +44,7 @@
     "Sandbox_WaterPipes_StagnationDaysOpen": "Dias hasta que el agua abierta se echa a perder",
     "Sandbox_WaterPipes_StagnationDaysOpen_tooltip": "Cuantos dias puede estar un contenedor abierto que recoge lluvia (un barril de lluvia, un anfora destapada) sin movimiento antes de que su agua se vuelva turbia. El agua abierta se estropea en dias, asi que este es el temporizador corto. Ponlo a 0 para que el agua abierta no se estropee sola (la lluvia todavia puede contaminarla).",
     "Sandbox_WaterPipes_RainTaintsOpenWater": "La lluvia contamina el agua abierta",
-    "Sandbox_WaterPipes_RainTaintsOpenWater_tooltip": "Cuando esta activado, la lluvia que cae sobre un contenedor abierto a la intemperie contamina toda su red, asi que recoger agua sin tapar es una apuesta cada vez que cambia el tiempo. Desactivalo si prefieres que los contenedores abiertos solo se estropeen por estar quietos."
+    "Sandbox_WaterPipes_RainTaintsOpenWater_tooltip": "Cuando esta activado, la lluvia que cae sobre un contenedor abierto a la intemperie contamina toda su red, asi que recoger agua sin tapar es una apuesta cada vez que cambia el tiempo. Desactivalo si prefieres que los contenedores abiertos solo se estropeen por estar quietos.",
+    "Sandbox_WaterPipes_HydrantReserve": "Reserva de la boca de incendios (litros)",
+    "Sandbox_WaterPipes_HydrantReserve_tooltip": "Cuánta agua conserva una boca de incendios en su conducción local una vez cortada el agua de la ciudad. 1000 por defecto. Mientras haya suministro, la boca está alimentada por la red y es prácticamente inagotable; esto es solo lo que queda después, y se agota con el uso. Ponlo a 0 para que las bocas se sequen en cuanto se corta el agua."
 }

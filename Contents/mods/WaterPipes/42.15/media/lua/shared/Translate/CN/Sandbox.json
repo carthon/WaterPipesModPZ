@@ -44,5 +44,7 @@
     "Sandbox_WaterPipes_StagnationDaysOpen": "敞口水变质前的天数",
     "Sandbox_WaterPipes_StagnationDaysOpen_tooltip": "敞口的、能接雨水的容器（雨水收集器、未加盖的双耳瓶）在水变为污染前可静置多少天。敞口的水几天内就会变质，所以这是短计时器。设为 0 则敞口的水不会自行变质（雨水仍可污染它）。",
     "Sandbox_WaterPipes_RainTaintsOpenWater": "雨水污染敞口水",
-    "Sandbox_WaterPipes_RainTaintsOpenWater_tooltip": "启用后，落在户外敞口容器上的雨水会污染其整个网络，因此每逢天气转变，露天收集水都是一场赌博。如果你更希望敞口容器只因静置而变质，就关闭它。"
+    "Sandbox_WaterPipes_RainTaintsOpenWater_tooltip": "启用后，落在户外敞口容器上的雨水会污染其整个网络，因此每逢天气转变，露天收集水都是一场赌博。如果你更希望敞口容器只因静置而变质，就关闭它。",
+    "Sandbox_WaterPipes_HydrantReserve": "消防栓储水量（升）",
+    "Sandbox_WaterPipes_HydrantReserve_tooltip": "城市供水中断后，消防栓在其本地干管中仍保有多少水。默认 1000。只要供水未断，消防栓由市政供水供给，几乎取之不尽；此数值仅为断水之后剩余的水量，会随使用逐渐耗尽。设为 0 则一旦停水消防栓立即干涸。"
 }

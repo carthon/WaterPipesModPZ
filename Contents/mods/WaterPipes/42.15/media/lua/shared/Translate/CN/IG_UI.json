@@ -41,5 +41,8 @@
     "IGUI_WaterPipesRouterPressureNoSupply": "没有水源到达此路由器。",
     "IGUI_WaterPipesRouterPressureNoLimit": "无限制",
     "IGUI_WaterPipesRouterPressureApply": "应用",
-    "IGUI_WaterPipesClose": "关闭"
+    "IGUI_WaterPipesClose": "关闭",
+    "IGUI_WaterPipesHydrantMainsFed": "由市政供水供给：只要城市供水未断，就能持续出水。",
+    "IGUI_WaterPipesHydrantReserve": "干管中剩余的水：%1 升。",
+    "IGUI_WaterPipesHydrantNeedsPipe": "在其格子上铺设水管即可接入你的网络。"
 }

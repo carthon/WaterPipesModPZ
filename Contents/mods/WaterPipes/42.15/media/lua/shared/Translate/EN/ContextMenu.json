@@ -7,5 +7,7 @@
     "ContextMenu_WaterPipesReadGauge": "Pressure gauge",
     "ContextMenu_WaterPipesCheckEmitter": "Check irrigation emitter",
     "ContextMenu_WaterPipesRepairDrip": "Repair drip emitter",
-    "ContextMenu_WaterPipesRouterPressureOpen": "Set pressure limit..."
+    "ContextMenu_WaterPipesRouterPressureOpen": "Set pressure limit...",
+    "ContextMenu_WaterPipesOpenHydrant": "Open hydrant",
+    "ContextMenu_WaterPipesCloseHydrant": "Close hydrant"
 }
