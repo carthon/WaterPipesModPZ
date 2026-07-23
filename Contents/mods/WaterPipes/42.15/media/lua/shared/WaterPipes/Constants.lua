@@ -207,6 +207,22 @@ Constants.WELL_SCRIPT_NAME = "Base.Well"
 -- across every pipe and the network would read as permanently full. The pump INJECTS from them at a
 -- bounded rate instead, the same shape as the purifier's intake step.
 
+-- ===== Water stagnation =====
+-- Standing water goes bad. Every water container carries the world-age hour of its last movement
+-- (any consumption, transfer, rain or mains inflow, caught through OnWaterAmountChange). Once a
+-- container has sat still past its limit it turns tainted, and the contamination rule then spreads it
+-- to the rest of its network -- so a whole plumbed system stagnates together, at the pace of its most
+-- exposed vessel. An actively used network never gets there, because drawing from it keeps stamping.
+--
+-- Open vs closed is read straight off the vessel's rain-catcher factor (FluidContainer.getRainCatcher,
+-- the RainFactor from its script): anything that collects rain is open to the air and spoils faster.
+-- Rain is the sharp edge: while it rains, any OPEN container that is also OUTSIDE has its whole
+-- network tainted at once, so uncovered collection is a gamble every time the weather turns. This
+-- mirrors vanilla, whose rain barrels already fill with tainted water.
+Constants.STAGNATION_STAMP_KEY = "waterpipesLastMove"   -- modData: world-age hours of last movement
+Constants.STAGNATION_DAYS_CLOSED = 30       -- sealed tanks, pipes, a lidded amphora: weeks
+Constants.STAGNATION_DAYS_OPEN = 10         -- rain barrels, an open amphora: days
+
 -- ===== Town water supply (the mains) =====
 -- Plumbing a fixture turns the engine's infinite city water off on it, so before this the network
 -- could only ever LOSE from the mains. Now a plumbed fixture is an inlet while the service runs: it

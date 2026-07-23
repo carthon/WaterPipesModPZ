@@ -36,5 +36,13 @@
     "Sandbox_WaterPipes_MainsHead": "Town water pressure (tenths)",
     "Sandbox_WaterPipes_MainsHead_tooltip": "Pressure the town supply holds the network at, in tenths of a metre of water column. 250 = 25.0, the low end of what a real municipal main runs. A sprinkler needs 20.0, so at the default the mains runs sprinklers on its own. Lower it if you want pumps to still matter before the shutoff.",
     "Sandbox_WaterPipes_MainsIntakeRate": "Town water intake rate (litres per minute)",
-    "Sandbox_WaterPipes_MainsIntakeRate_tooltip": "How much water the town supply pushes into your network each in-game minute. 60 = 3600 litres an hour, three times a pump, because the mains is the fattest source in the game. Lower it if filling your whole reserve before the shutoff feels too easy."
+    "Sandbox_WaterPipes_MainsIntakeRate_tooltip": "How much water the town supply pushes into your network each in-game minute. 60 = 3600 litres an hour, three times a pump, because the mains is the fattest source in the game. Lower it if filling your whole reserve before the shutoff feels too easy.",
+    "Sandbox_WaterPipes_WaterStagnation": "Water goes stagnant",
+    "Sandbox_WaterPipes_WaterStagnation_tooltip": "When on, water left sitting in a container or pipe network turns tainted after a while, and rain contaminates any open water left outside. Drawing from a network, refilling it, or town water flowing through it all count as movement and keep it fresh. Turn off to keep stored water clean forever.",
+    "Sandbox_WaterPipes_StagnationDaysClosed": "Days before sealed water goes bad",
+    "Sandbox_WaterPipes_StagnationDaysClosed_tooltip": "How many days a sealed container (a covered tank, the pipe network itself, a lidded amphora) may sit with no movement before its water turns tainted. Sealed water keeps for weeks, so this is the long timer. Set to 0 so sealed water never goes bad.",
+    "Sandbox_WaterPipes_StagnationDaysOpen": "Days before open water goes bad",
+    "Sandbox_WaterPipes_StagnationDaysOpen_tooltip": "How many days an open, rain-catching container (a rain barrel, an uncovered amphora) may sit with no movement before its water turns tainted. Open water spoils in days, so this is the short timer. Set to 0 so open water never goes bad on its own (rain can still taint it).",
+    "Sandbox_WaterPipes_RainTaintsOpenWater": "Rain taints open water",
+    "Sandbox_WaterPipes_RainTaintsOpenWater_tooltip": "When on, rain falling on an open container left outside taints its whole network, so uncovered collection is a gamble whenever the weather turns. Turn off if you would rather open containers only spoil from sitting still."
 }

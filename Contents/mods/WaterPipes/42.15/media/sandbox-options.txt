@@ -161,3 +161,39 @@ option WaterPipes.MainsIntakeRate
     page = WaterPipes,
     translation = WaterPipes_MainsIntakeRate,
 }
+
+option WaterPipes.WaterStagnation
+{
+    type = boolean,
+    default = true,
+    page = WaterPipes,
+    translation = WaterPipes_WaterStagnation,
+}
+
+option WaterPipes.StagnationDaysClosed
+{
+    type = integer,
+    min = 0,
+    max = 180,
+    default = 30,
+    page = WaterPipes,
+    translation = WaterPipes_StagnationDaysClosed,
+}
+
+option WaterPipes.StagnationDaysOpen
+{
+    type = integer,
+    min = 0,
+    max = 180,
+    default = 10,
+    page = WaterPipes,
+    translation = WaterPipes_StagnationDaysOpen,
+}
+
+option WaterPipes.RainTaintsOpenWater
+{
+    type = boolean,
+    default = true,
+    page = WaterPipes,
+    translation = WaterPipes_RainTaintsOpenWater,
+}

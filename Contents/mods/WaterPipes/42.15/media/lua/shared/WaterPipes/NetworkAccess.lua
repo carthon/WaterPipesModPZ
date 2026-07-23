@@ -636,6 +636,24 @@ function NetworkAccess.getFluidSummaryAtSquare(originSquare)
     return buildSummaryFromSquare(originSquare, "both", Constants.PRESSURE_KIND_TAP)
 end
 
+-- Turn every water vessel physically connected to `originSquare` tainted, in one pass, keeping each
+-- one's amount. Used by stagnation and rain: tainting the whole network at once is what keeps the
+-- redistribution step from seeing a half-and-half network and refusing to settle it. A no-op on an
+-- empty network, on petrol, or on water that is already tainted. Returns the litres turned.
+function NetworkAccess.taintNetworkAt(originSquare)
+    local pipeSquares, hops = collectPipeSquaresFromSquare(originSquare, "both")
+    local descriptors = normalizeDescriptorList(collectStorageDescriptors(pipeSquares, hops))
+    local turned = 0
+    for _, descriptor in ipairs(descriptors) do
+        local amount = descriptor.waterAmount or 0
+        if amount > 0 and descriptor.fluidType == "Water" then
+            Adapter.writeDescriptorWaterAmount(descriptor, amount, "TaintedWater")
+            turned = turned + amount
+        end
+    end
+    return turned
+end
+
 -- For visualization: the pipe squares reachable from a square + the container descriptors on them.
 -- Unlike getFluidSummaryAtSquare it returns the pipe squares even when there are no containers.
 function NetworkAccess.getNetworkFromSquare(originSquare)

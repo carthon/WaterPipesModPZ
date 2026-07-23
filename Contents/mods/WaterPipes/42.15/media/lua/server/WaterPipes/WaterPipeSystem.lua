@@ -17,6 +17,7 @@ require "WaterPipes/Router"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/Mains"
 require "WaterPipes/Pump"
+require "WaterPipes/Stagnation"
 require "WaterPipes/Irrigation"
 require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
@@ -37,6 +38,7 @@ local Router = WaterPipes.Router
 local NetworkAccess = WaterPipes.NetworkAccess
 local Mains = WaterPipes.Mains
 local Pump = WaterPipes.Pump
+local Stagnation = WaterPipes.Stagnation
 local Irrigation = WaterPipes.Irrigation
 local State = WaterPipes.State
 local System = WaterPipes.System
@@ -394,6 +396,106 @@ function System.processAllMains(dt)
     end
 end
 
+-- ===== Water stagnation =====
+
+-- The live water vessels of one network component: descriptor + its square + its FluidContainer,
+-- gathered the same way redistributeWater does. Only actual containers holding fluid are returned.
+local function collectComponentVessels(component)
+    local vessels = {}
+    for _, node in pairs(component.nodes) do
+        if node.kind == Constants.NODE_KIND_CONTAINER then
+            local square = getSquare(node.x, node.y, node.z)
+            if square then
+                local descriptor = Adapter.collectSquareContainers(square)[node.key]
+                if descriptor and descriptor.object then
+                    vessels[#vessels + 1] = { descriptor = descriptor, square = square,
+                        object = descriptor.object }
+                end
+            end
+        end
+    end
+    return vessels
+end
+
+local function fluidContainerOf(object)
+    if not object or not object.getFluidContainer then
+        return nil
+    end
+    local ok, fc = pcall(object.getFluidContainer, object)
+    return ok and fc or nil
+end
+
+-- A component taints as one body of water, so we act per component, not per vessel: decide with
+-- `predicate`, and the first vessel that says yes taints the whole network through it. Fresh clean
+-- vessels with no stamp yet are stamped now, so their clock starts from first sight rather than
+-- turning them the instant the feature switches on.
+local function taintComponentsWhere(predicate)
+    for _, component in ipairs(State.getComponents()) do
+        local vessels = collectComponentVessels(component)
+        local taint = false
+        for _, vessel in ipairs(vessels) do
+            local d = vessel.descriptor
+            if (d.waterAmount or 0) > 0 and d.fluidType == "Water" then
+                if predicate(vessel) then
+                    taint = true
+                    break
+                end
+            end
+        end
+        if taint and vessels[1] then
+            local turned = NetworkAccess.taintNetworkAt(vessels[1].square)
+            if turned > 0 then
+                Logger.log(string.format("[stagnation] tainted %.0f L across a network", turned))
+            end
+        end
+    end
+end
+
+-- Hourly: water that has sat still past its limit turns. Open vessels (rain-catchers) spoil faster
+-- than sealed ones; a network that is being drawn from keeps stamping itself and never gets here.
+function System.processStagnation()
+    if not Stagnation.isEnabled() then
+        return
+    end
+    local nowHours = Stagnation.nowHours()
+    if not nowHours then
+        return
+    end
+    taintComponentsWhere(function(vessel)
+        local open = Stagnation.isOpenContainer(fluidContainerOf(vessel.object))
+        local stamp = Stagnation.readStamp(vessel.object)
+        if not stamp then
+            -- First time we have seen it: start its clock, do not taint yet.
+            Stagnation.stamp(vessel.object, nowHours)
+            return false
+        end
+        return Stagnation.hasStagnated(stamp, open, nowHours)
+    end)
+end
+
+-- Every ten minutes while it rains: an OPEN vessel that is also OUTSIDE contaminates its whole
+-- network. Uncovered collection is a gamble whenever the weather turns -- which is what vanilla
+-- already does to its rain barrels, extended here to the whole plumbed system.
+function System.processRainTaint()
+    if not Stagnation.isEnabled() or not Stagnation.rainTaints() then
+        return
+    end
+    if not RainManager or not RainManager.isRaining or not RainManager.isRaining() then
+        return
+    end
+    taintComponentsWhere(function(vessel)
+        if not Stagnation.isOpenContainer(fluidContainerOf(vessel.object)) then
+            return false
+        end
+        local square = vessel.square
+        if not square.isOutside then
+            return false
+        end
+        local ok, outside = pcall(square.isOutside, square)
+        return ok and outside or false
+    end)
+end
+
 function System.refreshPlumbedEndpoints()
     local state = State.ensure()
     local coordinates = {}
@@ -559,6 +661,13 @@ end
 
 local function onEveryTenMinutes()
     System.tick()
+
+    -- Rain contaminates uncovered water at the same ten-minute cadence the vanilla rain barrel fills
+    -- on, so a passing shower is caught within one step.
+    local okRain, errRain = pcall(System.processRainTaint)
+    if not okRain then
+        Logger.error("Rain contamination pass failed: " .. tostring(errRain))
+    end
 end
 
 local function onEveryOneMinute()
@@ -593,6 +702,13 @@ local function onEveryHours()
     if not ok then
         Logger.error("Irrigation pass failed: " .. tostring(err))
     end
+
+    -- Stagnation is a days-scale process, so the hourly cadence is plenty and keeps its network walk
+    -- off the hot path.
+    local okStag, errStag = pcall(System.processStagnation)
+    if not okStag then
+        Logger.error("Stagnation pass failed: " .. tostring(errStag))
+    end
 end
 
 local function onWaterAmountChange(object, prevAmount)
@@ -614,6 +730,24 @@ local function onWaterAmountChange(object, prevAmount)
         local ok, err = pcall(FluidSource.onEndpointWaterAmountChange, object, prevAmount)
         if not ok then
             Logger.error("Endpoint water change handler failed: " .. tostring(err))
+        end
+    end
+
+    -- Any change to a water vessel counts as movement, which resets its stagnation clock. Reading the
+    -- fluid type off the object keeps clean water fresh while it is being used and leaves tainted water
+    -- untouched -- so the very act of tainting a vessel never resets its own clock.
+    if Stagnation.isEnabled() and object.getModData then
+        local ok, fluidType = pcall(function()
+            local descriptors = Adapter.collectSquareContainers(object:getSquare())
+            for _, descriptor in pairs(descriptors) do
+                if descriptor.object == object then
+                    return descriptor.fluidType
+                end
+            end
+            return nil
+        end)
+        if ok and fluidType then
+            Stagnation.noteMovement(object, fluidType)
         end
     end
 end
