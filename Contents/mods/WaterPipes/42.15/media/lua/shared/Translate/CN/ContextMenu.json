@@ -1,0 +1,7 @@
+{
+    "ContextMenu_WaterPipesUnplumbItem": "断开 %1的管道连接",
+    "ContextMenu_WaterPipesShowNetwork": "显示管道网络",
+    "ContextMenu_WaterPipesHideNetwork": "隐藏管道网络",
+    "ContextMenu_WaterPipesOpenPurifier": "打开净水器",
+    "ContextMenu_WaterPipesRepairFilter": "修复过滤器"
+}

@@ -1,7 +1,7 @@
 {
     "Sandbox_WaterPipes": "Tuberías de Agua",
     "Sandbox_WaterPipes_RealisticPurification": "Purificación de agua realista",
-    "Sandbox_WaterPipes_RealisticPurification_tooltip": "Si se activa, los grifos ya no purifican el agua turbia automáticamente: el agua turbia sigue turbia hasta que la pasas por una baldosa purificadora. Por defecto: desactivado, los grifos dan agua limpia como antes.",
+    "Sandbox_WaterPipes_RealisticPurification_tooltip": "Si se activa, los grifos ya no purifican el agua turbia automáticamente: el agua turbia sigue turbia hasta que la pasas por una baldosa purificadora. Activado por defecto como base de supervivencia; desactívalo para que los grifos den agua limpia como el vanilla.",
     "Sandbox_WaterPipes_GeneratorRefuelThreshold": "Umbral de auto-repostaje del generador (%)",
     "Sandbox_WaterPipes_GeneratorRefuelThreshold_tooltip": "Un generador conectado extrae combustible de la red cuando su depósito baja de este porcentaje de su capacidad. Pon 0 para desactivar el auto-repostaje.",
     "Sandbox_WaterPipes_GeneratorRefuelTarget": "Objetivo de auto-repostaje del generador (%)",

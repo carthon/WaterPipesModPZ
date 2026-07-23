@@ -1,0 +1,11 @@
+{
+    "Sandbox_WaterPipes": "水管系统",
+    "Sandbox_WaterPipes_RealisticPurification": "真实净水",
+    "Sandbox_WaterPipes_RealisticPurification_tooltip": "启用后，水龙头将不再自动净化污染的水：污染的水只有经过净水器后才会变成可饮用的净水。默认开启，作为生存基准；关闭后水龙头将像原版一样直接提供净水。",
+    "Sandbox_WaterPipes_GeneratorRefuelThreshold": "发电机自动加油阈值（%）",
+    "Sandbox_WaterPipes_GeneratorRefuelThreshold_tooltip": "连接到管道网络的发电机，当油量低于油箱容量的此百分比时，将自动从网络中补充燃料。设为 0 可禁用自动加油。",
+    "Sandbox_WaterPipes_GeneratorRefuelTarget": "发电机自动加油目标（%）",
+    "Sandbox_WaterPipes_GeneratorRefuelTarget_tooltip": "自动加油时，发电机会补充燃料直至达到此百分比（100 表示加满）。",
+    "Sandbox_WaterPipes_PurifierFilterWear": "净水器滤芯损耗速度（%）",
+    "Sandbox_WaterPipes_PurifierFilterWear_tooltip": "设置电动净水器滤芯的损耗速度，相对于默认值的百分比。100 为默认速度（一个全新滤芯约可净化 5000 单位污染的水后需要维修）；200 为损耗速度翻倍；50 为损耗减半。设为 0 则滤芯永不损耗，无需维修。"
+}
