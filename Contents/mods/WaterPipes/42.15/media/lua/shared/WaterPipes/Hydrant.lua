@@ -3,9 +3,11 @@ WaterPipes.Hydrant = WaterPipes.Hydrant or {}
 
 require "WaterPipes/Constants"
 require "WaterPipes/Mains"
+require "WaterPipes/State"
 
 local Constants = WaterPipes.Constants
 local Mains = WaterPipes.Mains
+local State = WaterPipes.State
 local Hydrant = WaterPipes.Hydrant
 
 -- A fire hydrant is a plain vanilla street object (the Mov_FireHydrant decoration) with no water of
@@ -72,6 +74,13 @@ function Hydrant.setOpen(worldObject, open)
     modData[Constants.HYDRANT_OPEN_KEY] = open and true or false
     if worldObject.transmitModData then
         pcall(worldObject.transmitModData, worldObject)
+    end
+
+    -- Keep the open-hydrant registry in step. Every toggle path runs through here (the server command
+    -- handler and the single-player direct call both land on setOpen), so this one spot is enough.
+    local square = worldObject.getSquare and worldObject:getSquare() or nil
+    if square then
+        State.setHydrantOpen(square:getX(), square:getY(), square:getZ(), open and true or false)
     end
 end
 

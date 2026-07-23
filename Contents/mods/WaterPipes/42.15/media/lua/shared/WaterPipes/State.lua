@@ -35,6 +35,10 @@ local function ensureStateShape(state)
     state.version = state.version or Constants.STATE_VERSION
     state.pipes = state.pipes or {}
     state.containers = state.containers or {}
+    -- Open fire hydrants, keyed by square. A hydrant is a map object, not something we build, so the
+    -- drain pass cannot find open ones by scanning pipe squares (an open hydrant with no pipe on its
+    -- tile is exactly the case that must still waste water). This persisted set is how it finds them.
+    state.openHydrants = state.openHydrants or {}
     state.graph = state.graph or Graph.new()
     state.lastRebuild = state.lastRebuild or 0
     return state
@@ -69,6 +73,20 @@ function State.registerPipe(x, y, z, metadata)
 
     Logger.log("Registered pipe at " .. key)
     return state.pipes[key]
+end
+
+function State.setHydrantOpen(x, y, z, open)
+    local state = State.ensure()
+    local key = State.squareKey(x, y, z)
+    if open then
+        state.openHydrants[key] = { x = x, y = y, z = z }
+    else
+        state.openHydrants[key] = nil
+    end
+end
+
+function State.getOpenHydrants()
+    return State.ensure().openHydrants
 end
 
 function State.unregisterPipe(x, y, z)

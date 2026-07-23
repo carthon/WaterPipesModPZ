@@ -398,9 +398,11 @@ function System.processAllMains(dt)
     end
 end
 
--- An OPEN hydrant with a pipe on its tile feeds clean water into the network. While the town service
--- runs it is mains-fed, so its reserve is held full and nothing is deducted; once the water is cut it
--- draws down the fixed reserve and runs dry. Closed hydrants keep their reserve untouched.
+-- An OPEN hydrant gushes water at its flow rate. Whatever the pipe network on its tile can take is
+-- fed in; the rest spills onto the street and is wasted -- so an open hydrant with nothing connected,
+-- or with a full network, still loses water. While the town service runs it is mains-fed, so its
+-- reserve is held full and the waste costs nothing; once the water is cut, the full flow (delivered
+-- plus spilled) is drawn from the fixed reserve, which then runs dry. Closed hydrants are untouched.
 function System.processHydrant(hydrant, square, dt)
     local mainsFed = Hydrant.isMainsFed()
     if mainsFed then
@@ -408,29 +410,36 @@ function System.processHydrant(hydrant, square, dt)
     end
 
     local reserve = Hydrant.reserve(hydrant)
-    local available = mainsFed and Hydrant.flowFor(dt) or math.min(Hydrant.flowFor(dt), reserve)
-    local wanted = math.min(available, NetworkAccess.availableToPush(square, "Water"))
-    if wanted <= 0 then
+    local flow = mainsFed and Hydrant.flowFor(dt) or math.min(Hydrant.flowFor(dt), reserve)
+    if flow <= 0 then
         return
     end
 
-    local added = NetworkAccess.fillFluidAtSquare(square, "Water", wanted)
-    if added > 0 and not mainsFed then
-        Hydrant.setReserve(hydrant, reserve - added)
+    -- The network takes what it can; the remainder is spilled. Both come out of the flow, so the
+    -- reserve loses the whole flow whether or not anything was connected.
+    NetworkAccess.fillFluidAtSquare(square, "Water", flow)
+    if not mainsFed then
+        Hydrant.setReserve(hydrant, reserve - flow)
     end
 end
 
+-- Driven by the open-hydrant registry rather than the pipe list, so a hydrant opened with no pipe on
+-- its tile still wastes water. The registry is self-cleaning: an entry whose hydrant is gone or has
+-- been closed is dropped here.
 function System.processHydrants(dt)
     dt = dt or 1.0
     if dt <= 0 then
         return
     end
-    local state = State.ensure()
-    for _, pipeData in pairs(state.pipes) do
-        local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
-        local hydrant = square and Hydrant.findOnSquare(square)
-        if hydrant and Hydrant.isOpen(hydrant) then
-            System.processHydrant(hydrant, square, dt)
+    for key, coord in pairs(State.getOpenHydrants()) do
+        local square = getSquare(coord.x, coord.y, coord.z)
+        if square then
+            local hydrant = Hydrant.findOnSquare(square)
+            if hydrant and Hydrant.isOpen(hydrant) then
+                System.processHydrant(hydrant, square, dt)
+            else
+                State.setHydrantOpen(coord.x, coord.y, coord.z, false)
+            end
         end
     end
 end

@@ -12,6 +12,7 @@ require "WaterPipes/NetworkAccess"
 require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Hydrant"
+require "WaterPipes/ISToggleHydrant"
 require "WaterPipes/Irrigation"
 require "WaterPipes/WaterPipesIrrigationDebug"
 require "WaterPipes/WaterPipesRouterPressureWindow"
@@ -917,17 +918,20 @@ function ContextMenu.setRouterPressure(playerObj, router, pressure)
     end
 end
 
--- Server-authoritative in MP so every client agrees on which hydrants are flowing; direct in SP.
+-- Walk to the hydrant, equip the wrench, and turn the valve as a timed action -- the actual flip is
+-- server-authoritative (ISToggleHydrant sends the command; direct in SP).
 function ContextMenu.setHydrantOpen(playerObj, hydrant, open)
     local square = hydrant and hydrant:getSquare()
-    if not square then
+    if not square or not playerObj then
         return
     end
-    if isClient() then
-        sendClientCommand(playerObj, "WaterPipes", "setHydrantOpen",
-            { x = square:getX(), y = square:getY(), z = square:getZ(), open = open and true or false })
-    else
-        Hydrant.setOpen(hydrant, open)
+    local wrench = playerObj:getInventory():getFirstTypeRecurse(Constants.PIPE_TOOL_TYPE)
+    if not wrench then
+        return
+    end
+    if luautils.walkAdj(playerObj, square, false) then
+        ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
+        ISTimedActionQueue.add(ISToggleHydrant:new(playerObj, hydrant, wrench, open))
     end
 end
 
