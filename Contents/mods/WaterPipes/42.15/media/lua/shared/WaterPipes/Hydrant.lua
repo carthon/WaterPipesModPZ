@@ -150,4 +150,13 @@ function Hydrant.flowFor(dt)
     return math.max(Constants.HYDRANT_FLOW_RATE, 0) * math.max(dt or 0, 0)
 end
 
+-- Is water actually coming out right now? Open, and with something to give -- mains-fed, or still
+-- holding some reserve. A cut hydrant whose reserve has run dry is open but silent. Drives the sound.
+function Hydrant.isFlowing(hydrant)
+    if not Hydrant.isOpen(hydrant) then
+        return false
+    end
+    return Hydrant.isMainsFed() or Hydrant.reserve(hydrant) > 0
+end
+
 return Hydrant
