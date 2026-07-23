@@ -217,6 +217,10 @@ Constants.HYDRANT_OPEN_KEY = "waterpipesHydrantOpen"      -- modData: opened wit
 Constants.HYDRANT_RESERVE_KEY = "waterpipesHydrantReserve" -- modData: litres left once the mains is cut
 Constants.HYDRANT_RESERVE = 1000            -- litres held in the local main after the shutoff
 Constants.HYDRANT_FLOW_RATE = 60            -- litres per in-game minute an open hydrant delivers
+-- Pressure an open, mains-fed hydrant floors the network at, m.c.a. A hydrant is a high-flow main tap,
+-- so it runs above the household mains (25.0) and comfortably above a sprinkler's 20.0 -- opening one
+-- runs sprinklers far from any barrel with no pump, until the day the water is cut.
+Constants.HYDRANT_HEAD = 40.0
 
 -- ===== Water stagnation =====
 -- Standing water goes bad. Every water container carries the world-age hour of its last movement

@@ -117,6 +117,25 @@ function Hydrant.isMainsFed()
     return Mains.serviceLive()
 end
 
+-- Pressure an open, mains-fed hydrant holds its network at. A hydrant is a high-flow tap on the town
+-- main, so it runs higher than a household supply (Mains.head). Real hydrants sit around 3-4 bar;
+-- stored in tenths so an integer sandbox slider can say 40.0.
+function Hydrant.head()
+    local sv = SandboxVars and SandboxVars.WaterPipes
+    local v = sv and sv.HydrantHead
+    if type(v) == "number" then
+        return math.max(v, 0) / 10
+    end
+    return Constants.HYDRANT_HEAD
+end
+
+-- Does this hydrant put pressure into the network right now? Only while OPEN and still mains-fed --
+-- the pressure is the town main's, so once the water is cut an open hydrant still yields its reserve
+-- but with no pressure behind it, exactly as a real standpipe would drain by gravity.
+function Hydrant.pressureActive(hydrant)
+    return Hydrant.isOpen(hydrant) and Hydrant.isMainsFed()
+end
+
 -- Litres an open hydrant may deliver in `dt` in-game minutes.
 function Hydrant.flowFor(dt)
     return math.max(Constants.HYDRANT_FLOW_RATE, 0) * math.max(dt or 0, 0)

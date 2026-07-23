@@ -46,5 +46,7 @@
     "Sandbox_WaterPipes_RainTaintsOpenWater": "Rain taints open water",
     "Sandbox_WaterPipes_RainTaintsOpenWater_tooltip": "When on, rain falling on an open container left outside taints its whole network, so uncovered collection is a gamble whenever the weather turns. Turn off if you would rather open containers only spoil from sitting still.",
     "Sandbox_WaterPipes_HydrantReserve": "Fire hydrant reserve (litres)",
-    "Sandbox_WaterPipes_HydrantReserve_tooltip": "How much water a fire hydrant still holds in its local main once the town water is cut. 1000 by default. While the water service is on the hydrant is mains-fed and effectively bottomless; this is only what is left afterwards, and it drains as you use it. Set to 0 so hydrants run dry the moment the water stops."
+    "Sandbox_WaterPipes_HydrantReserve_tooltip": "How much water a fire hydrant still holds in its local main once the town water is cut. 1000 by default. While the water service is on the hydrant is mains-fed and effectively bottomless; this is only what is left afterwards, and it drains as you use it. Set to 0 so hydrants run dry the moment the water stops.",
+    "Sandbox_WaterPipes_HydrantHead": "Fire hydrant pressure (tenths)",
+    "Sandbox_WaterPipes_HydrantHead_tooltip": "Pressure an open, mains-fed fire hydrant holds its network at, in tenths of a metre of water column. 400 = 40.0, well above the household mains (25.0) and a sprinkler's 20.0, because a hydrant is a high-flow tap on the town main. Opening one runs sprinklers far from any barrel with no pump, right up to the day the water is cut, after which the hydrant still yields its reserve but with no pressure. Lower it to make hydrants less of a free pump."
 }

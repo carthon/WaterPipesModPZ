@@ -4,6 +4,7 @@ WaterPipes.NetworkAccess = WaterPipes.NetworkAccess or {}
 require "WaterPipes/Constants"
 require "WaterPipes/ContainerAdapter"
 require "WaterPipes/EndpointObjects"
+require "WaterPipes/Hydrant"
 require "WaterPipes/Logger"
 require "WaterPipes/Mains"
 require "WaterPipes/PipeObjectUtils"
@@ -15,6 +16,7 @@ require "WaterPipes/Router"
 local Adapter = WaterPipes.ContainerAdapter
 local Constants = WaterPipes.Constants
 local EndpointObjects = WaterPipes.EndpointObjects
+local Hydrant = WaterPipes.Hydrant
 local Logger = WaterPipes.Logger
 local Mains = WaterPipes.Mains
 local NetworkAccess = WaterPipes.NetworkAccess
@@ -161,7 +163,7 @@ end
 -- placed on the right side of a regulator: pumps hanging off a node are UPSTREAM of that node's valve
 -- and cannot push past it, while everything on the way back to the consumer boosts freely.
 local function newChain(parent, ceiling, hops, z)
-    return { parent = parent, ceiling = ceiling, hops = hops, z = z, pumps = {}, mains = false }
+    return { parent = parent, ceiling = ceiling, hops = hops, z = z, pumps = {}, supplyHead = 0 }
 end
 
 -- Head the pumps between `chain` and the consumer add, inclusive of the chain's own stretch. Pumps ADD
@@ -177,26 +179,24 @@ local function chainPumpHead(chain)
     return chain.pumpHead
 end
 
--- Is there a live town-water inlet between `chain` and the consumer? The mains is NOT another pump: a
--- utility holds its main at a set pressure and every connection to it sits at that pressure, so it is
--- a FLOOR under the whole run rather than something added on top of the source's own head. Two inlets
--- are the same town supply, which falls out of this for free -- a floor cannot be applied twice.
--- Deliberately uncached, unlike chainPumpHead: `chain.mains` is still being set as the walk finds
--- squares, and a chain is at most a handful of nodes long, so caching would buy nothing and could
--- freeze a `false` taken before the inlet was reached.
-local function chainHasMains(chain)
+-- The pressure a municipal supply on `chain` floors the run at. A utility (the town mains, or an open
+-- fire hydrant fed by it) holds its main at a set pressure, and every connection sits at that pressure
+-- -- so it is a FLOOR under the whole run, not head added on top of a source. Two supplies do not
+-- stack: they are the same town water, so the floor is simply the highest one present, which is what
+-- taking the max gives. Each chain node records the best floor contributed by sources on its own
+-- squares (see tryAdd); this walks node + parents for the best between `chain` and the consumer.
+-- Deliberately uncached, unlike chainPumpHead: `supplyHead` is still being raised as the walk finds
+-- squares, so caching could freeze a value taken before a later inlet was reached.
+local function chainSupplyHead(chain)
     if not chain then
-        return false
+        return 0
     end
-    return chain.mains or chainHasMains(chain.parent)
+    return math.max(chain.supplyHead or 0, chainSupplyHead(chain.parent))
 end
 
 -- Everything a source on `chain` gets for free, applied to a head it computed on its own.
 local function applyChainSupply(head, chain)
-    if chainHasMains(chain) then
-        return math.max(head, Mains.head())
-    end
-    return head
+    return math.max(head, chainSupplyHead(chain))
 end
 
 -- What a source at (z, hops) on `chain` actually delivers to a `kind` consumer at consumerZ: the
@@ -265,7 +265,7 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
     local chains = {}   -- regulator chain each square was reached through (see newChain)
     local pipeSquares = {}
     local rootChain = newChain(nil, nil, 0, originSquare:getZ())
-    local zone = { pumps = {}, mains = {}, rootChain = rootChain }
+    local zone = { pumps = {}, mains = {}, hydrants = {}, supplyHead = 0, rootChain = rootChain }
 
     local function tryAdd(square, distance, chain)
         if not square or not hasPipeOnSquare(square) or Router.hasRouterOnSquare(square) then
@@ -290,12 +290,29 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
             chain.pumps[#chain.pumps + 1] = pump
         end
 
-        -- A plumbed fixture that still has town water behind it is an inlet: same accounting as a
-        -- pump, so a regulator holds it down exactly the same way.
+        -- Municipal supplies floor the run at their pressure (see chainSupplyHead). A plumbed fixture
+        -- with live town water behind it, and an OPEN hydrant that is still mains-fed, are both such
+        -- floors; each raises the chain node's best floor and the zone's, so a regulator holds them
+        -- down the same way it holds a pump down.
+        local function addSupply(head)
+            if head > (chain.supplyHead or 0) then
+                chain.supplyHead = head
+            end
+            if head > zone.supplyHead then
+                zone.supplyHead = head
+            end
+        end
+
         local mains = Mains.findOnSquare(square)
         if mains then
             zone.mains[#zone.mains + 1] = mains
-            chain.mains = true
+            addSupply(Mains.head())
+        end
+
+        local hydrant = Hydrant.findOnSquare(square)
+        if hydrant and Hydrant.pressureActive(hydrant) then
+            zone.hydrants[#zone.hydrants + 1] = hydrant
+            addSupply(Hydrant.head())
         end
     end
 
@@ -499,12 +516,10 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill)
     local pressure = nil
     if kind or fill then
         -- How far water entering here can be pushed UPHILL. Fills are not regulated (a fill query
-        -- never crosses a router), so the whole zone's lift counts. The mains is a floor here too:
-        -- a live inlet holds the network at its pressure, which is lift the pumps do not have to find.
-        local liftHead = Pump.headForPumps(zone.pumps)
-        if #zone.mains > 0 then
-            liftHead = math.max(liftHead, Mains.head())
-        end
+        -- never crosses a router), so the whole zone's lift counts. A municipal supply is a floor here
+        -- too: a live inlet or open hydrant holds the network at its pressure, which is lift the pumps
+        -- do not have to find. zone.supplyHead already carries the highest such floor.
+        local liftHead = math.max(Pump.headForPumps(zone.pumps), zone.supplyHead or 0)
         if fill then
             descriptors = applyFillGate(descriptors, originSquare, liftHead)
         else
@@ -688,6 +703,7 @@ function NetworkAccess.getPressureReport(square)
         pumpCount = #zone.pumps,
         poweredPumps = 0,
         mainsCount = #zone.mains,
+        hydrantCount = #zone.hydrants,
         sources = {},
         kinds = {},
     }
@@ -699,6 +715,8 @@ function NetworkAccess.getPressureReport(square)
     end
     report.pumpHead = Pump.headForPumps(zone.pumps)
     report.mainsHead = #zone.mains > 0 and Mains.head() or 0
+    -- The supply floor the whole zone sits at, whichever municipal source is highest.
+    report.supplyHead = zone.supplyHead or 0
 
     if #pipeSquares == 0 then
         return report

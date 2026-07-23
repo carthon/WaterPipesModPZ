@@ -527,6 +527,8 @@ local function describePressureReport(report, square)
         report.pipeCount, report.containerCount or 0, report.poweredPumps, report.pumpCount)
     add("Pump head: +%.1f", report.pumpHead or 0)
     add("Mains: %d live inlet(s), head +%.1f", report.mainsCount or 0, report.mainsHead or 0)
+    add("Hydrants: %d pressurising, supply floor %.1f",
+        report.hydrantCount or 0, report.supplyHead or 0)
 
     add(" ")
     add("Head by consumer (best source, after ceiling):")

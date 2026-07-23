@@ -207,3 +207,13 @@ option WaterPipes.HydrantReserve
     page = WaterPipes,
     translation = WaterPipes_HydrantReserve,
 }
+
+option WaterPipes.HydrantHead
+{
+    type = integer,
+    min = 0,
+    max = 1000,
+    default = 400,
+    page = WaterPipes,
+    translation = WaterPipes_HydrantHead,
+}
