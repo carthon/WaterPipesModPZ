@@ -9,5 +9,9 @@
     "Tooltip_WaterFilterCartridge": "用于过滤式净水器的可更换木炭滤芯。右键净水器安装，可恢复其净水能力。",
     "Tooltip_craft_WaterPipeRouterDesc": "单向流体路由器。可将一条管道分割成两个彼此独立的网络——入口（IN）和出口（OUT），二者只能通过放置在本格内的容器交换液体。放置净水器可在液体流经时完成净化，也可放置普通容器作为缓冲储液。建造时按 R 可调整出口方向，也可通过右键菜单修改方向。",
     "Tooltip_WaterPipesFilterCondition": "滤芯状态：%1%",
-    "Tooltip_WaterPipesRepairNeeds": "需要："
+    "Tooltip_WaterPipesRepairNeeds": "需要：",
+    "Tooltip_craft_WaterPumpDesc": "电动水泵。安装在管道上时，只要有电就会提升该网络的压力，多台串联可叠加。放在水井或开放水域旁时，还会把水抽入网络。它只能从约两层楼以下吸水，却能把水推送到高得多的地方，所以要放在低处。需要管钳。",
+    "Tooltip_craft_WaterPipeDripDesc": "滴灌头。它本身就是一段水管，灌溉自身格子上的作物并把水传递下去。无需压力，只要有水即可。压力过大会使其爆裂，所以不要在同一条线路上接水泵，或用路由器限制压力。需要管钳。",
+    "Tooltip_craft_WaterPipeSprinklerDesc": "喷洒器。它本身就是一段水管，灌溉周围 3x3 范围，但需要足够的压力，也就是需要水泵。无论格子上有没有作物都会喷洒，浪费水，而且声音大到会招来丧尸。需要管钳。",
+    "Tooltip_craft_WaterPressureGaugeDesc": "压力表。安装在水管上；右键查看该点的压力，以及喷洒器能否在此处工作。需要管钳。"
 }

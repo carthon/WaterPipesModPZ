@@ -8,5 +8,9 @@
     "WaterPurifierElectric": "蒸馏净水器（电动）",
     "WaterPipeRouter": "流体路由器",
     "WaterPipes_CraftFilterCartridge": "制作滤芯",
-    "WaterPipes_ForgeMetalPipe": "锻造金属水管"
+    "WaterPipes_ForgeMetalPipe": "锻造金属水管",
+    "WaterPump": "水泵",
+    "WaterPipeDrip": "滴灌头",
+    "WaterPipeSprinkler": "喷洒器",
+    "WaterPressureGauge": "压力表"
 }
