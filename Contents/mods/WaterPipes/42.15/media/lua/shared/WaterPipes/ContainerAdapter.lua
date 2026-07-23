@@ -77,6 +77,24 @@ local function isExcludedWorldObject(worldObject)
     return modData and modData[Constants.ADAPTER_SOURCE_MODDATA_KEY] == true or false
 end
 
+-- Water appliances (washing machines) hold a FluidContainer inherited from IsoObject, so the
+-- duck-typed detection below would adopt them as network STORAGE and rebalanceSummary would overwrite
+-- their water every tick -- so they could never reach the level they need to run. They are consumers,
+-- not vessels: EndpointObjects recognises the same class list as plumbable endpoints instead. Here we
+-- just keep them out of the storage path. Constants.WATER_APPLIANCE_CLASSES is the shared source.
+local function isExcludedAppliance(worldObject)
+    if not worldObject or not instanceof then
+        return false
+    end
+    for _, className in ipairs(Constants.WATER_APPLIANCE_CLASSES) do
+        local ok, isInstance = pcall(instanceof, worldObject, className)
+        if ok and isInstance then
+            return true
+        end
+    end
+    return false
+end
+
 local function addUniqueObject(results, seen, worldObject)
     if not worldObject then
         return
@@ -193,6 +211,10 @@ local function getDirectWorldFluidKind(worldObject)
         return false
     end
 
+    if isExcludedAppliance(worldObject) then
+        return false
+    end
+
     local fluidContainer = getWorldFluidContainer(worldObject)
     local hasReserveWater = worldObject.getReserveWaterMax or worldObject.getReserveWaterAmount or worldObject.setReserveWaterAmount
     if not fluidContainer and not hasReserveWater then
@@ -284,6 +306,10 @@ function Adapter.getWorldFluidKind(worldObject)
     end
 
     if instanceof and instanceof(worldObject, "IsoWorldInventoryObject") then
+        return false
+    end
+
+    if isExcludedAppliance(worldObject) then
         return false
     end
 
