@@ -221,6 +221,11 @@ Constants.HYDRANT_FLOW_RATE = 60            -- litres per in-game minute an open
 -- so it runs above the household mains (25.0) and comfortably above a sprinkler's 20.0 -- opening one
 -- runs sprinklers far from any barrel with no pump, until the day the water is cut.
 Constants.HYDRANT_HEAD = 40.0
+-- A shallow-water decal painted on the 3x3 around a flowing hydrant, purely to show the spill. It is
+-- a client-only overlay (each client paints its own from the synced open state, never world-saved --
+-- see WaterPipesHydrantPuddles), flagged in modData so the manager can find and clear its own tiles.
+Constants.HYDRANT_PUDDLE_SPRITE = "waterpipes_01_44"
+Constants.HYDRANT_PUDDLE_MODDATA_KEY = "waterpipesPuddle"
 
 -- ===== Water stagnation =====
 -- Standing water goes bad. Every water container carries the world-age hour of its last movement
