@@ -13,6 +13,8 @@ require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Hydrant"
 require "WaterPipes/ISToggleHydrant"
+require "WaterPipes/ISTogglePump"
+require "WaterPipes/ISOpenWaterPump"
 require "WaterPipes/Irrigation"
 require "WaterPipes/WaterPipesIrrigationDebug"
 require "WaterPipes/WaterPipesRouterPressureWindow"
@@ -23,6 +25,7 @@ require "WaterPipes/Logger"
 require "WaterPipes/PipeAutotile"
 require "WaterPipes/API"
 require "WaterPipes/WaterPipesPurifierWindow"
+require "WaterPipes/WaterPipesPumpWindow"
 require "WaterPipes/WaterPipesPurifierSound"
 require "WaterPipes/ISRepairWaterPurifier"
 require "WaterPipes/ISOpenWaterPurifier"
@@ -40,6 +43,7 @@ local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Purifier = WaterPipes.Purifier
 local Router = WaterPipes.Router
 local Hydrant = WaterPipes.Hydrant
+local Pump = WaterPipes.Pump
 local Pressure = WaterPipes.Pressure
 local Irrigation = WaterPipes.Irrigation
 local IrrigationDebug = WaterPipes.IrrigationDebug
@@ -867,6 +871,10 @@ local function findRouterInWorldObjects(worldobjects)
     return findFlaggedPipeInWorldObjects(worldobjects, Router.isRouter)
 end
 
+local function findPumpInWorldObjects(worldobjects)
+    return findFlaggedPipeInWorldObjects(worldobjects, Pump.isPump)
+end
+
 local function findDripInWorldObjects(worldobjects)
     return findFlaggedPipeInWorldObjects(worldobjects, Irrigation.isDrip)
 end
@@ -933,6 +941,51 @@ function ContextMenu.setHydrantOpen(playerObj, hydrant, open)
         ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
         ISTimedActionQueue.add(ISToggleHydrant:new(playerObj, hydrant, wrench, open))
     end
+end
+
+-- ===== Water pump: switch + status =====
+
+-- Flipping the switch is a physical act, so the character walks over to the machine first and the
+-- state only changes when the timed action completes (ISTogglePump, which is where the world change
+-- is made server-authoritatively). No tool: it is a switch, not plumbing.
+function ContextMenu.togglePump(playerObj, pump, enable)
+    if not playerObj or not pump then
+        return
+    end
+    if luautils.walkAdjObject(playerObj, pump, true) then
+        ISTimedActionQueue.add(ISTogglePump:new(playerObj, pump, enable))
+    end
+end
+
+-- Walk over and read the machine. If it turns out to be unreachable, open the window in place rather
+-- than leaving the player with a dead menu entry -- same fallback as the purifier.
+function ContextMenu.openPump(playerObj, pump)
+    if not playerObj or not pump then
+        return
+    end
+    if luautils.walkAdjObject(playerObj, pump, true) then
+        ISTimedActionQueue.add(ISOpenWaterPump:new(playerObj, pump))
+    elseif WaterPipesPumpWindow then
+        WaterPipesPumpWindow.openFor(pump)
+    end
+end
+
+-- The pump gets a submenu of its own, titled with the machine's name, because it now has more than
+-- one thing you can do to it. The switch entry is labelled with what clicking will DO, not with what
+-- the pump currently is, so there is never any doubt which way it is about to go.
+--
+-- The name is its own IGUI key rather than the recipe's bare "WaterPump" entry: that one lives in
+-- Recipes.json for the crafting UI, and a getText miss there would put the raw key on screen. The
+-- text is identical in all three locales, so this still reads like the build menu.
+local function addPumpMenu(context, playerObj, pump)
+    local rootOption = context:addOption(getText("IGUI_WaterPipesPumpName"), nil, nil)
+    local subMenu = ISContextMenu:getNew(context)
+    context:addSubMenu(rootOption, subMenu)
+
+    local enabled = Pump.isEnabled(pump)
+    subMenu:addOption(getText(enabled and "ContextMenu_WaterPipesPumpTurnOff"
+        or "ContextMenu_WaterPipesPumpTurnOn"), playerObj, ContextMenu.togglePump, pump, not enabled)
+    subMenu:addOption(getText("ContextMenu_WaterPipesPumpStatus"), playerObj, ContextMenu.openPump, pump)
 end
 
 function ContextMenu.repairDrip(playerObj, drip)
@@ -1119,6 +1172,12 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     local gaugeObject = findGaugeInWorldObjects(worldobjects)
     local hasGaugeOption = gaugeObject ~= nil
 
+    -- The pump's switch and readout. Unlike the router regulator these stay available with the
+    -- pressure model off: the switch still stops the intake, and the readout still answers whether
+    -- the machine has power.
+    local pumpObject = findPumpInWorldObjects(worldobjects)
+    local hasPumpOption = pumpObject ~= nil
+
     local dripObject = findDripInWorldObjects(worldobjects)
     local hasDripRepairOption = dripObject ~= nil and Irrigation.isDripBurst(dripObject)
 
@@ -1135,7 +1194,7 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         and not hasShowNetworkOption and not hasHideNetworkOption
         and not hasPurifierOption
         and not hasRouterPressureOption and not hasGaugeOption and not hasDripRepairOption
-        and not hasEmitterOption and not hasHydrantOption
+        and not hasEmitterOption and not hasHydrantOption and not hasPumpOption
         and not isDebugActive() then
         return false
     end
@@ -1184,6 +1243,10 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
                 option.toolTip = buildRepairTooltip(purifierObject, hasKit, hasWrench)
             end
         end
+    end
+
+    if hasPumpOption then
+        addPumpMenu(context, playerObj, pumpObject)
     end
 
     if hasRouterPressureOption then

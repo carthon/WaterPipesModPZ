@@ -66,12 +66,37 @@ local function squareHasPower(square)
     return ok and powered or false
 end
 
-function Pump.isPowered(worldObject)
+-- A pump runs only with BOTH gates up: mains power on its tile, and the player's switch left on.
+-- Everything downstream (head, intake, the pressure report) asks isPowered and nothing else, so
+-- combining the two there is enough -- no call site needs to know the switch exists.
+function Pump.hasPower(worldObject)
     if not Pump.isPump(worldObject) then
         return false
     end
     local square = worldObject.getSquare and worldObject:getSquare() or nil
     return squareHasPower(square)
+end
+
+-- Absent key means ON -- see PUMP_ENABLED_KEY. Every pump that predates the switch keeps working.
+function Pump.isEnabled(worldObject)
+    local modData = getModData(worldObject)
+    return not modData or modData[Constants.PUMP_ENABLED_KEY] ~= false
+end
+
+-- Server-authoritative in MP: clients request the flip, the server lands here (see ISTogglePump).
+function Pump.setEnabled(worldObject, enabled)
+    local modData = getModData(worldObject)
+    if not modData then
+        return
+    end
+    modData[Constants.PUMP_ENABLED_KEY] = enabled and true or false
+    if worldObject.transmitModData then
+        pcall(worldObject.transmitModData, worldObject)
+    end
+end
+
+function Pump.isPowered(worldObject)
+    return Pump.hasPower(worldObject) and Pump.isEnabled(worldObject)
 end
 
 -- ===== Head =====
@@ -305,6 +330,66 @@ function Pump.refundToSource(source, amount)
         restored = math.min(restored, capacity)
     end
     pcall(container.adjustAmount, container, restored)
+end
+
+-- ===== Readout =====
+
+-- Everything the status dialog and the context menu need, in one call.
+--
+-- NetworkAccess is deliberately NOT required at the top of this file: it already requires Pump, and
+-- closing that loop would make the pair a recursive require. Anything asking for a status runs long
+-- after both modules are loaded, so it is resolved off the WaterPipes table here instead.
+function Pump.getStatus(pumpObject)
+    if not Pump.isPump(pumpObject) then
+        return nil
+    end
+    local square = pumpObject.getSquare and pumpObject:getSquare() or nil
+    if not square then
+        return nil
+    end
+
+    local status = {
+        enabled = Pump.isEnabled(pumpObject),
+        hasPower = Pump.hasPower(pumpObject),
+    }
+    status.running = status.enabled and status.hasPower
+
+    -- Intake side. Finding a source is about WHERE the pump stands, so it answers even while the pump
+    -- is off -- "there is a well right here, you just have it switched off" is the useful answer.
+    local source = Pump.findSource(pumpObject)
+    status.sourceKind = source and source.kind or nil     -- "well" | "water" | nil
+    status.drawing = status.running and source ~= nil
+
+    -- Pressure side. `outlet` is what the line actually holds at this tile right now; `inlet` is what
+    -- it would hold WITHOUT this pump. A zone's lift is max(pump head, municipal supply floor), so a
+    -- pump standing on a mains-fed run can be adding nothing at all -- which is exactly what the
+    -- player is trying to find out. Taking the difference between the two lifts says so honestly,
+    -- where subtracting a nominal 25.0 would invent a contribution the pump is not making.
+    local NetworkAccess = WaterPipes.NetworkAccess
+    local report = NetworkAccess and NetworkAccess.getPressureReport(square) or nil
+    if report then
+        status.pressureEnabled = report.enabled
+
+        local own = Pressure.pumpHead()
+        local supply = report.supplyHead or 0
+        -- headForPumps only counts POWERED pumps, so this already excludes us while we are off.
+        local others = report.pumpHead or 0
+        if status.running then
+            others = math.max(others - own, 0)
+        end
+        local delta = math.max(others + own, supply) - math.max(others, supply)
+
+        local tap = report.kinds and report.kinds[Constants.PRESSURE_KIND_TAP] or nil
+        local outlet = tap and tap.head or nil
+        status.outlet = outlet
+        if outlet then
+            status.inlet = status.running and math.max(outlet - delta, 0) or outlet
+        end
+        -- What flipping the switch would buy, so an idle pump can justify itself.
+        status.wouldGain = (not status.running) and delta or 0
+    end
+
+    return status
 end
 
 return Pump

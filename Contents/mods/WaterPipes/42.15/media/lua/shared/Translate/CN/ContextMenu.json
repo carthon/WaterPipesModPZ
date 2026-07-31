@@ -9,5 +9,8 @@
     "ContextMenu_WaterPipesRepairDrip": "修复滴灌头",
     "ContextMenu_WaterPipesRouterPressureOpen": "设置压力上限...",
     "ContextMenu_WaterPipesOpenHydrant": "打开消防栓",
-    "ContextMenu_WaterPipesCloseHydrant": "关闭消防栓"
+    "ContextMenu_WaterPipesCloseHydrant": "关闭消防栓",
+    "ContextMenu_WaterPipesPumpTurnOn": "开启",
+    "ContextMenu_WaterPipesPumpTurnOff": "关闭",
+    "ContextMenu_WaterPipesPumpStatus": "查看水泵状态"
 }

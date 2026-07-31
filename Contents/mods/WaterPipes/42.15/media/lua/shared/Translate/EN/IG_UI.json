@@ -46,5 +46,19 @@
     "IGUI_WaterPipesClose": "Close",
     "IGUI_WaterPipesHydrantMainsFed": "Mains-fed: flows freely while the town water is on.",
     "IGUI_WaterPipesHydrantReserve": "Water left in the main: %1 L.",
-    "IGUI_WaterPipesHydrantNeedsPipe": "Lay a pipe on its tile to connect it to your network."
+    "IGUI_WaterPipesHydrantNeedsPipe": "Lay a pipe on its tile to connect it to your network.",
+    "IGUI_WaterPipesPumpName": "Water Pump",
+    "IGUI_WaterPipesPumpRunning": "Running",
+    "IGUI_WaterPipesPumpOff": "Switched off",
+    "IGUI_WaterPipesPumpNoPower": "No power",
+    "IGUI_WaterPipesPumpNoSource": "No well or open water in reach: this pump only adds pressure.",
+    "IGUI_WaterPipesPumpDrawingWell": "Drawing water from a well.",
+    "IGUI_WaterPipesPumpDrawingWater": "Drawing dirty water from open water.",
+    "IGUI_WaterPipesPumpSourceWellIdle": "A well is in reach, but the pump is not running.",
+    "IGUI_WaterPipesPumpSourceWaterIdle": "Open water is in reach, but the pump is not running.",
+    "IGUI_WaterPipesPumpNoSupply": "No supply reaches this pump.",
+    "IGUI_WaterPipesPumpInlet": "Pressure in: %1 m of head",
+    "IGUI_WaterPipesPumpOutlet": "Pressure out: %1 m of head",
+    "IGUI_WaterPipesPumpAdding": "Adding %1 m to this line.",
+    "IGUI_WaterPipesPumpWouldGain": "Turning it on would add %1 m."
 }

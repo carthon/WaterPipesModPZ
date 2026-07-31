@@ -925,6 +925,21 @@ local function onClientCommand(module, command, player, args)
         return
     end
 
+    -- Pump switch: server-authoritative so every client agrees on which pumps are running, the same
+    -- way the hydrant valve is. A switched-off pump reads as unpowered everywhere (Pump.isPowered),
+    -- so it stops both boosting pressure and drawing from its source.
+    if command == "setPumpEnabled" then
+        local square = resolveCommandSquare(args)
+        local pump = square and Pump.findOnSquare(square)
+        if not pump then
+            Logger.warn("Set pump command: no pump at "
+                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
+            return
+        end
+        Pump.setEnabled(pump, args and args.enabled)
+        return
+    end
+
     -- Debug: force an irrigation pass immediately, so a tester can watch crops fill without waiting
     -- for the hourly tick. dt comes from the client (hours of watering to apply in one shot).
     if command == "runIrrigation" then

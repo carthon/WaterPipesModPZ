@@ -46,5 +46,19 @@
     "IGUI_WaterPipesClose": "关闭",
     "IGUI_WaterPipesHydrantMainsFed": "由市政供水供给：只要城市供水未断，就能持续出水。",
     "IGUI_WaterPipesHydrantReserve": "干管中剩余的水：%1 升。",
-    "IGUI_WaterPipesHydrantNeedsPipe": "在其格子上铺设水管即可接入你的网络。"
+    "IGUI_WaterPipesHydrantNeedsPipe": "在其格子上铺设水管即可接入你的网络。",
+    "IGUI_WaterPipesPumpName": "水泵",
+    "IGUI_WaterPipesPumpRunning": "运行中",
+    "IGUI_WaterPipesPumpOff": "已关闭",
+    "IGUI_WaterPipesPumpNoPower": "没有电力",
+    "IGUI_WaterPipesPumpNoSource": "附近没有水井或开放水域：这台水泵只提供压力。",
+    "IGUI_WaterPipesPumpDrawingWell": "正在从水井抽水。",
+    "IGUI_WaterPipesPumpDrawingWater": "正在从开放水域抽取脏水。",
+    "IGUI_WaterPipesPumpSourceWellIdle": "附近有水井，但水泵未运行。",
+    "IGUI_WaterPipesPumpSourceWaterIdle": "附近有开放水域，但水泵未运行。",
+    "IGUI_WaterPipesPumpNoSupply": "没有水源到达这台水泵。",
+    "IGUI_WaterPipesPumpInlet": "进水压力：%1 米水柱",
+    "IGUI_WaterPipesPumpOutlet": "出水压力：%1 米水柱",
+    "IGUI_WaterPipesPumpAdding": "为此管线提供 %1 米。",
+    "IGUI_WaterPipesPumpWouldGain": "开启后可增加 %1 米。"
 }

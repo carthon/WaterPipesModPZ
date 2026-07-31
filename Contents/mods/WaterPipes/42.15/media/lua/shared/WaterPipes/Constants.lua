@@ -187,6 +187,10 @@ Constants.PRESSURE_MODEL_OFF = 3            -- pre-pressure behaviour: pure grav
 -- jobs: a surface pump can only SUCK water up about 7 m (atmospheric pressure caps it at 10.33 m,
 -- ~7-8 m in practice) but can PUSH it 25 m and more. That is why deep wells use submersible pumps.
 Constants.PUMP_MODDATA_KEY = "waterpipesPump"
+-- The manual switch, flipped from the pump's context menu. ABSENT MEANS ON: pumps built before the
+-- switch existed carry no key, and they must keep running after an update rather than silently
+-- stopping every network in every existing save.
+Constants.PUMP_ENABLED_KEY = "waterpipesPumpOn"
 -- Our OWN tiles, not vanilla ones. The art is the same machine copied into the waterpipes atlas;
 -- what changed is who owns the tiledef. The vanilla originals (industry_02_52/53) carry an
 -- AmbientSound property, and a sprite with AmbientSound is rebuilt down the engine's ambient-emitter
