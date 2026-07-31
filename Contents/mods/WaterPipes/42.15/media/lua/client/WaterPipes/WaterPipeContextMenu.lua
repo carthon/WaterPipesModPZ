@@ -1094,43 +1094,29 @@ end
 -- the pipe was already revealed. OnPreFillWorldObjectContextMenu fires BEFORE that bail, and the
 -- context is already visible by then (ISContextMenu.get shows it), so options added here do appear.
 --
--- It owns the network options outright rather than deferring to the main menu when a pipe looks
--- reachable: whether the main menu runs at all depends on the engine's own fetch count, which we
--- cannot see from here. Adding them here unconditionally and flagging it is the only ordering that
--- works in both cases; the main menu below skips them when the flag is set.
-local preAddedNetworkOptions = false
-
+-- Adding the options here does NOT work: when the engine bails, ISMenuContextWorld falls back to
+-- `ISContextMenu.get(...)`, which clears the menu and takes anything we added with it. The one thing
+-- that survives is telling the engine there IS something on this tile. fetch.c is a plain
+-- "did we find anything" counter -- zeroed in clearFetch, read exactly once for that bail -- so
+-- nudging it lets createMenu carry on and the normal menu below runs just as it does on a visible pipe.
 function ContextMenu.doPreMenu(player, context, worldobjects, test)
-    preAddedNetworkOptions = false
     if test then
         return
+    end
+    local fetch = ISWorldObjectContextMenu and ISWorldObjectContextMenu.fetchVars
+    if not fetch or (fetch.c or 0) > 0 then
+        return   -- the engine already found something here; it will not bail
     end
     local playerObj = getSpecificPlayer(player)
     if not playerObj or playerObj:getVehicle() then
         return
     end
 
-    local clicked = squareFromClick(player, context)
     local pipe = findPipeInWorldObjects(worldobjects)
-        or PipeObjectUtils.getPipeOnSquare(clicked)
-
-    if getDebug and getDebug() then
-        print(string.format(
-            "[WaterPipes menu] worldobjects=%d  clickedSquare=%s  pipeFound=%s",
-            worldobjects and #worldobjects or -1,
-            clicked and (clicked:getX() .. "," .. clicked:getY() .. "," .. clicked:getZ()) or "nil",
-            tostring(pipe ~= nil)))
+        or PipeObjectUtils.getPipeOnSquare(squareFromClick(player, context))
+    if pipe then
+        fetch.c = 1
     end
-
-    if not pipe then
-        return
-    end
-
-    context:addOption(getText("ContextMenu_WaterPipesShowNetwork"), playerObj, ContextMenu.showNetwork, pipe)
-    if #ContextMenu.highlightedObjects > 0 then
-        context:addOption(getText("ContextMenu_WaterPipesHideNetwork"), playerObj, ContextMenu.hideNetwork)
-    end
-    preAddedNetworkOptions = true
 end
 
 function ContextMenu.doMenu(player, context, worldobjects, test)
@@ -1236,11 +1222,11 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         applyPlumbOptionIcon(context:addOption(optionName, playerObj, ContextMenu.unplumbGenerator, generatorObject))
     end
 
-    if hasShowNetworkOption and not preAddedNetworkOptions then
+    if hasShowNetworkOption then
         context:addOption(getText("ContextMenu_WaterPipesShowNetwork"), playerObj, ContextMenu.showNetwork, pipeObject)
     end
 
-    if hasHideNetworkOption and not preAddedNetworkOptions then
+    if hasHideNetworkOption then
         context:addOption(getText("ContextMenu_WaterPipesHideNetwork"), playerObj, ContextMenu.hideNetwork)
     end
 
