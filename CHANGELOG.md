@@ -2,6 +2,13 @@
 
 All notable changes to Water Pipes are documented here. Dates are in YYYY-MM-DD.
 
+## [0.6.1] - 2026-07-31
+
+### Fixed
+- **Concealed pipes answer the right-click menu again.** A concealed pipe alone on its tile now
+  offers "Show pipe network" like any other pipe. Nothing about concealed pipes changed: they are
+  still invisible once placed and still only appear while the network view is up.
+
 ## [0.6.0] - 2026-07-23
 
 ### Water pressure
@@ -84,12 +91,6 @@ All notable changes to Water Pipes are documented here. Dates are in YYYY-MM-DD.
 - Fixes: pumps and gauges no longer vanish or error on world reload, the gauge no longer draws over
   the player, router sprites no longer draw over the player, and a pressure-regulated branch now
   loses pressure with distance as it should.
-
-### Known issues
-- A concealed pipe alone on its tile cannot be right-clicked, so "Show pipe network" is unavailable
-  from it. The engine skips the context menu entirely on a tile it finds nothing to pick on, and that
-  happens before any mod is asked to contribute. Use a visible pipe on the same network instead --
-  the view still highlights the concealed ones.
 
 ## [0.5.1] - 2026-07-20
 
