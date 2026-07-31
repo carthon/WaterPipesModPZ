@@ -1,7 +1,7 @@
 {
     "IGUI_WaterPipesGenerator": "Generator",
     "IGUI_WaterPipesFixture": "Water Fixture",
-    "IGUI_CraftCategory_Piping": "Piping",
+    "IGUI_CraftingCategories_Piping": "Piping",
     "IGUI_WaterPipesPurifierWindowTitle": "Electric Purifier",
     "IGUI_WaterPipesPurifierIntake": "Intake",
     "IGUI_WaterPipesPurifierOutput": "Output",
@@ -21,6 +21,8 @@
     "IGUI_WaterPipes_SoundEnabled_tooltip": "Looping ambient hum played by working machines, such as the electric purifier while it is powered. Turn off for total silence.",
     "IGUI_WaterPipes_SoundVolume": "Machine sound volume (%)",
     "IGUI_WaterPipes_SoundVolume_tooltip": "Volume of the mod's machine sounds, from 0 (silent) to 100 (loudest).",
+    "IGUI_WaterPipes_EffectsEnabled": "Water spray effects",
+    "IGUI_WaterPipes_EffectsEnabled_tooltip": "Animated water spray drawn over running sprinklers and open fire hydrants. Purely visual; turn off if you prefer no effects or want to save a little performance.",
     "IGUI_WaterPipesPressureModelOff": "Pressure is switched off in this game's sandbox options.",
     "IGUI_WaterPipesGaugeNoSupply": "No supply reaches this point.",
     "IGUI_WaterPipesGaugeReading": "Pressure here: %1 m of head",

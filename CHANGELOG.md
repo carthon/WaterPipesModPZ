@@ -43,15 +43,35 @@ All notable changes to Water Pipes are documented here. Dates are in YYYY-MM-DD.
   which is the survival baseline the rest of the water model assumes. Turn it off in the sandbox for
   the old behaviour.
 
+### Water effects
+- **Running water is now visible.** Sprinklers throw a spray over the 3x3 they water, drip emitters
+  show a small trickle, and an open fire hydrant gushes -- each only while it is actually running.
+  The whole thing can be turned off in Options -> Mods -> Water Pipes.
+
+### Art
+- **New art for the sprinkler, the drip emitter and the pressure gauge.** The emitters are now a
+  head that sits on the pipe instead of replacing it, so the run stays visible underneath and
+  connects to its neighbours as it should. The gauge is a real dial on the pipe rather than the
+  wall box it borrowed before.
+- Concealed pipes now preview as the pipe they actually build, so the build menu and the placement
+  cursor match the visible versions. They are still invisible once placed.
+
+### Compatibility
+- **Barrel mods now see the network.** Mods that redraw a barrel by its fill level (Useful Barrels
+  and similar) are notified when the network fills or drains one, so their sprites keep up.
+
 ### Naming and languages
 - The generic pipes are now **Fluid Pipes** (they carry fuel as readily as water). Water devices
   (pump, purifier, drip, sprinkler, gauge) keep their names. Every object description was rewritten
   to be short and direct.
 - **Simplified Chinese** is now fully supported alongside English and Spanish.
+- The build category now reads in your language instead of showing its internal name.
 
 ### Fixes
-- Fixes: pumps and gauges no longer vanish or error on world reload, router sprites no longer draw
-  over the player, and a pressure-regulated branch now loses pressure with distance as it should.
+- Fixes: pumps and gauges no longer vanish or error on world reload, the gauge no longer draws over
+  the player, concealed pipes can be right-clicked again to show the network, router sprites no
+  longer draw over the player, and a pressure-regulated branch now loses pressure with distance as
+  it should.
 
 ## [0.5.1] - 2026-07-20
 

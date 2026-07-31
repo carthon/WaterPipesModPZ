@@ -383,12 +383,38 @@ function Adapter.readWorldFluidType(worldObject)
     return nil
 end
 
+-- Notify EXTERNAL listeners that a world container we wrote to changed its amount, so mods keying off
+-- OnWaterAmountChange refresh (e.g. Useful Barrels' fill-level sprite, vanilla rain collectors). The
+-- vanilla FluidContainer write does not raise this event, so without it those mods never see our
+-- network moving their water. Guarded by WaterPipes._suppressWaterEvent: our OWN handler early-returns
+-- on the echo, so this resets no stagnation clock and re-reconciles no endpoint -- it is purely an
+-- outward signal. Save/restore (not true/false) stays correct if a listener re-enters; pcall keeps the
+-- flag clean if one errors. Fired only on a real change, and only for a real IsoObject.
+local function fireExternalWaterChange(worldObject, prevAmount)
+    if not worldObject or not worldObject.getModData then
+        return
+    end
+    if not LuaEventManager or not LuaEventManager.triggerEvent then
+        return
+    end
+    local now = Adapter.readWorldFluidAmount(worldObject) or 0
+    if math.abs(now - (prevAmount or 0)) <= 0.001 then
+        return
+    end
+    WaterPipes = WaterPipes or {}
+    local saved = WaterPipes._suppressWaterEvent
+    WaterPipes._suppressWaterEvent = true
+    pcall(LuaEventManager.triggerEvent, "OnWaterAmountChange", worldObject, prevAmount or 0)
+    WaterPipes._suppressWaterEvent = saved
+end
+
 function Adapter.writeWorldFluidAmount(worldObject, fluidAmount, fluidTypeName)
     if not worldObject then
         return false
     end
 
     worldObject = resolveFluidTarget(worldObject)
+    local prevAmount = Adapter.readWorldFluidAmount(worldObject) or 0
 
     if worldObject.setReserveWaterAmount or worldObject.getReserveWaterMax then
         local reserveCapacity = readNumber(worldObject, "getReserveWaterMax") or 0
@@ -415,6 +441,7 @@ function Adapter.writeWorldFluidAmount(worldObject, fluidAmount, fluidTypeName)
             pcall(worldObject.transmitModData, worldObject)
         end
 
+        fireExternalWaterChange(worldObject, prevAmount)
         return true
     end
 
@@ -467,6 +494,7 @@ function Adapter.writeWorldFluidAmount(worldObject, fluidAmount, fluidTypeName)
         pcall(worldObject.transmitModData, worldObject)
     end
 
+    fireExternalWaterChange(worldObject, prevAmount)
     return true
 end
 

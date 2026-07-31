@@ -3,14 +3,12 @@
     "WaterPipeRiser": "Vertical Fluid Pipe",
     "WaterPipeHidden": "Concealed Fluid Pipe",
     "WaterPipeRiserHidden": "Concealed Vertical Fluid Pipe",
-    "WaterPurifierFilter": "Water Purifier (Filter)",
-    "WaterPurifierFire": "Water Distiller (Fire)",
     "WaterPurifierElectric": "Water Distiller (Electric)",
     "WaterPipeRouter": "Fluid Router",
-    "WaterPipes_CraftFilterCartridge": "Craft Water Filter Cartridge",
     "WaterPipes_ForgeMetalPipe": "Forge a Metal Pipe",
     "WaterPump": "Water Pump",
     "WaterPipeDrip": "Drip Emitter",
     "WaterPipeSprinkler": "Sprinkler",
-    "WaterPressureGauge": "Pressure Gauge"
+    "WaterPressureGauge": "Pressure Gauge",
+    "Piping": "Piping"
 }

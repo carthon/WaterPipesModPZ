@@ -765,6 +765,13 @@ local function onEveryHours()
 end
 
 local function onWaterAmountChange(object, prevAmount)
+    -- Ignore the echo of our OWN network writes. ContainerAdapter.writeWorldFluidAmount fires
+    -- OnWaterAmountChange purely so external mods (e.g. Useful Barrels) refresh; processing it here
+    -- would reset stagnation clocks and re-reconcile endpoints for no reason (and risk re-entrancy).
+    if WaterPipes._suppressWaterEvent then
+        return
+    end
+
     if not object then
         return
     end

@@ -1,7 +1,7 @@
 {
     "IGUI_WaterPipesGenerator": "发电机",
     "IGUI_WaterPipesFixture": "用水设备",
-    "IGUI_CraftCategory_Piping": "管道",
+    "IGUI_CraftingCategories_Piping": "管道",
     "IGUI_WaterPipesPurifierWindowTitle": "电动净水器",
     "IGUI_WaterPipesPurifierIntake": "进水",
     "IGUI_WaterPipesPurifierOutput": "出水",
@@ -21,6 +21,8 @@
     "IGUI_WaterPipes_SoundEnabled_tooltip": "启用机器运行时的循环环境音，例如电动净水器通电工作时发出的嗡鸣声。关闭后将完全静音。",
     "IGUI_WaterPipes_SoundVolume": "机器音量（%）",
     "IGUI_WaterPipes_SoundVolume_tooltip": "设置本模组机器音效的音量，范围为 0（静音）至 100（最大音量）。",
+    "IGUI_WaterPipes_EffectsEnabled": "水花特效",
+    "IGUI_WaterPipes_EffectsEnabled_tooltip": "在运行中的喷头和开启的消防栓上绘制动态水花。纯视觉效果；如果你不想显示特效或想节省少量性能，可将其关闭。",
     "IGUI_WaterPipesPressureModelOff": "本局游戏的沙盒选项中已关闭压力系统。",
     "IGUI_WaterPipesGaugeNoSupply": "没有水源到达此处。",
     "IGUI_WaterPipesGaugeReading": "此处压力：%1 米水柱",

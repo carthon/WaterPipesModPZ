@@ -97,6 +97,28 @@ local COLOR_SOURCE = { r = 0.20, g = 0.95, b = 0.30, a = 1.0 }    -- green: prov
 local COLOR_CONSUMER = { r = 0.30, g = 0.60, b = 1.00, a = 1.0 }  -- blue: draws fluid (out-network)
 local COLOR_ROUTER = { r = 1.00, g = 0.75, b = 0.10, a = 1.0 }    -- amber: fluid router (boundary)
 
+-- The square the player actually right-clicked, worked out from the menu's own click position rather
+-- than the live mouse (same route vanilla's forage debug menu uses). This is the ONLY way to reach a
+-- concealed pipe: it renders as the empty tile, so the engine has nothing to pick there and hands us
+-- an empty `worldobjects` -- which is why "Show pipe network" used to appear on a revealed pipe but
+-- vanish the moment it went back to concealed.
+local function squareFromClick(player, context)
+    if not context or not screenToIsoX or not screenToIsoY or not getCell then
+        return nil
+    end
+    local character = getSpecificPlayer(player)
+    if not character then
+        return nil
+    end
+    local z = character:getZ()
+    local ok, square = pcall(function()
+        local x = screenToIsoX(player, context.x, context.y, z)
+        local y = screenToIsoY(player, context.x, context.y, z)
+        return getCell():getGridSquare(x, y, z)
+    end)
+    return ok and square or nil
+end
+
 local function findPipeInWorldObjects(worldobjects)
     if not worldobjects then
         return nil
@@ -1074,7 +1096,10 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         return false
     end
 
+    -- Fall back to the clicked square: a tile holding only a concealed pipe gives the engine nothing
+    -- to pick, so worldobjects arrives empty and we would bail before ever looking for the pipe.
     local clickedSquare = PipeObjectUtils.getSquareFromWorldObjects(worldobjects)
+        or squareFromClick(player, context)
     if not clickedSquare then
         return false
     end
@@ -1102,7 +1127,10 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         and GeneratorFuel.canUnplumb(generatorObject)
 
     -- Network visualization: available on any pipe, no tool required (helps players + debugging).
+    -- Concealed pipes are invisible and never reach worldobjects, so fall back to the clicked square
+    -- -- otherwise the one pipe you most need the network view for is the one you cannot ask.
     local pipeObject = findPipeInWorldObjects(worldobjects)
+        or PipeObjectUtils.getPipeOnSquare(clickedSquare)
     local hasShowNetworkOption = pipeObject ~= nil
     local hasHideNetworkOption = #ContextMenu.highlightedObjects > 0
 

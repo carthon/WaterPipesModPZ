@@ -3,14 +3,12 @@
     "WaterPipeRiser": "立管",
     "WaterPipeHidden": "暗管",
     "WaterPipeRiserHidden": "暗装立管",
-    "WaterPurifierFilter": "过滤式净水器",
-    "WaterPurifierFire": "蒸馏净水器（火力）",
     "WaterPurifierElectric": "蒸馏净水器（电动）",
     "WaterPipeRouter": "流体路由器",
-    "WaterPipes_CraftFilterCartridge": "制作滤芯",
     "WaterPipes_ForgeMetalPipe": "锻造金属水管",
     "WaterPump": "水泵",
     "WaterPipeDrip": "滴灌头",
     "WaterPipeSprinkler": "喷洒器",
-    "WaterPressureGauge": "压力表"
+    "WaterPressureGauge": "压力表",
+    "Piping": "管道"
 }

@@ -1,7 +1,7 @@
 {
     "IGUI_WaterPipesGenerator": "Generador",
     "IGUI_WaterPipesFixture": "Punto de agua",
-    "IGUI_CraftCategory_Piping": "Tuberías",
+    "IGUI_CraftingCategories_Piping": "Fontanería",
     "IGUI_WaterPipesPurifierWindowTitle": "Purificador eléctrico",
     "IGUI_WaterPipesPurifierIntake": "Entrada",
     "IGUI_WaterPipesPurifierOutput": "Salida",
@@ -21,6 +21,8 @@
     "IGUI_WaterPipes_SoundEnabled_tooltip": "Zumbido ambiental en bucle de las máquinas en marcha, como el purificador eléctrico mientras tiene electricidad. Desactívalo para silencio total.",
     "IGUI_WaterPipes_SoundVolume": "Volumen de sonido de las máquinas (%)",
     "IGUI_WaterPipes_SoundVolume_tooltip": "Volumen de los sonidos de las máquinas del mod, de 0 (silencio) a 100 (máximo).",
+    "IGUI_WaterPipes_EffectsEnabled": "Efectos de agua",
+    "IGUI_WaterPipes_EffectsEnabled_tooltip": "Chorro de agua animado sobre los aspersores en marcha y las bocas de incendio abiertas. Solo es visual; desactívalo si prefieres sin efectos o para ahorrar algo de rendimiento.",
     "IGUI_WaterPipesPressureModelOff": "La presión está desactivada en las opciones de sandbox de esta partida.",
     "IGUI_WaterPipesGaugeNoSupply": "No llega suministro a este punto.",
     "IGUI_WaterPipesGaugeReading": "Presión aquí: %1 m de columna",
