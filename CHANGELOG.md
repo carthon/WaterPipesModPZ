@@ -6,9 +6,9 @@ All notable changes to Water Pipes are documented here. Dates are in YYYY-MM-DD.
 
 ### Water pressure
 - **Pipes now have pressure**, measured in metres of water column. Height above a consumer adds
-  pressure, distance along the pipes spends it, and pumps create it. Water still flows without it
-  unless you switch the model on to Realistic in the sandbox; a Simple (height only) and an Off
-  mode are there too.
+  pressure, distance along the pipes spends it, and pumps create it. The full Realistic model is on
+  by default; the sandbox also carries a Simple mode (height only, distance is free) and an Off mode
+  that restores the old gravity-only behaviour.
 - **Electric Water Pump.** A powered pipe: on a run it boosts the network's pressure (chain several
   to add up), and placed next to a well or open water it also draws water in. It lifts water only a
   couple of floors from below but pushes it far higher, so put it low near the source.
