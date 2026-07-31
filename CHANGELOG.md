@@ -15,6 +15,17 @@ All notable changes to Water Pipes are documented here. Dates are in YYYY-MM-DD.
 - **Pressure Gauge.** A dial that sits on a pipe; right-click it to read the pressure at that point
   and whether a sprinkler would run there.
 
+### Fluid routers
+- **A bare router is now a pressure-reducing valve, not a wall.** A draw reaches through it to the
+  network upstream and runs at whatever is lower, the incoming pressure or the ceiling you set --
+  so a sprinkler on a regulated branch works without needing a tank behind it. It still only lets
+  fluid cross one way, so it keeps its no-backflow meaning. Put a container on it and it goes back
+  to being the hard boundary it always was.
+- **Set the limit with a dialog.** Right-clicking a router opens a window with a slider for feeling
+  out a value and a typed field for hitting an exact one, which matters when a drip emitter bursts
+  above 15.0 and a sprinkler needs 20.0. It also shows the pressure arriving at the valve and the
+  pressure leaving it, so you can see what a limit will actually do before applying it.
+
 ### Irrigation
 - **Drip Emitter** and **Sprinkler**, built as pipes over your crops. The drip waters its own tile
   and needs only water reaching it; the sprinkler waters a 3x3 but needs real pressure (a pump) and
@@ -49,6 +60,8 @@ All notable changes to Water Pipes are documented here. Dates are in YYYY-MM-DD.
   The whole thing can be turned off in Options -> Mods -> Water Pipes.
 
 ### Art
+- **Repainted pipes, wall covers and fluid routers.** The whole pipe set is new art. Nothing about
+  how they build or connect changed.
 - **New art for the sprinkler, the drip emitter and the pressure gauge.** The emitters are now a
   head that sits on the pipe instead of replacing it, so the run stays visible underneath and
   connects to its neighbours as it should. The gauge is a real dial on the pipe rather than the
