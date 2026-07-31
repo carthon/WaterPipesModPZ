@@ -97,11 +97,9 @@ local COLOR_SOURCE = { r = 0.20, g = 0.95, b = 0.30, a = 1.0 }    -- green: prov
 local COLOR_CONSUMER = { r = 0.30, g = 0.60, b = 1.00, a = 1.0 }  -- blue: draws fluid (out-network)
 local COLOR_ROUTER = { r = 1.00, g = 0.75, b = 0.10, a = 1.0 }    -- amber: fluid router (boundary)
 
--- The square the player actually right-clicked, worked out from the menu's own click position rather
--- than the live mouse (same route vanilla's forage debug menu uses). This is the ONLY way to reach a
--- concealed pipe: it renders as the empty tile, so the engine has nothing to pick there and hands us
--- an empty `worldobjects` -- which is why "Show pipe network" used to appear on a revealed pipe but
--- vanish the moment it went back to concealed.
+-- The square the player actually right-clicked, taken from the menu's own click position rather than
+-- the live mouse. ISContextMenu.get stores those coords as requestX/requestY; .x/.y drift once the
+-- menu slides into place, so they are only a fallback.
 local function squareFromClick(player, context)
     if not context or not screenToIsoX or not screenToIsoY or not getCell then
         return nil
@@ -110,11 +108,15 @@ local function squareFromClick(player, context)
     if not character then
         return nil
     end
+    local cx = context.requestX or context.x
+    local cy = context.requestY or context.y
+    if not cx or not cy then
+        return nil
+    end
     local z = character:getZ()
     local ok, square = pcall(function()
-        local x = screenToIsoX(player, context.x, context.y, z)
-        local y = screenToIsoY(player, context.x, context.y, z)
-        return getCell():getGridSquare(x, y, z)
+        return getCell():getGridSquare(screenToIsoX(player, cx, cy, z),
+                                       screenToIsoY(player, cx, cy, z), z)
     end)
     return ok and square or nil
 end
@@ -1086,6 +1088,42 @@ local function buildDripRepairTooltip(hasKit, hasWrench)
     return tooltip
 end
 
+-- A concealed pipe renders as the empty tile, so the engine picks nothing on that square -- and
+-- createMenu RETURNS on `fetch.c == 0` before it ever fires OnFillWorldObjectContextMenu. The menu
+-- below therefore never ran on a concealed pipe, which is why "Show pipe network" only appeared once
+-- the pipe was already revealed. OnPreFillWorldObjectContextMenu fires BEFORE that bail, and the
+-- context is already visible by then (ISContextMenu.get shows it), so options added here do appear.
+--
+-- It handles ONLY the network options, and only when the normal path would find no pipe; the flag
+-- keeps them from being added twice on tiles where the engine does carry on to the main menu.
+local preAddedNetworkOptions = false
+
+function ContextMenu.doPreMenu(player, context, worldobjects, test)
+    preAddedNetworkOptions = false
+    if test then
+        return
+    end
+    local playerObj = getSpecificPlayer(player)
+    if not playerObj or playerObj:getVehicle() then
+        return
+    end
+    if findPipeInWorldObjects(worldobjects) then
+        return   -- visible pipe: the main menu will run and handle it
+    end
+
+    local square = squareFromClick(player, context)
+    local pipe = square and PipeObjectUtils.getPipeOnSquare(square) or nil
+    if not pipe then
+        return
+    end
+
+    context:addOption(getText("ContextMenu_WaterPipesShowNetwork"), playerObj, ContextMenu.showNetwork, pipe)
+    if #ContextMenu.highlightedObjects > 0 then
+        context:addOption(getText("ContextMenu_WaterPipesHideNetwork"), playerObj, ContextMenu.hideNetwork)
+    end
+    preAddedNetworkOptions = true
+end
+
 function ContextMenu.doMenu(player, context, worldobjects, test)
     if test and ISWorldObjectContextMenu.Test then
         return true
@@ -1189,11 +1227,11 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         applyPlumbOptionIcon(context:addOption(optionName, playerObj, ContextMenu.unplumbGenerator, generatorObject))
     end
 
-    if hasShowNetworkOption then
+    if hasShowNetworkOption and not preAddedNetworkOptions then
         context:addOption(getText("ContextMenu_WaterPipesShowNetwork"), playerObj, ContextMenu.showNetwork, pipeObject)
     end
 
-    if hasHideNetworkOption then
+    if hasHideNetworkOption and not preAddedNetworkOptions then
         context:addOption(getText("ContextMenu_WaterPipesHideNetwork"), playerObj, ContextMenu.hideNetwork)
     end
 
@@ -1255,6 +1293,8 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     end
 end
 
+-- Pre-fill runs first and is the only one that fires on a tile the engine picked nothing on.
+Events.OnPreFillWorldObjectContextMenu.Add(ContextMenu.doPreMenu)
 Events.OnFillWorldObjectContextMenu.Add(ContextMenu.doMenu)
 ISWorldObjectContextMenu.onPlumbItem = ContextMenu.onVanillaPlumbItem
 
