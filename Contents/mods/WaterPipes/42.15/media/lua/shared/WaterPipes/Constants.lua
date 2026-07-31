@@ -142,6 +142,175 @@ Constants.ADAPTER_SOURCE_SPRITE = "carpentry_02_54"
 Constants.ADAPTER_SOURCE_HIDDEN_SPRITE = "waterpipes_01_20"
 Constants.MAX_FINITE_FLUID_CAPACITY = 9999
 
+-- ===== Pressure model =====
+-- Pressure is measured in METRES OF WATER COLUMN (m.c.a.), the unit real irrigation uses:
+-- 1 m.c.a. = 0.098 bar. Municipal mains run 20-40, a garden sprinkler needs ~20, gravity drip
+-- works at 1-2. Keeping the unit real means every constant below can be sanity-checked against
+-- a plumbing table instead of being a made-up number.
+--
+-- The pressure a source delivers to a consumer is:
+--     P = CONTAINER_BASE_PRESSURE
+--       + PRESSURE_PER_LEVEL * (z_source - z_consumer)     -- falling gains, climbing costs
+--       - friction(consumer) * hops                        -- distance always costs
+--
+-- The elevation term telescopes (it depends only on the endpoints, not the route), so the only
+-- path-dependent term is friction, which is uniform per hop. Minimising loss is therefore just
+-- minimising hop count -- the existing BFS with a distance counter, no Dijkstra needed. This
+-- stops holding once pumps add head at a node (they break the telescoping); see the pump phase.
+Constants.PRESSURE_PER_LEVEL = 3.0          -- a PZ floor is ~2.4-3 m tall; 1 m of water = 0.098 bar
+Constants.CONTAINER_BASE_PRESSURE = 1.0     -- a full ~1 m tall barrel pushes 1 m.c.a. at its base
+-- Friction scales with flow squared (Darcy-Weisbach), so a barely-open tap loses far less head per
+-- tile than a sprinkler running wide open. Modelling that is what keeps existing bases alive: a tap
+-- reaches 20 tiles on the flat (1.0 / 0.05), where one flat rate would have cut it to 5.
+Constants.PRESSURE_FRICTION_DRIP = 0.02     -- trickle flow
+Constants.PRESSURE_FRICTION_TAP = 0.05      -- taps, generators: low flow
+Constants.PRESSURE_FRICTION_SPRINKLER = 0.2 -- wide-open flow through scavenged pipe
+-- Minimum pressure a consumer needs to draw at all.
+Constants.PRESSURE_MIN_TAP = 0.0
+Constants.PRESSURE_MIN_DRIP = 0.0
+Constants.PRESSURE_MIN_SPRINKLER = 20.0     -- a real sprinkler head needs ~2 bar
+-- Consumer kinds, used to pick a friction coefficient.
+Constants.PRESSURE_KIND_TAP = "tap"
+Constants.PRESSURE_KIND_DRIP = "drip"
+Constants.PRESSURE_KIND_SPRINKLER = "sprinkler"
+-- Sandbox PressureModel enum values (WaterPipes.PressureModel).
+Constants.PRESSURE_MODEL_REALISTIC = 1      -- full model: height, distance, pumps
+Constants.PRESSURE_MODEL_SIMPLE = 2         -- height only: no distance loss
+Constants.PRESSURE_MODEL_OFF = 3            -- pre-pressure behaviour: pure gravity reachability
+
+-- ===== Water pump =====
+-- A pump is a pipe variant that needs power. Where you PUT it decides what it does, exactly like a
+-- real self-priming surface pump:
+--   * sitting on a pipe that already has water -> a booster; it just adds head.
+--   * next to a well / open water / a container -> an extractor; it also injects fluid.
+-- The asymmetry between the two numbers below is the real physics that makes one device do both
+-- jobs: a surface pump can only SUCK water up about 7 m (atmospheric pressure caps it at 10.33 m,
+-- ~7-8 m in practice) but can PUSH it 25 m and more. That is why deep wells use submersible pumps.
+Constants.PUMP_MODDATA_KEY = "waterpipesPump"
+-- Our OWN tiles, not vanilla ones. The art is the same machine copied into the waterpipes atlas;
+-- what changed is who owns the tiledef. The vanilla originals (industry_02_52/53) carry an
+-- AmbientSound property, and a sprite with AmbientSound is rebuilt down the engine's ambient-emitter
+-- path on chunk load, which never resolves a modded entity script -- so every saved pump came back
+-- as "EntityScript not found". Same story for the gauge below.
+Constants.PUMP_SPRITE_EW = "waterpipes_01_28"   -- floor machine, E/W axis
+Constants.PUMP_SPRITE_NS = "waterpipes_01_29"   -- ...and its N/S mirror
+Constants.PUMP_HEAD = 25.0                  -- m.c.a. added; a domestic pressure set is ~2.5 bar
+Constants.PUMP_SUCTION_LIMIT = 7.0          -- m.c.a. it can lift a source from below (~2 floors)
+Constants.PUMP_INTAKE_RATE = 20             -- litres per in-game minute; a real pump does 33-50
+-- Natural sources the extractor mode can tap. A well is a plain IsoObject carrying a FluidContainer
+-- component (10 000 L of CLEAN water, refilled only by rain at RainFactor 0.1 -- so it is a big
+-- reservoir, not an infinite tap). Open water is identified the way vanilla does it, by the floor
+-- tile's `water` flag, and is infinite but TAINTED -- which is what gives the purifier a job.
+Constants.WELL_SCRIPT_NAME = "Base.Well"
+-- Both wells (10 000) and water tiles (10 000) sit above MAX_FINITE_FLUID_CAPACITY on purpose: they
+-- must never join the network as ordinary containers, or rebalanceSummary would smear 10 000 L
+-- across every pipe and the network would read as permanently full. The pump INJECTS from them at a
+-- bounded rate instead, the same shape as the purifier's intake step.
+
+-- ===== Fire hydrants =====
+-- A vanilla street hydrant (a decorative moveable with no water of its own) becomes a network source
+-- once a pipe is laid on its tile and it is opened with a pipe wrench. While the town water service is
+-- still running it is mains-fed and effectively bottomless; the day the water is cut it keeps only the
+-- reserve left in the local main (HYDRANT_RESERVE litres) and drains as it is used. Clean water.
+Constants.HYDRANT_SPRITE = "street_decoration_01_12"     -- vanilla Mov_FireHydrant
+Constants.HYDRANT_OPEN_KEY = "waterpipesHydrantOpen"      -- modData: opened with the wrench
+Constants.HYDRANT_RESERVE_KEY = "waterpipesHydrantReserve" -- modData: litres left once the mains is cut
+Constants.HYDRANT_RESERVE = 1000            -- litres held in the local main after the shutoff
+Constants.HYDRANT_FLOW_RATE = 60            -- litres per in-game minute an open hydrant delivers
+-- Pressure an open, mains-fed hydrant floors the network at, m.c.a. A hydrant is a high-flow main tap,
+-- so it runs above the household mains (25.0) and comfortably above a sprinkler's 20.0 -- opening one
+-- runs sprinklers far from any barrel with no pump, until the day the water is cut.
+Constants.HYDRANT_HEAD = 40.0
+
+-- ===== Water stagnation =====
+-- Standing water goes bad. Every water container carries the world-age hour of its last movement
+-- (any consumption, transfer, rain or mains inflow, caught through OnWaterAmountChange). Once a
+-- container has sat still past its limit it turns tainted, and the contamination rule then spreads it
+-- to the rest of its network -- so a whole plumbed system stagnates together, at the pace of its most
+-- exposed vessel. An actively used network never gets there, because drawing from it keeps stamping.
+--
+-- Open vs closed is read straight off the vessel's rain-catcher factor (FluidContainer.getRainCatcher,
+-- the RainFactor from its script): anything that collects rain is open to the air and spoils faster.
+-- Rain is the sharp edge: while it rains, any OPEN container that is also OUTSIDE has its whole
+-- network tainted at once, so uncovered collection is a gamble every time the weather turns. This
+-- mirrors vanilla, whose rain barrels already fill with tainted water.
+Constants.STAGNATION_STAMP_KEY = "waterpipesLastMove"   -- modData: world-age hours of last movement
+Constants.STAGNATION_DAYS_CLOSED = 30       -- sealed tanks, pipes, a lidded amphora: weeks
+Constants.STAGNATION_DAYS_OPEN = 10         -- rain barrels, an open amphora: days
+
+-- ===== Town water supply (the mains) =====
+-- Plumbing a fixture turns the engine's infinite city water off on it, so before this the network
+-- could only ever LOSE from the mains. Now a plumbed fixture is an inlet while the service runs: it
+-- fills the network at a bounded rate and holds the whole zone at mains pressure, which is what makes
+-- the shutoff day an event instead of a footnote. See Mains.lua for how the service is detected.
+-- The mains is a PRESSURE FLOOR, not another pump. A utility holds its main at a set pressure and
+-- every connection to it sits at that pressure, so a live inlet puts the whole zone at this number
+-- whatever the distance -- it is not added on top of a source's own head, and two inlets are still
+-- one supply. A regulator can still hold it down, because a valve regulates what flows THROUGH it.
+Constants.MAINS_HEAD = 25.0                 -- m.c.a.; real municipal mains run 20-40
+Constants.MAINS_INTAKE_RATE = 60            -- litres per in-game minute: the fattest source there is
+Constants.MAINS_INFINITE_AMOUNT = 10000     -- the marker isWaterInfinite() reports (see Mains.lua)
+Constants.MAINS_PROBE_TTL_MS = 5000         -- how long a "is the service on?" answer is reused
+
+-- ===== Router pressure regulator =====
+-- A router already splits the network in two, so pressure cannot cross it either. That makes it the
+-- natural place to REGULATE: the player sets a ceiling and the OUT-side zone runs at it.
+-- It can only ever reduce (P_out = min(P_in, setting)) -- exactly what a real pressure-reducing
+-- valve does, and the reason a router can never replace a pump.
+Constants.ROUTER_PRESSURE_KEY = "waterpipesRouterPressure"
+Constants.ROUTER_PRESSURE_UNSET = -1        -- "no ceiling": pass the incoming head through untouched
+Constants.ROUTER_PRESSURE_MAX = 100         -- ceiling the context menu offers
+Constants.ROUTER_PRESSURE_STEP = 5          -- granularity of the context-menu options
+
+-- ===== Irrigation =====
+-- Both emitters are PIPE variants: they sit on the line, conduct water onward, and water as it
+-- passes. Chaining them along a furrow is exactly what real drip tape is.
+--
+-- Vanilla farming numbers this is built on (all verified against B42 source):
+--   * a crop's waterLvl runs 0-100; one "use" adds 10 and costs 200 mL = 0.2 network litres
+--     (ZomboidGlobals.farmingFluidContainerMillilitresPerUse, shared/defines.lua)
+--   * crops die only at waterLvl <= 0, and drain just 1 per 5 in-game hours by default
+--   * rain only reaches crops with exterior == true -- INDOOR crops get nothing, which is the real
+--     reason to build this
+--   * tainted water waters crops exactly like clean water (ISFarmingMenu whitelists both)
+Constants.DRIP_MODDATA_KEY = "waterpipesDrip"
+Constants.DRIP_SPRITE_EW = "waterpipes_01_40"   -- short pipe stub, E/W axis
+Constants.DRIP_SPRITE_NS = "waterpipes_01_41"   -- ...and its N/S mirror
+Constants.DRIP_WATER_PER_HOUR = 10            -- waterLvl per in-game hour on its own tile
+-- Real drip emitters are built for ~1-1.5 bar and blow out above that, which is why every real drip
+-- line has a pressure regulator ahead of it. Over this head the emitter bursts: it stops watering
+-- but still conducts, exactly like a spent purifier filter still passes clean water.
+Constants.DRIP_BURST_PRESSURE = 15.0
+Constants.DRIP_CONDITION_KEY = "waterpipesDripCondition"
+Constants.DRIP_MAX_CONDITION = 100
+Constants.DRIP_REPAIR_ITEMS = {
+    { type = "Base.DuctTape", count = 1 },
+}
+Constants.DRIP_REPAIR_TIME = 80
+
+Constants.SPRINKLER_MODDATA_KEY = "waterpipesSprinkler"
+Constants.SPRINKLER_SPRITE_EW = "waterpipes_01_42"   -- upright elbow: reads as a spray head
+Constants.SPRINKLER_SPRITE_NS = "waterpipes_01_43"
+Constants.SPRINKLER_RADIUS = 1                     -- 1 = the 3x3 around it
+Constants.SPRINKLER_WATER_PER_HOUR = 10            -- waterLvl per in-game hour, per covered tile
+-- A sprinkler sprays the whole 3x3 whether or not there is a crop under it, so it wastes most of
+-- what it draws. That inefficiency IS the balance: water cost alone can never balance irrigation
+-- (crops drain far too slowly), so the drip-vs-sprinkler choice has to be paid for somewhere else.
+Constants.SPRINKLER_WASTE_TILES = 9                -- litres are charged for all 9, crops or not
+Constants.SPRINKLER_NOISE_RADIUS = 12              -- zombie attraction while running
+Constants.SPRINKLER_NOISE_VOLUME = 8
+
+-- Litres of network fluid per +1 waterLvl. 10 waterLvl = 1 use = 200 mL, so 1 waterLvl = 0.02 L.
+Constants.IRRIGATION_LITRES_PER_WATER_LEVEL = 0.02
+Constants.IRRIGATION_MAX_WATER_LEVEL = 100
+
+-- ===== Pressure gauge =====
+-- Pressure is otherwise an invisible number; this is the only way the player can see it.
+Constants.GAUGE_MODDATA_KEY = "waterpipesGauge"
+Constants.GAUGE_SPRITE_N = "waterpipes_01_30"   -- vented wall box, North wall (see PUMP_SPRITE_EW)
+Constants.GAUGE_SPRITE_W = "waterpipes_01_31"   -- ...and the West wall mirror
+Constants.GAUGE_READ_DISTANCE = 2             -- matches ISFluidUtil.isoMaxPanelDist
+
 -- Appliances that use water to run but manage it themselves (a washing machine only needs its own
 -- FluidContainer non-empty to start a cycle, and its cycle logic never touches fluid). They carry the
 -- waterPiped flag, so in principle the endpoint detection already sees them -- but that flag is read

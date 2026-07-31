@@ -8,9 +8,15 @@ local Constants = WaterPipes.Constants
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Router = WaterPipes.Router
 
--- A fluid router is a floor pipe flagged in modData. It is a network BOUNDARY: the graph and the
--- gravity traversal never conduct through it, so the IN-side pipes and OUT-side pipes stay two
--- separate networks. The active IN->container->OUT transfer (with the direction) lands in step 4.
+-- A fluid router is a floor pipe flagged in modData, and it is two devices in one depending on what
+-- sits on its tile:
+--   * bare      -> an inline PRESSURE-REDUCING VALVE. A draw reaches through it to the upstream
+--                  network (one way: OUT side back to IN side, never the reverse), and whatever it
+--                  feeds runs at min(incoming head, ceiling).
+--   * with a tank (the purifier) -> a HARD BOUNDARY. The fluid is being transformed there, so the
+--                  two sides must never see each other, and water crosses only through that tank.
+-- The crossing itself lives in NetworkAccess (it is a property of the walk); this module owns the
+-- router's identity, its IN->OUT direction and its ceiling.
 
 local function getModData(worldObject)
     if not worldObject or not worldObject.getModData then
@@ -83,6 +89,40 @@ end
 -- {dx,dy} of the OUT side; the IN side is the opposite.
 function Router.getOutOffset(worldObject)
     return DIR_OFFSET[Router.getDirection(worldObject)]
+end
+
+-- ===== Pressure regulation =====
+-- A router already stops pressure crossing it, which makes it the one place a player can put a
+-- ceiling on a zone. Set it from the context menu; the setting is the head AT THE VALVE OUTLET, and
+-- from there the water loses head over distance and height like any other run -- so a branch does not
+-- sit at the setting all the way to its far end. The arithmetic is Pressure.atRegulator; this module
+-- only stores the number. It can only ever REDUCE: the unregulated head is always one of the terms
+-- the consumer takes the minimum of, so setting 25 on a line carrying 10 still gives 10. Pumps
+-- BEHIND the valve stay behind it; a pump in front of it re-pressurises its own branch.
+
+function Router.getPressureCeiling(worldObject)
+    local modData = getModData(worldObject)
+    local value = modData and modData[Constants.ROUTER_PRESSURE_KEY]
+    if type(value) == "number" and value >= 0 then
+        return value
+    end
+    return nil   -- unset: pass the incoming head straight through
+end
+
+function Router.setPressureCeiling(worldObject, value)
+    local modData = getModData(worldObject)
+    if not modData then
+        return
+    end
+    if type(value) ~= "number" or value < 0 then
+        modData[Constants.ROUTER_PRESSURE_KEY] = Constants.ROUTER_PRESSURE_UNSET
+    else
+        modData[Constants.ROUTER_PRESSURE_KEY] =
+            math.min(math.max(value, 0), Constants.ROUTER_PRESSURE_MAX)
+    end
+    if worldObject.transmitModData then
+        pcall(worldObject.transmitModData, worldObject)
+    end
 end
 
 return Router

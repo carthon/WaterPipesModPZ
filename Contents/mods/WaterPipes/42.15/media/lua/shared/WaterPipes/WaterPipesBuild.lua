@@ -26,6 +26,17 @@ local function edgeFromFacing(params)
     return (params and params.facing == "w") and "W" or "N"
 end
 
+-- Fixed-sprite floor variants (pump, drip, sprinkler) only have an E/W and an N/S sprite, so the
+-- build-cursor facing picks the axis rather than a full four-way direction.
+local function axisFromFacing(params)
+    local facing = params and params.facing
+    facing = type(facing) == "string" and string.lower(facing) or "n"
+    if facing == "n" or facing == "s" then
+        return Constants.PIPE_AXIS_NS
+    end
+    return Constants.PIPE_AXIS_EW
+end
+
 -- Router OUT direction from the build-cursor facing (chosen by rotating with R). The engine passes
 -- facing as lowercase n/e/s/w; be tolerant of case.
 local function facingToDirection(params)
@@ -71,6 +82,24 @@ local function squareHasRiserEdge(square, edge)
     return false
 end
 
+-- The gauge is not a pipe, so it is not in getPipeObjectsOnSquare; scan the square's objects instead.
+local function squareHasGauge(square)
+    if not square or not square.getObjects then
+        return false
+    end
+    local ok, objects = pcall(square.getObjects, square)
+    if not ok or not objects then
+        return false
+    end
+    for i = 0, objects:size() - 1 do
+        local modData = getModData(objects:get(i))
+        if modData and modData[Constants.GAUGE_MODDATA_KEY] then
+            return true
+        end
+    end
+    return false
+end
+
 -- ===== OnIsValid (both sides) =====
 
 -- One floor pipe per square (any orientation) -- they auto-connect.
@@ -85,25 +114,38 @@ end
 
 -- ===== OnCreate (server / single-player) =====
 
-local function markAndRegister(thumpable, surface, riser, edge, hidden, router, routerDirection)
+-- opts: surface, riser, edge, hidden, router, routerDirection, pump, drip, sprinkler, axis.
+-- Every pipe variant goes through here so they all land on the network the same way; what makes a
+-- router / pump / drip / sprinkler special is one extra modData flag, never a separate object type.
+local function markAndRegister(thumpable, opts)
     if not thumpable then
         return
     end
+    opts = opts or {}
 
     local modData = getModData(thumpable)
     if modData then
         modData[Constants.PIPE_MODDATA_KEY] = true
-        modData[Constants.PIPE_SURFACE_MODDATA_KEY] = surface
-        modData[Constants.PIPE_AXIS_MODDATA_KEY] = Constants.PIPE_AXIS_EW
-        modData[Constants.PIPE_RISER_MODDATA_KEY] = riser and true or nil
-        modData[Constants.PIPE_RISER_EDGE_MODDATA_KEY] = edge or nil
+        modData[Constants.PIPE_SURFACE_MODDATA_KEY] = opts.surface
+        modData[Constants.PIPE_AXIS_MODDATA_KEY] = opts.axis or Constants.PIPE_AXIS_EW
+        modData[Constants.PIPE_RISER_MODDATA_KEY] = opts.riser and true or nil
+        modData[Constants.PIPE_RISER_EDGE_MODDATA_KEY] = opts.edge or nil
         -- Concealed variant: baked in at build; clients render it with a transparent tile.
-        modData[Constants.PIPE_HIDDEN_MODDATA_KEY] = hidden and true or nil
+        modData[Constants.PIPE_HIDDEN_MODDATA_KEY] = opts.hidden and true or nil
         -- Router variant: a flow boundary; the OUT direction is chosen by rotating (R) at build time.
-        modData[Constants.ROUTER_MODDATA_KEY] = router and true or nil
-        if router then
-            modData[Constants.ROUTER_DIRECTION_KEY] = routerDirection or Constants.ROUTER_DEFAULT_DIRECTION
+        modData[Constants.ROUTER_MODDATA_KEY] = opts.router and true or nil
+        if opts.router then
+            modData[Constants.ROUTER_DIRECTION_KEY] = opts.routerDirection or Constants.ROUTER_DEFAULT_DIRECTION
+            modData[Constants.ROUTER_PRESSURE_KEY] = Constants.ROUTER_PRESSURE_UNSET
         end
+        -- Pump variant: powered; raises its zone's pressure and can inject from a well or open water.
+        modData[Constants.PUMP_MODDATA_KEY] = opts.pump and true or nil
+        -- Emitters: pipes that water as fluid passes through them.
+        modData[Constants.DRIP_MODDATA_KEY] = opts.drip and true or nil
+        if opts.drip then
+            modData[Constants.DRIP_CONDITION_KEY] = Constants.DRIP_MAX_CONDITION
+        end
+        modData[Constants.SPRINKLER_MODDATA_KEY] = opts.sprinkler and true or nil
     end
     if thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)
@@ -111,33 +153,57 @@ local function markAndRegister(thumpable, surface, riser, edge, hidden, router, 
 
     local square = thumpable.getSquare and thumpable:getSquare() or nil
     if square and WaterPipes.System and WaterPipes.System.registerPipeAt then
-        if riser then
+        if opts.riser then
             Logger.log(string.format("Placed vertical pipe (wall cover) edge=%s at %d:%d:%d",
-                tostring(edge), square:getX(), square:getY(), square:getZ()))
+                tostring(opts.edge), square:getX(), square:getY(), square:getZ()))
         end
         -- registerPipeAt rebuilds the network, refreshes plumbed endpoints and runs the autotile.
         -- Routers pass metadata so the graph rebuild can isolate them as flow boundaries.
         WaterPipes.System.registerPipeAt(square:getX(), square:getY(), square:getZ(),
-            router and { router = true } or nil)
+            opts.router and { router = true } or nil)
     end
 end
 
 function Build.floorOnCreate(params)
-    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false)
+    markAndRegister(params and params.thumpable, { surface = Constants.PIPE_SURFACE_FLOOR })
 end
 
 function Build.riserOnCreate(params)
-    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_WALLCOVER, true, edgeFromFacing(params), false)
+    markAndRegister(params and params.thumpable, {
+        surface = Constants.PIPE_SURFACE_WALLCOVER, riser = true, edge = edgeFromFacing(params),
+    })
 end
 
 -- Concealed variants: identical placement/registration, but flagged hidden so each client renders
 -- them invisible. Network, auto-connect and verticality are unaffected (detection is modData-based).
 function Build.floorHiddenOnCreate(params)
-    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, true)
+    markAndRegister(params and params.thumpable, { surface = Constants.PIPE_SURFACE_FLOOR, hidden = true })
 end
 
 function Build.riserHiddenOnCreate(params)
-    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_WALLCOVER, true, edgeFromFacing(params), true)
+    markAndRegister(params and params.thumpable, {
+        surface = Constants.PIPE_SURFACE_WALLCOVER, riser = true, edge = edgeFromFacing(params), hidden = true,
+    })
+end
+
+-- Pump / emitters: floor-pipe variants that keep a fixed sprite chosen by the build-cursor axis
+-- rather than autotiling into corners (there is only one sprite pair for each).
+function Build.pumpOnCreate(params)
+    markAndRegister(params and params.thumpable, {
+        surface = Constants.PIPE_SURFACE_FLOOR, pump = true, axis = axisFromFacing(params),
+    })
+end
+
+function Build.dripOnCreate(params)
+    markAndRegister(params and params.thumpable, {
+        surface = Constants.PIPE_SURFACE_FLOOR, drip = true, axis = axisFromFacing(params),
+    })
+end
+
+function Build.sprinklerOnCreate(params)
+    markAndRegister(params and params.thumpable, {
+        surface = Constants.PIPE_SURFACE_FLOOR, sprinkler = true, axis = axisFromFacing(params),
+    })
 end
 
 -- Purifier-containers: NON-pipe objects placed on a router tile. They hold two buffers (IN tainted /
@@ -216,8 +282,40 @@ end
 -- Fluid router: a floor pipe that is a flow boundary (splits the network into IN and OUT sides). The
 -- OUT direction comes from the build-cursor facing (rotate with R while placing).
 function Build.routerOnCreate(params)
-    markAndRegister(params and params.thumpable, Constants.PIPE_SURFACE_FLOOR, false, nil, false, true,
-        facingToDirection(params))
+    markAndRegister(params and params.thumpable, {
+        surface = Constants.PIPE_SURFACE_FLOOR, router = true, routerDirection = facingToDirection(params),
+    })
+end
+
+-- The pump is an ordinary floor pipe as far as placement goes: one per tile, like any other.
+Build.pumpOnIsValid = Build.floorOnIsValid
+Build.sprinklerOnIsValid = Build.floorOnIsValid
+
+-- The drip emitter is deliberately NOT gated on being clear of crops: it is meant to be laid down
+-- the furrow, on top of what it waters. floorOnIsValid only refuses a second floor pipe on the tile,
+-- which is exactly the rule we want here too -- so this is an alias for intent, not for behaviour.
+Build.dripOnIsValid = Build.floorOnIsValid
+
+-- The gauge is a dial that sits on a pipe at floor level -- it reads the network but never carries
+-- fluid, so it never registers and never affects the graph. It needs a pipe under it to read, and
+-- there is room for only one per tile.
+function Build.gaugeOnIsValid(params)
+    local square = params and params.square
+    return squareHasFloorPipe(square) and not squareHasGauge(square)
+end
+
+function Build.gaugeOnCreate(params)
+    local thumpable = params and params.thumpable
+    if not thumpable then
+        return
+    end
+    local modData = getModData(thumpable)
+    if modData then
+        modData[Constants.GAUGE_MODDATA_KEY] = true
+    end
+    if thumpable.transmitModData then
+        pcall(thumpable.transmitModData, thumpable)
+    end
 end
 
 -- Global alias used by the entity SpriteConfig OnCreate/OnIsValid dotted paths.

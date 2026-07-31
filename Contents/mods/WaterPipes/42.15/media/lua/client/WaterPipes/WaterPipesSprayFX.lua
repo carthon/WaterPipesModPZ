@@ -1,0 +1,207 @@
+-- Water-spray visual FX (client-only). Build 42 exposes no per-object particle system to Lua, so the
+-- only way to paint water over a tile is what this does: draw a small, seamlessly-looping frame set
+-- straight to the UI layer in OnPreUIDraw, positioned with isoToScreen. We keep it light on purpose --
+-- 16 tiny frames per effect, no forced UI framerate -- unlike the reference mod's 720-frame sheets.
+--
+-- Two emitters get a spray: a sprinkler while it is actually watering, and a fire hydrant while it is
+-- open and flowing. Both conditions are read client-side (the same status the irrigation overlay and
+-- the hydrant sound already use), on a slow rescan; the per-frame path only draws the cached list.
+--
+-- Purely presentational -> client-side, never transmitted. Gated on the mod's EffectsEnabled option
+-- (Options -> Mods -> Water Pipes), sibling to the sound toggles. Drawn to player 0's screen space, so
+-- like the reference mod it is a single-screen effect (splitscreen shows it on the first view only).
+
+require "WaterPipes/Constants"
+require "WaterPipes/Hydrant"
+require "WaterPipes/Irrigation"
+
+WaterPipes = WaterPipes or {}
+WaterPipes.SprayFX = WaterPipes.SprayFX or {}
+
+local Hydrant = WaterPipes.Hydrant
+local Irrigation = WaterPipes.Irrigation
+local FX = WaterPipes.SprayFX
+
+-- ===== Tunables =====
+local FRAMES = 16            -- loop length (frame canvas size is per-effect, see KIND.cell)
+local HOLD = 2               -- UI draws per animation frame (advance every HOLD draws)
+local DRAW_RADIUS = 18       -- tiles from the player we scan/draw within (matches the sound modules)
+local RESCAN_TICKS = 45      -- ~0.75s between active-list rebuilds
+local BASE_ALPHA = 0.40      -- floor alpha (night); daylight adds up to +0.5
+local MAX_ALPHA = 0.92
+
+-- Per-kind art anchor. origin (ox, oy) is the emitter/ground point INSIDE the frame and matches the
+-- generator's own origin, so it is structural -- leave it alone. headLift is the one to nudge: it
+-- raises the whole sprite so the spray leaves the NOZZLE instead of the floor.
+--
+-- headLift is measured off the atlas: the tile's ground anchor sits at y=224 in a 128x256 cell, and
+-- the emitter heads top out at y=189 (sprinkler) and y=187 (drip) -- i.e. 35 and 37 px of nozzle above
+-- ground. The old 16/6 dated from the retired elbow art and left the spray sitting on the grass.
+-- cell = the frame's pixel size (matches tools/fx/gen_spray_fx.py per effect). The sprinkler uses a
+-- bigger canvas so its spray blankets the 3x3 it waters; the hydrant stays one tile.
+local KIND = {
+    sprinkler = { folder = "sprinkler", cell = 224, ox = 112, oy = 168, headLift = 35 },
+    hydrant   = { folder = "hydrant",   cell = 128, ox = 64,  oy = 76,  headLift = 12 },
+    drip      = { folder = "drip",      cell = 128, ox = 64,  oy = 70,  headLift = 37 },
+}
+
+-- ===== Options =====
+local function effectsEnabled()
+    local group = PZAPI and PZAPI.ModOptions and PZAPI.ModOptions:getOptions("WaterPipes")
+    local o = group and group:getOption("EffectsEnabled")
+    return not o or o:getValue() ~= false
+end
+
+-- ===== Texture cache (loaded once) =====
+FX.textures = FX.textures or {}
+local function textures(kind)
+    local cached = FX.textures[kind]
+    if cached then
+        return cached
+    end
+    local folder = KIND[kind].folder
+    local frames = {}
+    for i = 0, FRAMES - 1 do
+        local path = string.format("media/textures/WaterPipes/FX/%s/%02d.png", folder, i)
+        frames[i] = getTexture and getTexture(path) or nil
+    end
+    FX.textures[kind] = frames
+    return frames
+end
+
+-- ===== Active list (rebuilt on a slow cadence) =====
+-- Each entry: { x, y, z, kind, phase } where phase de-syncs multiple emitters so they don't animate
+-- in lockstep. Deterministic from the tile so it is stable frame to frame.
+FX.active = FX.active or {}
+
+local function phaseFor(x, y)
+    return (x * 7 + y * 13) % FRAMES
+end
+
+local function rescan()
+    local player = getPlayer and getPlayer() or nil
+    local cell = getCell and getCell() or nil
+    if not player or not cell then
+        FX.active = {}
+        return
+    end
+    local px = math.floor(player:getX())
+    local py = math.floor(player:getY())
+    local pz = math.floor(player:getZ())
+    local list = {}
+    for dx = -DRAW_RADIUS, DRAW_RADIUS do
+        for dy = -DRAW_RADIUS, DRAW_RADIUS do
+            local sq = cell:getGridSquare(px + dx, py + dy, pz)
+            if sq then
+                local hydrant = Hydrant.findOnSquare(sq)
+                if hydrant and Hydrant.isFlowing(hydrant) then
+                    list[#list + 1] = { x = sq:getX(), y = sq:getY(), z = sq:getZ(),
+                                        kind = "hydrant", phase = phaseFor(sq:getX(), sq:getY()) }
+                else
+                    -- A tile carries a sprinkler OR a drip, never both; whichever is actually
+                    -- watering (has pressure + water + not burst) gets its spray this pass.
+                    local emitter = Irrigation.findSprinklerOnSquare(sq)
+                    local kind = emitter and "sprinkler" or nil
+                    if not emitter then
+                        emitter = Irrigation.findDripOnSquare(sq)
+                        kind = emitter and "drip" or nil
+                    end
+                    if emitter then
+                        local status = Irrigation.getEmitterStatus(emitter, sq)
+                        if status and status.active then
+                            list[#list + 1] = { x = sq:getX(), y = sq:getY(), z = sq:getZ(),
+                                                kind = kind, phase = phaseFor(sq:getX(), sq:getY()) }
+                        end
+                    end
+                end
+            end
+        end
+    end
+    FX.active = list
+end
+
+-- ===== Draw =====
+local drawTick = 0
+
+local function daylightAlpha()
+    local world = getWorld and getWorld() or nil
+    local cm = world and world.getClimateManager and world:getClimateManager() or nil
+    local dls = 0.5
+    if cm and cm.getDayLightStrength then
+        local ok, v = pcall(cm.getDayLightStrength, cm)
+        if ok and type(v) == "number" then
+            dls = v
+        end
+    end
+    return math.min(MAX_ALPHA, BASE_ALPHA + 0.5 * math.max(0, math.min(1, dls)))
+end
+
+function FX.render()
+    if not isIngameState or not isIngameState() then
+        return
+    end
+    if not effectsEnabled() then
+        return
+    end
+    local list = FX.active
+    if not list or #list == 0 then
+        return
+    end
+    local player = getPlayer and getPlayer() or nil
+    if not player then
+        return
+    end
+    if not UIManager or not UIManager.DrawTexture or not isoToScreenX then
+        return
+    end
+
+    local pn = player:getPlayerNum() or 0
+    local zoom = getCore and getCore():getZoom(pn) or 1
+    if not zoom or zoom <= 0 then
+        zoom = 1
+    end
+    local frameIndex = math.floor(drawTick / HOLD)
+    local alpha = daylightAlpha()
+
+    for _, e in ipairs(list) do
+        local spec = KIND[e.kind]
+        if spec then
+            local tex = textures(e.kind)[(frameIndex + e.phase) % FRAMES]
+            if tex then
+                -- place the frame's origin pixel onto the tile centre, then lift to nozzle height
+                local size = spec.cell / zoom
+                local sx = isoToScreenX(pn, e.x + 0.5, e.y + 0.5, e.z) - spec.ox / zoom
+                local sy = isoToScreenY(pn, e.x + 0.5, e.y + 0.5, e.z) - spec.oy / zoom - spec.headLift / zoom
+                UIManager.DrawTexture(tex, sx, sy, size, size, alpha)
+            end
+        end
+    end
+
+    drawTick = drawTick + 1
+    if drawTick >= FRAMES * HOLD then
+        drawTick = 0
+    end
+end
+
+-- ===== Wiring =====
+local tickCounter = 0
+local function onTick()
+    tickCounter = tickCounter + 1
+    if tickCounter < RESCAN_TICKS then
+        return
+    end
+    tickCounter = 0
+    pcall(rescan)
+end
+
+if Events and Events.OnTick then
+    Events.OnTick.Add(onTick)
+end
+if Events and Events.OnPreUIDraw then
+    Events.OnPreUIDraw.Add(function() pcall(FX.render) end)
+end
+if Events and Events.OnGameStop then
+    Events.OnGameStop.Add(function() FX.active = {} end)
+end
+
+return FX

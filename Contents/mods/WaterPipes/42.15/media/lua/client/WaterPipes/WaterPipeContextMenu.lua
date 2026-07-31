@@ -9,6 +9,14 @@ require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Purifier"
 require "WaterPipes/Router"
 require "WaterPipes/NetworkAccess"
+require "WaterPipes/Pressure"
+require "WaterPipes/Pump"
+require "WaterPipes/Hydrant"
+require "WaterPipes/ISToggleHydrant"
+require "WaterPipes/Irrigation"
+require "WaterPipes/WaterPipesIrrigationDebug"
+require "WaterPipes/WaterPipesRouterPressureWindow"
+require "WaterPipes/ISRepairWaterDrip"
 require "WaterPipes/Logger"
 -- Client-side: loads PipeAutotile so it registers its OnObjectAdded/LoadGridsquare hooks and each
 -- client recomputes pipe connection sprites locally (the shape is never sent over the network).
@@ -31,6 +39,10 @@ local NetworkAccess = WaterPipes.NetworkAccess
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Purifier = WaterPipes.Purifier
 local Router = WaterPipes.Router
+local Hydrant = WaterPipes.Hydrant
+local Pressure = WaterPipes.Pressure
+local Irrigation = WaterPipes.Irrigation
+local IrrigationDebug = WaterPipes.IrrigationDebug
 local PipeAutotile = WaterPipes.PipeAutotile
 local ContextMenu = WaterPipes.ContextMenu
 ContextMenu.originalOnPlumbItem = ContextMenu.originalOnPlumbItem or ISWorldObjectContextMenu.onPlumbItem
@@ -488,7 +500,126 @@ function ContextMenu.dumpAdapterDiagnostics(playerObj, endpointObject)
     end
 end
 
-local function addDebugMenu(context, subMenu, playerObj, endpointObject)
+-- Debug pressure readout. Unlike the gauge, this works on ANY square -- no fixture, no pipe needed --
+-- and shows every term that produced the number rather than just the number, so a wrong reading can
+-- be traced to the source, hop count, pump or router ceiling behind it. Debug strings stay English,
+-- like the rest of this menu.
+local function describePressureReport(report, square)
+    local lines = {}
+    local function add(fmt, ...)
+        lines[#lines + 1] = select("#", ...) > 0 and string.format(fmt, ...) or fmt
+    end
+
+    add("Square %d,%d,%d", square:getX(), square:getY(), square:getZ())
+
+    local MODEL_NAMES = {
+        [Constants.PRESSURE_MODEL_REALISTIC] = "realistic",
+        [Constants.PRESSURE_MODEL_SIMPLE] = "simple (height only)",
+        [Constants.PRESSURE_MODEL_OFF] = "OFF (gravity only)",
+    }
+    add("Model: %s", MODEL_NAMES[report.model] or tostring(report.model))
+
+    if report.pipeCount == 0 then
+        add("No pipe network reachable from here.")
+        return lines
+    end
+
+    add("Reach: %d pipes, %d containers, %d/%d pumps powered",
+        report.pipeCount, report.containerCount or 0, report.poweredPumps, report.pumpCount)
+    add("Pump head: +%.1f", report.pumpHead or 0)
+    add("Mains: %d live inlet(s), head +%.1f", report.mainsCount or 0, report.mainsHead or 0)
+    add("Hydrants: %d pressurising, supply floor %.1f",
+        report.hydrantCount or 0, report.supplyHead or 0)
+
+    add(" ")
+    add("Head by consumer (best source, after ceiling):")
+    for _, kind in ipairs({ Constants.PRESSURE_KIND_TAP, Constants.PRESSURE_KIND_DRIP,
+        Constants.PRESSURE_KIND_SPRINKLER }) do
+        local entry = report.kinds[kind]
+        if entry then
+            add("  %-9s %6.2f  (needs %.1f, friction %.3f/tile)  %s",
+                kind, entry.head or 0, entry.minimum, entry.friction,
+                entry.ok and "OK" or "NOT ENOUGH")
+        end
+    end
+
+    add(" ")
+    add("Sources (head delivered here at tap flow):")
+    if #report.sources == 0 then
+        add("  none")
+    end
+    for _, source in ipairs(report.sources) do
+        -- A source reached through a regulator shows the ceiling that capped it, so a surprising
+        -- head can be traced to the router responsible.
+        add("  z=%d hops=%d  %.1f/%.1f %s  %s->  %6.2f",
+            source.z or 0, source.hops or 0, source.amount or 0, source.capacity or 0,
+            tostring(source.fluidType),
+            source.ceiling and string.format("[cap %.1f] ", source.ceiling) or "",
+            source.head or 0)
+    end
+
+    return lines
+end
+
+function ContextMenu.inspectPressure(playerObj, square)
+    if not isDebugActive() or not square then
+        return
+    end
+
+    local report = NetworkAccess.getPressureReport(square)
+    if not report then
+        return
+    end
+
+    Logger.log("=== Water Pipes pressure report ===")
+    for _, line in ipairs(describePressureReport(report, square)) do
+        Logger.log(line)
+    end
+
+    if playerObj and HaloTextHelper then
+        local tap = report.kinds and report.kinds[Constants.PRESSURE_KIND_TAP]
+        HaloTextHelper.addText(playerObj, tap and tap.head
+            and string.format("Water Pipes: %.2f m of head here", tap.head)
+            or "Water Pipes: no network here")
+    end
+end
+
+local function buildPressureDebugTooltip(square)
+    local report = NetworkAccess.getPressureReport(square)
+    if not report then
+        return nil
+    end
+    local tooltip = ISWorldObjectContextMenu.addToolTip()
+    tooltip:setName("Inspect Pressure")
+    tooltip.description = table.concat(describePressureReport(report, square), " <LINE> ")
+    return tooltip
+end
+
+function ContextMenu.toggleIrrigationOverlay(playerObj)
+    if not isDebugActive() then
+        return
+    end
+    IrrigationDebug.toggle()
+end
+
+-- Force an irrigation pass right now with a big dt, so crops jump instead of creeping. Server-owned
+-- (the farming system lives there), so in MP it goes through a command; in SP we run it directly.
+function ContextMenu.runIrrigationNow(playerObj)
+    if not isDebugActive() then
+        return
+    end
+    local dt = 2.0   -- two hours of watering in one shot: a clearly visible jump
+    if isClient() then
+        sendClientCommand(playerObj, "WaterPipes", "runIrrigation", { dt = dt })
+    else
+        pcall(Irrigation.run, dt)
+    end
+    if playerObj and HaloTextHelper then
+        HaloTextHelper.addText(playerObj, "Water Pipes: ran irrigation pass")
+    end
+end
+
+local function addDebugMenu(context, subMenu, playerObj, endpointObject, square)
     if not isDebugActive() then
         return
     end
@@ -499,17 +630,28 @@ local function addDebugMenu(context, subMenu, playerObj, endpointObject)
 
     debugSubMenu:addOption("Force Global Water Shutoff", playerObj, ContextMenu.forceGlobalWaterShutoff)
     debugSubMenu:addOption("Force Network Tick", playerObj, ContextMenu.forceNetworkTick)
+    if square then
+        -- Hovering shows the whole breakdown; clicking also dumps it to console.txt for copy/paste.
+        local option = debugSubMenu:addOption("Inspect Pressure", playerObj, ContextMenu.inspectPressure, square)
+        option.toolTip = buildPressureDebugTooltip(square)
+    end
+    -- Irrigation visibility: a live tint over crops (water level) and emitters (active/starved), plus
+    -- an on-demand pass so you can watch crops fill without waiting for the hourly tick.
+    local overlayName = IrrigationDebug.isEnabled()
+        and "Irrigation Overlay: ON" or "Irrigation Overlay: OFF"
+    debugSubMenu:addOption(overlayName, playerObj, ContextMenu.toggleIrrigationOverlay)
+    debugSubMenu:addOption("Run Irrigation Now (+2h)", playerObj, ContextMenu.runIrrigationNow)
     if endpointObject then
         debugSubMenu:addOption("Dump Plumbing Diagnostics", playerObj, ContextMenu.dumpPlumbingDiagnostics, endpointObject)
         debugSubMenu:addOption("Dump Adapter Diagnostics", playerObj, ContextMenu.dumpAdapterDiagnostics, endpointObject)
     end
 end
 
-local function addDebugRootMenu(context, playerObj, endpointObject)
+local function addDebugRootMenu(context, playerObj, endpointObject, square)
     local rootOption = context:addOption(ContextMenu.DEBUG_ROOT_NAME, nil, nil)
     local subMenu = context:getNew(context)
     context:addSubMenu(rootOption, subMenu)
-    addDebugMenu(context, subMenu, playerObj, endpointObject)
+    addDebugMenu(context, subMenu, playerObj, endpointObject, square)
 end
 
 local function optionTargetsEndpoint(option, endpointObject)
@@ -702,6 +844,226 @@ local function buildRepairTooltip(purifierObject, hasKit, hasWrench)
     return tooltip
 end
 
+-- ===== Pressure devices: router regulator, drip repair, gauge =====
+
+local function findFlaggedPipeInWorldObjects(worldobjects, predicate)
+    if not worldobjects then
+        return nil
+    end
+    for _, worldObject in ipairs(worldobjects) do
+        local square = worldObject and worldObject.getSquare and worldObject:getSquare() or nil
+        if square then
+            for _, candidate in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+                if predicate(candidate) then
+                    return candidate
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function findRouterInWorldObjects(worldobjects)
+    return findFlaggedPipeInWorldObjects(worldobjects, Router.isRouter)
+end
+
+local function findDripInWorldObjects(worldobjects)
+    return findFlaggedPipeInWorldObjects(worldobjects, Irrigation.isDrip)
+end
+
+local function findEmitterInWorldObjects(worldobjects)
+    return findFlaggedPipeInWorldObjects(worldobjects, function(worldObject)
+        return Irrigation.isDrip(worldObject) or Irrigation.isSprinkler(worldObject)
+    end)
+end
+
+local function findGaugeInWorldObjects(worldobjects)
+    if not worldobjects then
+        return nil
+    end
+    for _, worldObject in ipairs(worldobjects) do
+        if worldObject and worldObject.getModData then
+            local ok, modData = pcall(worldObject.getModData, worldObject)
+            if ok and modData and modData[Constants.GAUGE_MODDATA_KEY] then
+                return worldObject
+            end
+        end
+    end
+    return nil
+end
+
+local function findHydrantInWorldObjects(worldobjects)
+    if not worldobjects then
+        return nil
+    end
+    for _, worldObject in ipairs(worldobjects) do
+        if Hydrant.isHydrant(worldObject) then
+            return worldObject
+        end
+    end
+    return nil
+end
+
+-- Server-authoritative in MP so every client converges on the same regulated zone; direct in SP.
+function ContextMenu.setRouterPressure(playerObj, router, pressure)
+    local square = router and router:getSquare()
+    if not square then
+        return
+    end
+    if isClient() then
+        sendClientCommand(playerObj, "WaterPipes", "setRouterPressure",
+            { x = square:getX(), y = square:getY(), z = square:getZ(), pressure = pressure })
+    else
+        Router.setPressureCeiling(router, pressure)
+    end
+end
+
+-- Walk to the hydrant, equip the wrench, and turn the valve as a timed action -- the actual flip is
+-- server-authoritative (ISToggleHydrant sends the command; direct in SP).
+function ContextMenu.setHydrantOpen(playerObj, hydrant, open)
+    local square = hydrant and hydrant:getSquare()
+    if not square or not playerObj then
+        return
+    end
+    local wrench = playerObj:getInventory():getFirstTypeRecurse(Constants.PIPE_TOOL_TYPE)
+    if not wrench then
+        return
+    end
+    if luautils.walkAdj(playerObj, square, false) then
+        ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
+        ISTimedActionQueue.add(ISToggleHydrant:new(playerObj, hydrant, wrench, open))
+    end
+end
+
+function ContextMenu.repairDrip(playerObj, drip)
+    if not playerObj or not drip then
+        return
+    end
+    local wrench = playerObj:getInventory():getFirstTypeRecurse(Constants.PIPE_TOOL_TYPE)
+    if not wrench then
+        return
+    end
+    ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
+    ISTimedActionQueue.add(ISRepairWaterDrip:new(playerObj, drip, wrench))
+end
+
+local function formatHead(value)
+    return string.format("%.1f", value or 0)
+end
+
+-- The gauge is a readout, not a machine: everything it knows fits in a tooltip, so it needs no
+-- window of its own. Pressure is otherwise an invisible number -- this is where the player sees it.
+--
+-- It reports the pressure and nothing else. It used to also advise on sprinklers and drip emitters,
+-- but a gauge cannot know what is downstream of it: it read the pressure on ITS tile and then talked
+-- about crops that might be twenty tiles and a regulator away. Emitters answer for themselves now --
+-- see buildEmitterTooltip.
+local function buildGaugeTooltip(square)
+    local tooltip = ISWorldObjectContextMenu.addToolTip()
+    tooltip:setName(getText("ContextMenu_WaterPipesReadGauge"))
+
+    local lines = {}
+    if not Pressure.isEnabled() then
+        lines[#lines + 1] = getText("IGUI_WaterPipesPressureModelOff")
+    else
+        local tap = NetworkAccess.getPressureAtSquare(square, Constants.PRESSURE_KIND_TAP)
+        lines[#lines + 1] = tap and getText("IGUI_WaterPipesGaugeReading", formatHead(tap))
+            or getText("IGUI_WaterPipesGaugeNoSupply")
+    end
+
+    tooltip.description = table.concat(lines, " <LINE> ")
+    return tooltip
+end
+
+-- Emitters diagnose themselves. The pressure that decides whether a drip or a sprinkler runs is the
+-- pressure ON ITS OWN TILE at ITS OWN flow rate -- a sprinkler loses head four times faster than a
+-- tap, so a gauge reading taken elsewhere never answered the question the player was actually asking.
+local function buildEmitterTooltip(emitterObject)
+    local tooltip = ISWorldObjectContextMenu.addToolTip()
+    tooltip:setName(getText("ContextMenu_WaterPipesCheckEmitter"))
+
+    local status = Irrigation.getEmitterStatus(emitterObject, emitterObject:getSquare())
+    local lines = {}
+
+    if not status then
+        lines[#lines + 1] = getText("IGUI_WaterPipesEmitterUnknown")
+    elseif status.burst then
+        -- A burst emitter is a plumbing fault, not a pressure reading: say so and stop.
+        lines[#lines + 1] = getText("IGUI_WaterPipesEmitterBurst")
+    else
+        lines[#lines + 1] = status.pressure
+            and getText("IGUI_WaterPipesEmitterPressure", formatHead(status.pressure))
+            or getText("IGUI_WaterPipesEmitterNoSupply")
+
+        if not status.reaches then
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterLow", formatHead(status.minimum))
+        elseif not status.hasWater then
+            -- Pressure is fine, the pipes are simply empty. Different problem, different fix.
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterDry")
+        else
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterWatering")
+        end
+
+        -- Only worth mentioning on a drip, and only while the line is genuinely over the limit.
+        local burst = Irrigation.burstPressure()
+        if Irrigation.isDrip(emitterObject) and burst and (status.pressure or 0) > burst then
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterBurstRisk", formatHead(burst))
+        end
+    end
+
+    tooltip.description = table.concat(lines, " <LINE> ")
+    return tooltip
+end
+
+-- What the hydrant will do if opened: mains-fed and bottomless while the town service runs, or the
+-- finite local reserve once it is cut. Reminds the player a pipe on the tile is what connects it.
+local function buildHydrantTooltip(hydrant)
+    local tooltip = ISWorldObjectContextMenu.addToolTip()
+    tooltip:setName(getText("ContextMenu_WaterPipesOpenHydrant"))
+    local lines = {}
+    if Hydrant.isMainsFed() then
+        lines[#lines + 1] = getText("IGUI_WaterPipesHydrantMainsFed")
+    else
+        lines[#lines + 1] = getText("IGUI_WaterPipesHydrantReserve",
+            string.format("%.0f", Hydrant.reserve(hydrant)))
+    end
+    lines[#lines + 1] = " "
+    lines[#lines + 1] = getText("IGUI_WaterPipesHydrantNeedsPipe")
+    tooltip.description = table.concat(lines, " <LINE> ")
+    return tooltip
+end
+
+-- The ceiling is set in its own little dialog (slider plus a typed field) rather than a menu of
+-- fixed steps: the useful values sit against real thresholds -- a drip emitter bursts above 15.0,
+-- a sprinkler needs 20.0 -- so the player needs to land on an exact number, not the nearest five.
+local function addRouterPressureMenu(context, playerObj, router)
+    context:addOption(getText("ContextMenu_WaterPipesRouterPressureOpen"), playerObj,
+        ContextMenu.openRouterPressure, router)
+end
+
+function ContextMenu.openRouterPressure(playerObj, router)
+    if router and WaterPipesRouterPressureWindow then
+        WaterPipesRouterPressureWindow.openFor(router)
+    end
+end
+
+local function buildDripRepairTooltip(hasKit, hasWrench)
+    local tooltip = ISWorldObjectContextMenu.addToolTip()
+    tooltip:setName(getText("ContextMenu_WaterPipesRepairDrip"))
+    local lines = { getText("IGUI_WaterPipesDripBurst"), " ", getText("Tooltip_WaterPipesRepairNeeds") }
+    if not hasWrench then
+        lines[#lines + 1] = "  1 x " .. (getItemNameFromFullType(Constants.PIPE_TOOL_TYPE) or "Pipe Wrench")
+    end
+    if not hasKit then
+        for _, entry in ipairs(Constants.DRIP_REPAIR_ITEMS) do
+            lines[#lines + 1] = "  " .. (entry.count or 1) .. " x "
+                .. (getItemNameFromFullType(entry.type) or entry.type)
+        end
+    end
+    tooltip.description = table.concat(lines, " <LINE> ")
+    return tooltip
+end
+
 function ContextMenu.doMenu(player, context, worldobjects, test)
     if test and ISWorldObjectContextMenu.Test then
         return true
@@ -712,7 +1074,8 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         return false
     end
 
-    if not PipeObjectUtils.getSquareFromWorldObjects(worldobjects) then
+    local clickedSquare = PipeObjectUtils.getSquareFromWorldObjects(worldobjects)
+    if not clickedSquare then
         return false
     end
 
@@ -747,10 +1110,32 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     local purifierObject = findPurifierInWorldObjects(worldobjects)
     local hasPurifierOption = purifierObject ~= nil
 
+    -- Pressure devices. The router's regulator and the gauge only make sense while the model is on;
+    -- with it off there is no pressure to cap or to read.
+    local pressureOn = Pressure.isEnabled()
+    local routerObject = pressureOn and findRouterInWorldObjects(worldobjects) or nil
+    local hasRouterPressureOption = routerObject ~= nil and playerHasPipeWrench(playerObj)
+
+    local gaugeObject = findGaugeInWorldObjects(worldobjects)
+    local hasGaugeOption = gaugeObject ~= nil
+
+    local dripObject = findDripInWorldObjects(worldobjects)
+    local hasDripRepairOption = dripObject ~= nil and Irrigation.isDripBurst(dripObject)
+
+    local emitterObject = findEmitterInWorldObjects(worldobjects)
+    local hasEmitterOption = emitterObject ~= nil
+
+    -- A street fire hydrant opens and closes with a pipe wrench; once open and piped it feeds the
+    -- network. The option only shows with a wrench in hand.
+    local hydrantObject = findHydrantInWorldObjects(worldobjects)
+    local hasHydrantOption = hydrantObject ~= nil and playerHasPipeWrench(playerObj)
+
     if not hasUnplumbOption and not hasModPlumbOption
         and not hasGeneratorPlumbOption and not hasGeneratorUnplumbOption
         and not hasShowNetworkOption and not hasHideNetworkOption
         and not hasPurifierOption
+        and not hasRouterPressureOption and not hasGaugeOption and not hasDripRepairOption
+        and not hasEmitterOption and not hasHydrantOption
         and not isDebugActive() then
         return false
     end
@@ -801,8 +1186,44 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         end
     end
 
+    if hasRouterPressureOption then
+        addRouterPressureMenu(context, playerObj, routerObject)
+    end
+
+    if hasHydrantOption then
+        local open = Hydrant.isOpen(hydrantObject)
+        local label = open and getText("ContextMenu_WaterPipesCloseHydrant")
+            or getText("ContextMenu_WaterPipesOpenHydrant")
+        local option = context:addOption(label, playerObj, ContextMenu.setHydrantOpen,
+            hydrantObject, not open)
+        option.toolTip = buildHydrantTooltip(hydrantObject)
+    end
+
+    if hasGaugeOption then
+        local option = context:addOption(getText("ContextMenu_WaterPipesReadGauge"), playerObj, nil)
+        option.notAvailable = true   -- a gauge is read, not operated: the tooltip IS the readout
+        option.toolTip = buildGaugeTooltip(gaugeObject:getSquare())
+    end
+
+    if hasEmitterOption then
+        local option = context:addOption(getText("ContextMenu_WaterPipesCheckEmitter"), playerObj, nil)
+        option.notAvailable = true   -- like the gauge: this is a readout, the tooltip IS the answer
+        option.toolTip = buildEmitterTooltip(emitterObject)
+    end
+
+    if hasDripRepairOption then
+        local option = context:addOption(getText("ContextMenu_WaterPipesRepairDrip"),
+            playerObj, ContextMenu.repairDrip, dripObject)
+        local hasWrench = playerHasPipeWrench(playerObj)
+        local hasKit = ISRepairWaterDrip.hasRepairKit(playerObj:getInventory())
+        if not hasWrench or not hasKit then
+            option.notAvailable = true
+            option.toolTip = buildDripRepairTooltip(hasKit, hasWrench)
+        end
+    end
+
     if isDebugActive() then
-        addDebugRootMenu(context, playerObj, endpointObject)
+        addDebugRootMenu(context, playerObj, endpointObject, clickedSquare)
     end
 end
 

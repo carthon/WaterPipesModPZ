@@ -1,0 +1,13 @@
+{
+    "ContextMenu_WaterPipesUnplumbItem": "断开 %1的管道连接",
+    "ContextMenu_WaterPipesShowNetwork": "显示管道网络",
+    "ContextMenu_WaterPipesHideNetwork": "隐藏管道网络",
+    "ContextMenu_WaterPipesOpenPurifier": "打开净水器",
+    "ContextMenu_WaterPipesRepairFilter": "修复过滤器",
+    "ContextMenu_WaterPipesReadGauge": "压力表",
+    "ContextMenu_WaterPipesCheckEmitter": "检查灌溉头",
+    "ContextMenu_WaterPipesRepairDrip": "修复滴灌头",
+    "ContextMenu_WaterPipesRouterPressureOpen": "设置压力上限...",
+    "ContextMenu_WaterPipesOpenHydrant": "打开消防栓",
+    "ContextMenu_WaterPipesCloseHydrant": "关闭消防栓"
+}
