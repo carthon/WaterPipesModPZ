@@ -201,6 +201,12 @@ Constants.PUMP_INTAKE_RATE = 20             -- litres per in-game minute; a real
 -- component (10 000 L of CLEAN water, refilled only by rain at RainFactor 0.1 -- so it is a big
 -- reservoir, not an infinite tap). Open water is identified the way vanilla does it, by the floor
 -- tile's `water` flag, and is infinite but TAINTED -- which is what gives the purifier a job.
+-- A well is identified by its ENTITY name. B42 entity objects answer getEntityScript():getName(),
+-- which yields the bare name inside the module ("Well"), and that is how vanilla itself reads them
+-- -- see ISOpenCloseLid.lua:35 doing exactly this on a barrel. getScriptName() is the VEHICLE
+-- accessor and returns the string "none" on an entity object, so the fully-qualified form below is
+-- only kept as a fallback for builds where it does answer.
+Constants.WELL_ENTITY_NAME = "Well"
 Constants.WELL_SCRIPT_NAME = "Base.Well"
 -- Both wells (10 000) and water tiles (10 000) sit above MAX_FINITE_FLUID_CAPACITY on purpose: they
 -- must never join the network as ordinary containers, or rebalanceSummary would smear 10 000 L

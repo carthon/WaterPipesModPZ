@@ -132,9 +132,45 @@ local function isOpenWaterSquare(square)
     return okProp and hasWater or false
 end
 
--- A well is a plain IsoObject whose entity script is Base.Well; it carries a FluidContainer of clean
--- water. It is deliberately NOT an ordinary network container (its capacity is above
--- MAX_FINITE_FLUID_CAPACITY), so the pump is the only way its water reaches the pipes.
+-- The name of the entity script behind a world object, or nil for a plain scenery tile.
+--
+-- getEntityScript() is the accessor that answers on a B42 entity object; getScriptName() is the
+-- vehicle one and returns the literal string "none" here, which is why asking it alone never matched
+-- a well. Both are tried, cheapest-correct first, so this keeps working either way.
+local function entityNameOf(worldObject)
+    if not worldObject then
+        return nil
+    end
+
+    if worldObject.getEntityScript then
+        local ok, script = pcall(worldObject.getEntityScript, worldObject)
+        if ok and script and script.getName then
+            local okName, name = pcall(script.getName, script)
+            if okName and name and name ~= "" then
+                return name
+            end
+        end
+    end
+
+    if worldObject.getScriptName then
+        local ok, name = pcall(worldObject.getScriptName, worldObject)
+        if ok and name and name ~= "" and name ~= "none" then
+            return name
+        end
+    end
+
+    return nil
+end
+Pump.entityNameOf = entityNameOf
+
+function Pump.isWell(worldObject)
+    local name = entityNameOf(worldObject)
+    return name == Constants.WELL_ENTITY_NAME or name == Constants.WELL_SCRIPT_NAME
+end
+
+-- A well is an entity object carrying a FluidContainer of clean water. It is deliberately NOT an
+-- ordinary network container (its capacity is above MAX_FINITE_FLUID_CAPACITY), so the pump is the
+-- only way its water reaches the pipes.
 local function findWellOnSquare(square)
     if not square or not square.getObjects then
         return nil
@@ -145,11 +181,8 @@ local function findWellOnSquare(square)
     end
     for i = 0, objects:size() - 1 do
         local worldObject = objects:get(i)
-        if worldObject and worldObject.getScriptName then
-            local okName, scriptName = pcall(worldObject.getScriptName, worldObject)
-            if okName and scriptName == Constants.WELL_SCRIPT_NAME then
-                return worldObject
-            end
+        if Pump.isWell(worldObject) then
+            return worldObject
         end
     end
     return nil
