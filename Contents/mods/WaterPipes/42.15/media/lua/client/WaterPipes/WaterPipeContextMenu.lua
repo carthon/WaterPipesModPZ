@@ -115,8 +115,8 @@ local function squareFromClick(player, context)
     end
     local z = character:getZ()
     local ok, square = pcall(function()
-        return getCell():getGridSquare(screenToIsoX(player, cx, cy, z),
-                                       screenToIsoY(player, cx, cy, z), z)
+        return getCell():getGridSquare(math.floor(screenToIsoX(player, cx, cy, z)),
+                                       math.floor(screenToIsoY(player, cx, cy, z)), z)
     end)
     return ok and square or nil
 end
@@ -1094,8 +1094,10 @@ end
 -- the pipe was already revealed. OnPreFillWorldObjectContextMenu fires BEFORE that bail, and the
 -- context is already visible by then (ISContextMenu.get shows it), so options added here do appear.
 --
--- It handles ONLY the network options, and only when the normal path would find no pipe; the flag
--- keeps them from being added twice on tiles where the engine does carry on to the main menu.
+-- It owns the network options outright rather than deferring to the main menu when a pipe looks
+-- reachable: whether the main menu runs at all depends on the engine's own fetch count, which we
+-- cannot see from here. Adding them here unconditionally and flagging it is the only ordering that
+-- works in both cases; the main menu below skips them when the flag is set.
 local preAddedNetworkOptions = false
 
 function ContextMenu.doPreMenu(player, context, worldobjects, test)
@@ -1107,12 +1109,19 @@ function ContextMenu.doPreMenu(player, context, worldobjects, test)
     if not playerObj or playerObj:getVehicle() then
         return
     end
-    if findPipeInWorldObjects(worldobjects) then
-        return   -- visible pipe: the main menu will run and handle it
+
+    local clicked = squareFromClick(player, context)
+    local pipe = findPipeInWorldObjects(worldobjects)
+        or PipeObjectUtils.getPipeOnSquare(clicked)
+
+    if getDebug and getDebug() then
+        print(string.format(
+            "[WaterPipes menu] worldobjects=%d  clickedSquare=%s  pipeFound=%s",
+            worldobjects and #worldobjects or -1,
+            clicked and (clicked:getX() .. "," .. clicked:getY() .. "," .. clicked:getZ()) or "nil",
+            tostring(pipe ~= nil)))
     end
 
-    local square = squareFromClick(player, context)
-    local pipe = square and PipeObjectUtils.getPipeOnSquare(square) or nil
     if not pipe then
         return
     end
@@ -1293,8 +1302,11 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     end
 end
 
--- Pre-fill runs first and is the only one that fires on a tile the engine picked nothing on.
-Events.OnPreFillWorldObjectContextMenu.Add(ContextMenu.doPreMenu)
+-- Pre-fill runs first and is the only one that fires on a tile the engine picked nothing on. Guarded
+-- because losing this whole file to a missing event would take every option in the mod with it.
+if Events.OnPreFillWorldObjectContextMenu then
+    Events.OnPreFillWorldObjectContextMenu.Add(ContextMenu.doPreMenu)
+end
 Events.OnFillWorldObjectContextMenu.Add(ContextMenu.doMenu)
 ISWorldObjectContextMenu.onPlumbItem = ContextMenu.onVanillaPlumbItem
 
