@@ -25,6 +25,7 @@ if PZAPI and PZAPI.ModOptions and not PZAPI.ModOptions:getOptions("WaterPipes") 
     local opts = PZAPI.ModOptions:create("WaterPipes", "IGUI_WaterPipes_Options")
     opts:addTickBox("SoundEnabled", "IGUI_WaterPipes_SoundEnabled", true, "IGUI_WaterPipes_SoundEnabled_tooltip")
     opts:addSlider("SoundVolume", "IGUI_WaterPipes_SoundVolume", 0, 100, 5, DEFAULT_VOLUME, "IGUI_WaterPipes_SoundVolume_tooltip")
+    opts:addTickBox("EffectsEnabled", "IGUI_WaterPipes_EffectsEnabled", true, "IGUI_WaterPipes_EffectsEnabled_tooltip")
 end
 
 local function modOption(id)
