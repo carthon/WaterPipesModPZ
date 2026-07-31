@@ -97,15 +97,13 @@ local function isRiser(worldObject)
     return modData and modData[Constants.PIPE_RISER_MODDATA_KEY] == true or false
 end
 
--- Fixed sprite for the pipe variants that are devices rather than plumbing: pump, drip emitter and
--- sprinkler. Each has exactly one E/W and one N/S cell, so the build axis picks it and the
--- neighbour mask is irrelevant. Returns nil for an ordinary pipe, which then autotiles as usual.
--- Read straight from modData rather than through the device modules, to keep this file free of
--- requires it does not otherwise need.
+-- Fixed sprite for the pipe variant that REPLACES its tile art outright: the pump, which is a whole
+-- machine rather than a fitting, so there is no pipe left to show under it. It has exactly one E/W and
+-- one N/S cell, so the build axis picks it and the neighbour mask is irrelevant. Returns nil for
+-- anything else, which then autotiles as usual. Read straight from modData rather than through the
+-- device modules, to keep this file free of requires it does not otherwise need.
 local DEVICE_SPRITES = {
     [Constants.PUMP_MODDATA_KEY] = { ew = Constants.PUMP_SPRITE_EW, ns = Constants.PUMP_SPRITE_NS },
-    [Constants.DRIP_MODDATA_KEY] = { ew = Constants.DRIP_SPRITE_EW, ns = Constants.DRIP_SPRITE_NS },
-    [Constants.SPRINKLER_MODDATA_KEY] = { ew = Constants.SPRINKLER_SPRITE_EW, ns = Constants.SPRINKLER_SPRITE_NS },
 }
 
 local function deviceSprite(worldObject)
@@ -114,6 +112,29 @@ local function deviceSprite(worldObject)
         return nil
     end
     for key, sprites in pairs(DEVICE_SPRITES) do
+        if modData[key] == true then
+            return modData[Constants.PIPE_AXIS_MODDATA_KEY] == Constants.PIPE_AXIS_NS
+                and sprites.ns or sprites.ew
+        end
+    end
+    return nil
+end
+
+-- Emitters (drip, sprinkler) are a HEAD that sits ON the pipe, not a replacement for it: the pipe below
+-- keeps autotiling to its neighbours and the head rides on top as the engine's overlay sprite -- the
+-- same route vanilla paints a sign onto a wall (ISPaintSignAction). Two cells are kept per emitter so a
+-- later art drop can give each facing its own head; today both hold the same centred one.
+local EMITTER_OVERLAYS = {
+    [Constants.DRIP_MODDATA_KEY] = { ew = Constants.DRIP_SPRITE_EW, ns = Constants.DRIP_SPRITE_NS },
+    [Constants.SPRINKLER_MODDATA_KEY] = { ew = Constants.SPRINKLER_SPRITE_EW, ns = Constants.SPRINKLER_SPRITE_NS },
+}
+
+local function emitterOverlay(worldObject)
+    local modData = modDataOf(worldObject)
+    if not modData then
+        return nil
+    end
+    for key, sprites in pairs(EMITTER_OVERLAYS) do
         if modData[key] == true then
             return modData[Constants.PIPE_AXIS_MODDATA_KEY] == Constants.PIPE_AXIS_NS
                 and sprites.ns or sprites.ew
@@ -132,6 +153,24 @@ local function setSpriteIfChanged(worldObject, sprite)
     if square and square.RecalcProperties then
         pcall(square.RecalcProperties, square)
     end
+end
+
+-- Paint (or clear) the emitter head riding on top of a pipe. "Cleared" is our own fully transparent
+-- cell rather than a nil sprite: vanilla only ever SETS an overlay from Lua, so passing nil is
+-- untested, while the transparent tile is guaranteed to draw nothing. Deliberately NOT folded into
+-- setSpriteIfChanged, which early-returns when the pipe shape is unchanged and would then skip the
+-- head -- the two have to be decided independently.
+local function setOverlayIfChanged(worldObject, sprite)
+    if not worldObject or not worldObject.setOverlaySprite then
+        return
+    end
+    sprite = sprite or Constants.PIPE_HIDDEN_SPRITE
+    local current = worldObject.getOverlaySprite and worldObject:getOverlaySprite() or nil
+    local currentName = current and current.getName and current:getName() or nil
+    if currentName == sprite then
+        return
+    end
+    pcall(worldObject.setOverlaySprite, worldObject, sprite)
 end
 
 -- The fixed sprite a wall riser should show given its edge (N/W).
@@ -239,6 +278,7 @@ function PipeAutotile.refreshFloorPipeAt(x, y, z)
     -- neighbours (getFloorPipeOnSquare finds them by modData, not by sprite).
     if isHidden(pipe) then
         setSpriteIfChanged(pipe, Constants.PIPE_HIDDEN_SPRITE)
+        setOverlayIfChanged(pipe, nil)   -- a concealed emitter hides its head too
         return
     end
 
@@ -251,19 +291,24 @@ function PipeAutotile.refreshFloorPipeAt(x, y, z)
     -- Routers keep a fixed device sprite (the IN->OUT band) and never autotile.
     if Router.isRouter(pipe) then
         setSpriteIfChanged(pipe, Router.spriteFor(pipe))
+        setOverlayIfChanged(pipe, nil)
         return
     end
 
-    -- Devices (pump, drip emitter, sprinkler) keep a fixed sprite chosen by their build axis. They
-    -- still conduct and still count as a floor connection for their neighbours -- only their own
-    -- sprite is pinned, because each has just one E/W and one N/S art cell, no corners or tees.
+    -- The pump keeps a fixed sprite chosen by its build axis: it is a whole machine, so it replaces
+    -- the pipe art rather than sitting on it. It still conducts and still counts as a floor
+    -- connection for its neighbours -- only its own sprite is pinned.
     local device = deviceSprite(pipe)
     if device then
         setSpriteIfChanged(pipe, device)
+        setOverlayIfChanged(pipe, nil)
         return
     end
 
+    -- Ordinary pipe, or a pipe carrying an emitter: either way the pipe autotiles to its neighbours,
+    -- and the emitter head (if any) is painted on top of that shape instead of replacing it.
     setSpriteIfChanged(pipe, floorConnectionSprite(pipe, x, y, z))
+    setOverlayIfChanged(pipe, emitterOverlay(pipe))
 end
 
 -- Refresh a square, its 4 cardinal neighbours, and the floors above/below (a wall cover can
@@ -324,6 +369,7 @@ function PipeAutotile.revealPipe(pipe)
         setSpriteIfChanged(pipe, riserSprite(pipe))
     else
         setSpriteIfChanged(pipe, floorConnectionSprite(pipe, square:getX(), square:getY(), square:getZ()))
+        setOverlayIfChanged(pipe, emitterOverlay(pipe))
     end
 end
 
@@ -336,6 +382,7 @@ function PipeAutotile.rehidePipe(pipe)
         refreshRiserVisibility(pipe)
     else
         setSpriteIfChanged(pipe, Constants.PIPE_HIDDEN_SPRITE)
+        setOverlayIfChanged(pipe, nil)
     end
 end
 

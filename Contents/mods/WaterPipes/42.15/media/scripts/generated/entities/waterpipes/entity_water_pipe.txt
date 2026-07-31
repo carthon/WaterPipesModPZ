@@ -76,7 +76,7 @@ module WaterPipes
             {
                 layer
                 {
-                    row = waterpipes_01_9,
+                    row = waterpipes_01_44,
                 }
             }
         }
@@ -106,14 +106,14 @@ module WaterPipes
             {
                 layer
                 {
-                    row = waterpipes_01_16,
+                    row = waterpipes_01_45,
                 }
             }
             face W
             {
                 layer
                 {
-                    row = waterpipes_01_17,
+                    row = waterpipes_01_46,
                 }
             }
         }
@@ -161,6 +161,7 @@ module WaterPipes
                 item 2 [Base.SheetMetal],
                 item 1 [Base.ElectronicsScrap],
                 item 1 [Base.Wire],
+                item 1 [Base.Lighter_Battery] mode:destroy flags[ItemCount],
                 item 1 [Base.Charcoal],
                 item 2 [Base.RippedSheets],
             }
