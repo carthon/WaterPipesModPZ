@@ -2,6 +2,35 @@
 
 All notable changes to Water Pipes are documented here. Dates are in YYYY-MM-DD.
 
+## [0.7.0] - 2026-08-01
+
+### Water pump
+- **A pump now has an on/off switch.** Right-click it for a menu of its own: turn it on or off, or
+  read its status. A pump that is off contributes nothing at all -- no pressure, no drawing from a
+  well -- exactly as if you had cut its power, so you can stop one draining a well without unplugging
+  the generator feeding half the base. Flipping it is a physical act: your character walks over and
+  works the panel. No tool needed.
+- **The status dialog answers what a pump cannot show from the outside**: whether it is switched off
+  or simply unpowered, whether it has a well or open water in reach and is drawing from it, and the
+  pressure arriving against the pressure leaving. An idle pump also tells you what switching it on
+  would actually buy, which on a mains-fed line can be nothing. The switch is in the dialog too.
+
+### Getting wet
+- **Running water soaks you.** A sprinkler's 3x3 and an open hydrant's now wet whoever stands in
+  them, body and clothing alike, taking about a minute to go from dry to soaked. Crossing at a walk
+  leaves you damp; standing there does not.
+
+### Art and effects
+- **A new pressure gauge**: a proper round instrument you can read at a glance, replacing the dial
+  that all but vanished at normal zoom.
+- **An open hydrant now floods its 3x3** instead of trickling onto its own tile -- a heavy, wide jet
+  rather than a second sprinkler.
+
+### Fixed
+- **Pumps could never draw from a well.** The check that recognised a well never matched, in any
+  released version, so a pump beside one silently did nothing while the open-water half of the same
+  feature worked fine. Wells work now.
+
 ## [0.6.1] - 2026-07-31
 
 ### Fixed
