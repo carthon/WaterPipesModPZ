@@ -9,5 +9,8 @@
     "ContextMenu_WaterPipesRepairDrip": "Reparar gotero",
     "ContextMenu_WaterPipesRouterPressureOpen": "Fijar límite de presión...",
     "ContextMenu_WaterPipesOpenHydrant": "Abrir boca de incendios",
-    "ContextMenu_WaterPipesCloseHydrant": "Cerrar boca de incendios"
+    "ContextMenu_WaterPipesCloseHydrant": "Cerrar boca de incendios",
+    "ContextMenu_WaterPipesPumpTurnOn": "Encender",
+    "ContextMenu_WaterPipesPumpTurnOff": "Apagar",
+    "ContextMenu_WaterPipesPumpStatus": "Ver estado de la bomba"
 }

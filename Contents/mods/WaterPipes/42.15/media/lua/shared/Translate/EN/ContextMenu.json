@@ -9,5 +9,8 @@
     "ContextMenu_WaterPipesRepairDrip": "Repair drip emitter",
     "ContextMenu_WaterPipesRouterPressureOpen": "Set pressure limit...",
     "ContextMenu_WaterPipesOpenHydrant": "Open hydrant",
-    "ContextMenu_WaterPipesCloseHydrant": "Close hydrant"
+    "ContextMenu_WaterPipesCloseHydrant": "Close hydrant",
+    "ContextMenu_WaterPipesPumpTurnOn": "Turn on",
+    "ContextMenu_WaterPipesPumpTurnOff": "Turn off",
+    "ContextMenu_WaterPipesPumpStatus": "Check pump"
 }

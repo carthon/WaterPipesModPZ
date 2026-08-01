@@ -46,5 +46,19 @@
     "IGUI_WaterPipesClose": "Cerrar",
     "IGUI_WaterPipesHydrantMainsFed": "Alimentada por la red municipal: da agua sin límite mientras haya suministro.",
     "IGUI_WaterPipesHydrantReserve": "Agua restante en la conducción: %1 L.",
-    "IGUI_WaterPipesHydrantNeedsPipe": "Pon una tubería en su casilla para conectarla a tu red."
+    "IGUI_WaterPipesHydrantNeedsPipe": "Pon una tubería en su casilla para conectarla a tu red.",
+    "IGUI_WaterPipesPumpName": "Bomba de agua",
+    "IGUI_WaterPipesPumpRunning": "En marcha",
+    "IGUI_WaterPipesPumpOff": "Apagada",
+    "IGUI_WaterPipesPumpNoPower": "Sin corriente",
+    "IGUI_WaterPipesPumpNoSource": "Sin pozo ni agua abierta al alcance: esta bomba solo da presión.",
+    "IGUI_WaterPipesPumpDrawingWell": "Sacando agua de un pozo.",
+    "IGUI_WaterPipesPumpDrawingWater": "Sacando agua sucia de agua abierta.",
+    "IGUI_WaterPipesPumpSourceWellIdle": "Hay un pozo al alcance, pero la bomba no está en marcha.",
+    "IGUI_WaterPipesPumpSourceWaterIdle": "Hay agua abierta al alcance, pero la bomba no está en marcha.",
+    "IGUI_WaterPipesPumpNoSupply": "No llega suministro a esta bomba.",
+    "IGUI_WaterPipesPumpInlet": "Presión de entrada: %1 m de columna",
+    "IGUI_WaterPipesPumpOutlet": "Presión de salida: %1 m de columna",
+    "IGUI_WaterPipesPumpAdding": "Aporta %1 m a esta línea.",
+    "IGUI_WaterPipesPumpWouldGain": "Encenderla añadiría %1 m."
 }

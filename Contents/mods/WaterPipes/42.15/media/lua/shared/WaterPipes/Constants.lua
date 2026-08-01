@@ -187,6 +187,10 @@ Constants.PRESSURE_MODEL_OFF = 3            -- pre-pressure behaviour: pure grav
 -- jobs: a surface pump can only SUCK water up about 7 m (atmospheric pressure caps it at 10.33 m,
 -- ~7-8 m in practice) but can PUSH it 25 m and more. That is why deep wells use submersible pumps.
 Constants.PUMP_MODDATA_KEY = "waterpipesPump"
+-- The manual switch, flipped from the pump's context menu. ABSENT MEANS ON: pumps built before the
+-- switch existed carry no key, and they must keep running after an update rather than silently
+-- stopping every network in every existing save.
+Constants.PUMP_ENABLED_KEY = "waterpipesPumpOn"
 -- Our OWN tiles, not vanilla ones. The art is the same machine copied into the waterpipes atlas;
 -- what changed is who owns the tiledef. The vanilla originals (industry_02_52/53) carry an
 -- AmbientSound property, and a sprite with AmbientSound is rebuilt down the engine's ambient-emitter
@@ -201,6 +205,12 @@ Constants.PUMP_INTAKE_RATE = 20             -- litres per in-game minute; a real
 -- component (10 000 L of CLEAN water, refilled only by rain at RainFactor 0.1 -- so it is a big
 -- reservoir, not an infinite tap). Open water is identified the way vanilla does it, by the floor
 -- tile's `water` flag, and is infinite but TAINTED -- which is what gives the purifier a job.
+-- A well is identified by its ENTITY name. B42 entity objects answer getEntityScript():getName(),
+-- which yields the bare name inside the module ("Well"), and that is how vanilla itself reads them
+-- -- see ISOpenCloseLid.lua:35 doing exactly this on a barrel. getScriptName() is the VEHICLE
+-- accessor and returns the string "none" on an entity object, so the fully-qualified form below is
+-- only kept as a fallback for builds where it does answer.
+Constants.WELL_ENTITY_NAME = "Well"
 Constants.WELL_SCRIPT_NAME = "Base.Well"
 -- Both wells (10 000) and water tiles (10 000) sit above MAX_FINITE_FLUID_CAPACITY on purpose: they
 -- must never join the network as ordinary containers, or rebalanceSummary would smear 10 000 L
