@@ -37,11 +37,12 @@ local MAX_ALPHA = 0.92
 -- headLift is measured off the atlas: the tile's ground anchor sits at y=224 in a 128x256 cell, and
 -- the emitter heads top out at y=189 (sprinkler) and y=187 (drip) -- i.e. 35 and 37 px of nozzle above
 -- ground. The old 16/6 dated from the retired elbow art and left the spray sitting on the grass.
--- cell = the frame's pixel size (matches tools/fx/gen_spray_fx.py per effect). The sprinkler uses a
--- bigger canvas so its spray blankets the 3x3 it waters; the hydrant stays one tile.
+-- cell = the frame's pixel size (matches tools/fx/gen_spray_fx.py per effect). The sprinkler and the
+-- hydrant both blanket a 3x3, so both use the bigger canvas with the ground anchor low and centred
+-- (ox = cell/2, oy = cell/2 + 56). Only the drip stays on its own tile.
 local KIND = {
     sprinkler = { folder = "sprinkler", cell = 224, ox = 112, oy = 168, headLift = 35 },
-    hydrant   = { folder = "hydrant",   cell = 128, ox = 64,  oy = 76,  headLift = 12 },
+    hydrant   = { folder = "hydrant",   cell = 224, ox = 112, oy = 168, headLift = 12 },
     drip      = { folder = "drip",      cell = 128, ox = 64,  oy = 70,  headLift = 37 },
 }
 
