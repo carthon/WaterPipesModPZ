@@ -41,3 +41,25 @@ renewable even in a low-loot game.
 
 **One fluid per network** — water *or* petrol, never mixed. A sink needs a water network; a
 generator needs a Petrol network.
+
+## Credits
+
+- **Tileset and sprite art** — [aariak_einherjer](https://steamcommunity.com/id/aariak_einherjer/)
+  ([ArtStation](https://www.artstation.com/adrianechanizrol))
+- **Simplified Chinese translation** — rakkasumi
+- Everything else by Carthon.
+
+Still open to more hands: art, translations into a language that is not covered yet, or ideas worth
+trying. Open an issue or say hello on the Workshop page.
+
+## Licence
+
+Copyright (c) 2026 Carthon. All rights reserved — see [LICENSE](LICENSE).
+
+Short version: play with it, host it, read the source and learn from it. Do **not** re-upload it or
+publish a modified version without asking first, and credit *Water Pipes by Carthon* wherever you
+reuse any of it. Asking usually gets a yes.
+
+Note that some sprites are cropped from Project Zomboid's own tilesheets and remain The Indie Stone's
+property — they are not mine to sublicense. Project Zomboid is © The Indie Stone; this mod is
+unofficial and not endorsed by them.

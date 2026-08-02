@@ -1,0 +1,57 @@
+Water Pipes — a mod for Project Zomboid
+Copyright (c) 2026 Carthon. All rights reserved.
+
+
+WHAT YOU MAY DO
+
+  - Play with the mod, and host it on your own server, public or private.
+  - Read the source, learn from it, and adapt techniques from it in your own work.
+  - Report bugs, request features and open pull requests against this repository.
+
+
+WHAT YOU MAY NOT DO WITHOUT WRITTEN PERMISSION
+
+  - Re-upload the mod, in whole or in part, to the Steam Workshop or anywhere else.
+  - Publish a modified, ported or translated version of it.
+  - Bundle it into a public modpack or collection that HOSTS its files, rather than
+    linking to the Steam Workshop item.
+  - Sell it, or place it behind a paywall, donation wall or ad gate.
+
+  Permission is usually given if you ask. Open an issue on this repository or comment on
+  the Steam Workshop page.
+
+
+CREDIT
+
+  Any permitted reuse of code or assets from this mod must credit:
+
+      Water Pipes by Carthon
+
+  and link either the Steam Workshop item (3739595559) or this repository. Where the
+  reuse includes artwork, credit the artist named below as well.
+
+
+THIRD-PARTY MATERIAL — NOT ALL OF THIS IS MINE TO LICENSE
+
+  - Some sprites in media/texturepacks/waterpipes.pack are cropped or recoloured from
+    Project Zomboid's own tilesheets (industry_01, industry_02): the water pump, the
+    purifier tank, and the pipe bases under the irrigation emitters. Those pixels remain
+    the property of The Indie Stone, are used under their mod terms, and are NOT covered
+    by any grant above. Nobody can sublicense them, including me.
+
+  - Tileset and sprite artwork contributed by aariak_einherjer
+    (https://steamcommunity.com/id/aariak_einherjer/ ·
+    https://www.artstation.com/adrianechanizrol), used with permission.
+
+  - Simplified Chinese translation contributed by rakkasumi.
+
+  - Project Zomboid, its assets, its scripts and its APIs are © The Indie Stone. This mod
+    is unofficial. It is not endorsed by or affiliated with The Indie Stone, and it is
+    subject to whatever terms they set for Project Zomboid mods.
+
+
+NO WARRANTY
+
+  The mod is provided "as is", without warranty of any kind, express or implied. Adding
+  or removing any Build 42 mod that registers buildable objects can damage an existing
+  save. Back yours up. The author is not liable for lost saves, servers or time.
