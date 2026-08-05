@@ -16,7 +16,7 @@ function ISRepairWaterDrip.hasRepairKit(inventory)
         return false
     end
     for _, entry in ipairs(Constants.DRIP_REPAIR_ITEMS) do
-        if inventory:getCountTypeRecurse(entry.type) < (entry.count or 1) then
+        if Constants.countRepairItems(inventory, entry) < (entry.count or 1) then
             return false
         end
     end
@@ -26,7 +26,7 @@ end
 local function consumeRepairKit(inventory)
     for _, entry in ipairs(Constants.DRIP_REPAIR_ITEMS) do
         for _ = 1, (entry.count or 1) do
-            local item = inventory:getFirstTypeRecurse(entry.type)
+            local item = Constants.takeRepairItem(inventory, entry)
             if not item then
                 return false
             end

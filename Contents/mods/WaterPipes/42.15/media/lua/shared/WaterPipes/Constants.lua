@@ -103,16 +103,97 @@ Constants.PURIFIER_FILTER_MAX_CONDITION = 100              -- % scale; a fresh/r
 Constants.PURIFIER_FILTER_WEAR_PER_UNIT = 0.02            -- % lost per unit of tainted water filtered
 Constants.PURIFIER_FILTER_WARN_CONDITION = 25             -- UI turns amber at/below this (repair soon)
 -- Repair kit: consumed by the "Repair Filter" timed action to restore condition to MAX.
+-- A repair entry takes either one `type` or a list of interchangeable `types`.
+--
+-- Charcoal comes in two items that share the base:charcoal tag: Base.Charcoal, which you scavenge,
+-- and Base.CharcoalCrafted, which you burn yourself in a charcoal pit. Accepting only the scavenged
+-- one meant a player who had set up their own supply could not use it, which is backwards -- the
+-- crafted one is the renewable resource.
 Constants.PURIFIER_REPAIR_ITEMS = {
-    { type = "Base.Charcoal", count = 1 },
+    { types = { "Base.Charcoal", "Base.CharcoalCrafted" }, tag = "CHARCOAL", count = 1 },
     { type = "Base.RippedSheets", count = 2 },
 }
+
+-- The item types a repair entry will accept, whichever shape it was written in.
+function Constants.repairTypes(entry)
+    return entry and (entry.types or { entry.type }) or {}
+end
+
+-- An entry may also name an ItemTag member, which catches anything carrying that tag -- including
+-- charcoal added by other mods, which an explicit list never will.
+--
+-- Resolved by NAME and guarded, because whether the game actually defines the member can only be
+-- settled in game: vanilla's own Lua uses the ItemTag enum everywhere and never a string, and it
+-- never mentions CHARCOAL. If it does not resolve, the type list below still covers both vanilla
+-- charcoals, so nothing breaks either way.
+function Constants.repairTag(entry)
+    local name = entry and entry.tag
+    if not name or not ItemTag then
+        return nil
+    end
+    local ok, value = pcall(function() return ItemTag[name] end)
+    return ok and value or nil
+end
+
+-- How many of `entry` the inventory holds, by type and by tag.
+--
+-- The MAXIMUM of the two, never the sum: a tagged charcoal is also in the type list, so adding them
+-- would count the same item twice and let a repair start with half the materials.
+function Constants.countRepairItems(inventory, entry)
+    if not inventory or not entry then
+        return 0
+    end
+
+    local byType = 0
+    for _, itemType in ipairs(Constants.repairTypes(entry)) do
+        byType = byType + (inventory:getCountTypeRecurse(itemType) or 0)
+    end
+
+    local tag = Constants.repairTag(entry)
+    if not tag then
+        return byType
+    end
+
+    local ok, list = pcall(inventory.getAllTagRecurse, inventory, tag, ArrayList.new())
+    local byTag = (ok and list and list.size) and list:size() or 0
+    return math.max(byType, byTag)
+end
+
+-- One item matching `entry`, ready to be consumed. Types first: they are the exact things the recipe
+-- names, and the tag is the wider net.
+function Constants.takeRepairItem(inventory, entry)
+    if not inventory or not entry then
+        return nil
+    end
+
+    for _, itemType in ipairs(Constants.repairTypes(entry)) do
+        local item = inventory:getFirstTypeRecurse(itemType)
+        if item then
+            return item
+        end
+    end
+
+    local tag = Constants.repairTag(entry)
+    if tag then
+        local ok, item = pcall(inventory.getFirstTagRecurse, inventory, tag)
+        if ok and item then
+            return item
+        end
+    end
+
+    return nil
+end
 Constants.PURIFIER_REPAIR_TIME = 150                       -- timed-action ticks (build is 200)
 -- Purifier-container is a NON-pipe object placed on a router tile. It holds two internal buffers
 -- (modData): IN (tainted intake) and OUT (clean output). The router drives intake -> convert -> output.
 Constants.PURIFIER_IN_AMOUNT_KEY = "waterpipesPurIn"
 Constants.PURIFIER_IN_TAINTED_KEY = "waterpipesPurInTainted"
 Constants.PURIFIER_OUT_AMOUNT_KEY = "waterpipesPurOut"
+-- Did the purifier actually move any fluid on the last server tick? The readout used to infer this
+-- from the buffer levels, which got it wrong in the one case the player most wants to see: a tank
+-- sitting full while it is busy pushing clean water out reads as "full", and full was reported as
+-- Stopped. The server knows the truth, so it writes it down instead.
+Constants.PURIFIER_PROCESSING_KEY = "waterpipesPurBusy"
 Constants.PURIFIER_BUFFER_CAPACITY = 50
 -- Rates are per IN-GAME MINUTE (the server sub-steps them by elapsed game-time each tick, so throughput
 -- is the same whatever the framerate). Intake is FASTER than convert/output on purpose: the IN buffer
