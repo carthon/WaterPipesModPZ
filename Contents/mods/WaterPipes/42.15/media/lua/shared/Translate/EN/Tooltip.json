@@ -3,7 +3,7 @@
     "Tooltip_craft_WaterPipeRiserDesc": "A pipe run up a wall. Links floor pipes on both sides and connects different floors. Needs a Pipe Wrench.",
     "Tooltip_craft_WaterPipeHiddenDesc": "A pipe plastered out of sight. Carries fluid like a normal one. Reveal it with 'Show pipe network'. Needs a Pipe Wrench and a bucket of mixed cement.",
     "Tooltip_craft_WaterPipeRiserHiddenDesc": "A vertical pipe plastered into the wall. Links floors out of sight. Reveal it with 'Show pipe network'. Needs a Pipe Wrench and a bucket of mixed cement.",
-    "Tooltip_craft_WaterPurifierElectricDesc": "Electric distiller tank. Put it on a Fluid Router: water crossing it is purified while it has power. The filter wears with use; right-click to repair it with charcoal and ripped sheets. Needs clear space above.",
+    "Tooltip_craft_WaterPurifierElectricDesc": "Electric purifier tank. Put it on a Fluid Router: water crossing it is purified while it has power. The filter wears with use; right-click to repair it with charcoal and ripped sheets. Needs clear space above.",
     "Tooltip_craft_WaterPipeRouterDesc": "Splits a pipe run into two separate networks, an IN side and an OUT side, that exchange only through a container on its tile. Put a purifier there to clean water in transit, or a tank to buffer it. Rotate with R to aim the OUT side.",
     "Tooltip_WaterPipesFilterCondition": "Filter condition: %1%",
     "Tooltip_WaterPipesRepairNeeds": "Requires:",
