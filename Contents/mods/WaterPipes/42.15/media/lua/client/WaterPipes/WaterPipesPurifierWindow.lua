@@ -160,17 +160,19 @@ function WaterPipesPurifierWindow:prerender()
     -- actually cleaning tainted right now.
     local hasTainted = inTainted and inAmount > 0
     local converting = connected and hasTainted and not clogged
+    local processing = Purifier.isProcessing(obj)
     local full = outAmount >= cap
-    local working = connected and (inAmount > 0 or outAmount > 0)
     local statusKey, statusCol
-    if not connected then
+    if processing then
+        -- The server says fluid moved on its last tick. That beats every inference below: a tank
+        -- sitting full while it pushes clean water out is busy, not stopped.
+        statusKey, statusCol = "IGUI_WaterPipesPurifierFiltering", COL_RUNNING
+    elseif not connected then
         statusKey, statusCol = "IGUI_WaterPipesPurifierStopped", COL_STOPPED
     elseif hasTainted and clogged then
         statusKey, statusCol = "IGUI_WaterPipesPurifierClogged", COL_STOPPED
     elseif full then
         statusKey, statusCol = "IGUI_WaterPipesPurifierStopped", COL_STOPPED
-    elseif working then
-        statusKey, statusCol = "IGUI_WaterPipesPurifierFiltering", COL_RUNNING
     else
         statusKey, statusCol = "IGUI_WaterPipesPurifierIdle", COL_LABEL
     end

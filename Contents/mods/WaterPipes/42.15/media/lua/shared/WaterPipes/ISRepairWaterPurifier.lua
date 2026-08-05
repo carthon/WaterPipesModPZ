@@ -2,7 +2,7 @@ require "TimedActions/ISBaseTimedAction"
 require "WaterPipes/Constants"
 require "WaterPipes/Purifier"
 
--- Repairs a purifier's worn filter: consumes the repair kit (Charcoal + RippedSheets) from the
+-- Repairs a purifier's worn filter: consumes the repair kit (charcoal + RippedSheets) from the
 -- character's inventory and restores the filter condition to full. World state (the condition modData)
 -- is mutated authoritatively on the server via a client command, mirroring the plumb timed actions;
 -- the inventory consumption happens locally on the acting client.
@@ -12,8 +12,12 @@ ISRepairWaterPurifier = ISBaseTimedAction:derive("ISRepairWaterPurifier")
 local Constants = WaterPipes.Constants
 local Purifier = WaterPipes.Purifier
 
--- Inventory type queries below use the FULL type ("Base.Charcoal"), matching the mod's proven
+-- Inventory type queries below use the FULL type ("Base.RippedSheets"), matching the mod's proven
 -- containsTypeRecurse("Base.PipeWrench") usage (PZ's *TypeRecurse helpers match full or short type).
+
+-- Counting and taking both live in Constants, so this and the drip repair cannot drift apart: an
+-- entry may list interchangeable types (the two charcoals) and name a tag, and both paths have to
+-- agree on what counts or the tooltip ends up promising something the action cannot deliver.
 
 -- Does the inventory hold the full repair kit?
 function ISRepairWaterPurifier.hasRepairKit(inventory)
@@ -21,7 +25,7 @@ function ISRepairWaterPurifier.hasRepairKit(inventory)
         return false
     end
     for _, entry in ipairs(Constants.PURIFIER_REPAIR_ITEMS) do
-        if inventory:getCountTypeRecurse(entry.type) < (entry.count or 1) then
+        if Constants.countRepairItems(inventory, entry) < (entry.count or 1) then
             return false
         end
     end
@@ -31,7 +35,7 @@ end
 local function consumeRepairKit(inventory)
     for _, entry in ipairs(Constants.PURIFIER_REPAIR_ITEMS) do
         for _ = 1, (entry.count or 1) do
-            local item = inventory:getFirstTypeRecurse(entry.type)
+            local item = Constants.takeRepairItem(inventory, entry)
             if not item then
                 return false
             end

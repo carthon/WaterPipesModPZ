@@ -176,6 +176,48 @@ function Purifier.getOutAmount(worldObject)
     return type(value) == "number" and math.max(value, 0) or 0
 end
 
+-- Was fluid actually moving on the last server tick? Distinct from isWorking, which only says the
+-- tile has electricity.
+function Purifier.isProcessing(worldObject)
+    local modData = getModData(worldObject)
+    return modData and modData[Constants.PURIFIER_PROCESSING_KEY] == true or false
+end
+
+-- Server-side, once per tick. Only writes and transmits on a CHANGE: this runs every tick on every
+-- purifier, and transmitting an unchanged flag would be steady multiplayer traffic for nothing.
+function Purifier.setProcessing(worldObject, processing)
+    local modData = getModData(worldObject)
+    if not modData then
+        return
+    end
+    local value = processing and true or nil
+    if modData[Constants.PURIFIER_PROCESSING_KEY] == value then
+        return
+    end
+    modData[Constants.PURIFIER_PROCESSING_KEY] = value
+    transmit(worldObject)
+end
+
+-- Room left in the IN buffer for `tainted`-ness of water, or 0 if it cannot take that kind.
+--
+-- This exists so a pump can feed the purifier directly. Until now the pump asked the NETWORK how
+-- much it could take, and that question never crosses a router -- which is exactly what a purifier
+-- sits on -- so a lake pump with a barrel on the clean side alone was told "no room" and drew
+-- nothing. The tank the purifier already carries is the obvious place for that water to go.
+--
+-- A buffer that already holds water only accepts more of the SAME kind: addIn keeps the existing
+-- taint flag, so letting clean water into a tainted buffer would quietly relabel it.
+function Purifier.intakeHeadroom(worldObject, tainted)
+    if not Purifier.isPurifier(worldObject) then
+        return 0
+    end
+    local amount = Purifier.getInAmount(worldObject)
+    if amount > 0 and Purifier.isInTainted(worldObject) ~= (tainted and true or false) then
+        return 0
+    end
+    return math.max(Constants.PURIFIER_BUFFER_CAPACITY - amount, 0)
+end
+
 -- Add intake into the IN buffer, recording whether it is tainted (an empty buffer adopts the type).
 function Purifier.addIn(worldObject, amount, tainted)
     local modData = getModData(worldObject)

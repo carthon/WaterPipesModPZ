@@ -228,6 +228,11 @@ end
 -- `dt` is the elapsed in-game minutes for this sub-step; the per-minute rates are scaled by it so the
 -- purifier moves the same amount per game-minute no matter how often we tick.
 local function processPurifierRouter(purifier, inSquare, outSquare, dt)
+    -- Set by whichever of the three steps below actually moves fluid, and written to the purifier at
+    -- the end. A tank sitting full while it pushes clean water out IS busy, and the readout used to
+    -- call that "Stopped" purely because the levels looked static.
+    local processed = false
+
     -- 1. Output: push the (clean) OUT buffer into the OUT network.
     local outAmount = Purifier.getOutAmount(purifier)
     if outAmount > 0 then
@@ -237,6 +242,7 @@ local function processPurifierRouter(purifier, inSquare, outSquare, dt)
             local filled = NetworkAccess.fillFluidAtSquare(outSquare, "Water", push)
             if filled and filled > 0 then
                 Purifier.removeOut(purifier, filled)
+                processed = true
             end
         end
     end
@@ -254,11 +260,15 @@ local function processPurifierRouter(purifier, inSquare, outSquare, dt)
                 if Purifier.canFilter(purifier) then
                     local before = Purifier.getInAmount(purifier)
                     Purifier.moveInToOut(purifier, move)   -- lands in the OUT buffer as clean Water
-                    Purifier.wearFilter(purifier, before - Purifier.getInAmount(purifier))
+                    local converted = before - Purifier.getInAmount(purifier)
+                    Purifier.wearFilter(purifier, converted)
+                    processed = processed or converted > 0
                 end
                 -- tainted + not powered / clogged filter: stays in the IN buffer until it can be cleaned
             else
+                local before = Purifier.getInAmount(purifier)
                 Purifier.moveInToOut(purifier, move)       -- clean water always passes through
+                processed = processed or Purifier.getInAmount(purifier) < before
             end
         end
     end
@@ -278,10 +288,14 @@ local function processPurifierRouter(purifier, inSquare, outSquare, dt)
                 local drawn = NetworkAccess.drawFluidAtSquare(inSquare, "TaintedWater", pull)
                 if drawn and drawn > 0 then
                     Purifier.addIn(purifier, drawn, true)
+                    processed = true
                 end
             end
         end
     end
+
+    -- Record what actually happened, so the readout reports it instead of guessing from the levels.
+    Purifier.setProcessing(purifier, processed)
 end
 
 -- Fluid routers actively move fluid across their boundary in the OUT direction each server tick. A
@@ -331,15 +345,56 @@ end
 -- a well holds 10 000 L and open water is infinite, so letting either join the network as storage
 -- would leave rebalanceSummary smearing them across every pipe and the network permanently full.
 -- Bounded injection is the same shape the purifier's intake step already uses.
+-- A purifier the pump is allowed to feed: one sitting on a router that borders the pump's own zone,
+-- approached from the router's IN side.
+--
+-- The side matters. A router's OUT offset points at its clean side, so if the pipe we reached it
+-- from IS that square, we are downstream and pushing raw lake water in there would contaminate the
+-- clean run. Only the intake side is fair game.
+local function findPurifierIntakeForPump(square)
+    local cell = getCell and getCell() or nil
+    if not cell then
+        return nil
+    end
+    local pipeSquares = NetworkAccess.getNetworkFromSquare(square)
+    for _, sq in ipairs(pipeSquares or {}) do
+        for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
+            local nsq = cell:getGridSquare(sq:getX() + offset.x, sq:getY() + offset.y,
+                                           sq:getZ() + offset.z)
+            local router = nsq and Router.findOnSquare(nsq)
+            if router then
+                local out = Router.getOutOffset(router)
+                local onOutSide = out and nsq:getX() + out.dx == sq:getX()
+                    and nsq:getY() + out.dy == sq:getY()
+                if not onOutSide then
+                    local purifier = Purifier.findForRouterSquare(nsq)
+                    if purifier then
+                        return purifier
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
 function System.processPump(pump, square, dt)
     local source = Pump.findSource(pump)
     if not source then
         return   -- booster only: nothing to draw from, but it still adds head to its zone
     end
 
-    -- Ask the network what it can take FIRST, so we never pull water out of a well and lose it.
+    -- Ask what can take water FIRST, so we never pull it out of a well and lose it.
+    --
+    -- Two destinations, not one. The network is the obvious one, but a fill query stops dead at a
+    -- router, and a purifier sits on a router -- so a pump feeding a purifier with storage only on
+    -- the clean side used to be told "no room" and drew nothing at all. Its intake tank counts too.
+    local tainted = source.fluidType == "TaintedWater"
     local headroom = NetworkAccess.availableToPush(square, source.fluidType)
-    local wanted = math.min(Pump.intakeFor(dt), headroom)
+    local purifier = findPurifierIntakeForPump(square)
+    local purifierRoom = purifier and Purifier.intakeHeadroom(purifier, tainted) or 0
+
+    local wanted = math.min(Pump.intakeFor(dt), headroom + purifierRoom)
     if wanted <= 0 then
         return
     end
@@ -349,10 +404,22 @@ function System.processPump(pump, square, dt)
         return
     end
 
-    local added = NetworkAccess.fillFluidAtSquare(square, source.fluidType, taken)
+    -- Network first: it is the destination the player can actually see filling up.
+    local added = 0
+    if headroom > 0 then
+        added = NetworkAccess.fillFluidAtSquare(square, source.fluidType, math.min(taken, headroom))
+    end
+
+    local leftover = taken - added
+    if leftover > 0 and purifierRoom > 0 and purifier then
+        local intoTank = math.min(leftover, purifierRoom)
+        Purifier.addIn(purifier, intoTank, tainted)
+        added = added + intoTank
+    end
+
     if added < taken then
-        -- The network took less than we drew (a race with another consumer, or a mixed-fluid
-        -- refusal). Put the remainder back rather than quietly destroying it.
+        -- Less was taken than we drew (a race with another consumer, or a mixed-fluid refusal). Put
+        -- the remainder back rather than quietly destroying it.
         Pump.refundToSource(source, taken - added)
     end
 end

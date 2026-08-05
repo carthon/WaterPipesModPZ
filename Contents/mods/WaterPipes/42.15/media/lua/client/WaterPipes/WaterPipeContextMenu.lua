@@ -153,29 +153,43 @@ local function findPurifierInWorldObjects(worldobjects)
     return nil
 end
 
+-- The anchor of a purifier's 2x2 footprint: the router tile the SERVER processes the tank on, and
+-- therefore the only object whose modData holds its real state -- buffers, filter condition, whether
+-- it is busy. The other three tiles carry a purifier object with empty modData, so anything reading
+-- state has to come through here first or it silently reads defaults.
+--
+-- Resolved exactly the way the server does it (findForRouterSquare on the router square), so client
+-- and server always agree on which object they are talking about.
+local function resolvePurifierAnchor(purifierObject)
+    local square = purifierObject and purifierObject.getSquare and purifierObject:getSquare() or nil
+    local cell = getCell and getCell() or nil
+    if not square or not cell then
+        return nil, nil
+    end
+
+    for _, off in ipairs(PURIFIER_BLOCK_OFFSETS) do
+        local nsq = square
+        if off[1] ~= 0 or off[2] ~= 0 then
+            nsq = cell:getGridSquare(square:getX() + off[1], square:getY() + off[2], square:getZ())
+        end
+        if nsq and Router.hasRouterOnSquare(nsq) then
+            local anchor = Purifier.findForRouterSquare(nsq)
+            if anchor then
+                return anchor, nsq
+            end
+        end
+    end
+    return nil, nil
+end
+
 -- Open the purifier readout window (buffers, running status, filtering rate).
 function ContextMenu.openPurifier(playerObj, purifierObject)
     if not purifierObject or not WaterPipesPurifierWindow then
         return
     end
-    -- Resolve the router/anchor tile of the purifier's 2x2 footprint so the window reads the SAME buffers
-    -- the server processes on that tile (findForRouterSquare). The footprint extends +x/+y from the anchor
-    -- (which carries the router), so from any tank tile the anchor is this tile or up-and-left of it.
-    local anchorSquare = nil
-    local sq = purifierObject.getSquare and purifierObject:getSquare() or nil
-    local cell = getCell and getCell() or nil
-    if sq then
-        for _, off in ipairs({ { 0, 0 }, { -1, 0 }, { 0, -1 }, { -1, -1 } }) do
-            local nsq = sq
-            if off[1] ~= 0 or off[2] ~= 0 then
-                nsq = cell and cell:getGridSquare(sq:getX() + off[1], sq:getY() + off[2], sq:getZ())
-            end
-            if nsq and Router.hasRouterOnSquare(nsq) and Purifier.findForRouterSquare(nsq) then
-                anchorSquare = nsq
-                break
-            end
-        end
-    end
+    -- The window has to read the SAME buffers the server writes, so it keys off the anchor tile
+    -- rather than whichever of the four the player clicked.
+    local _anchor, anchorSquare = resolvePurifierAnchor(purifierObject)
 
     -- Walk the character over to the tank, then open the window on arrival. If it is unreachable, just
     -- open it in place so the readout is never blocked.
@@ -825,6 +839,16 @@ local function onServerCommand(module, command, args)
     end
 end
 
+-- An entry may accept several interchangeable items (either charcoal), so the requirement is shown
+-- as "A / B" rather than pinning the player to the one they happen not to have.
+local function describeRepairEntry(entry)
+    local names = {}
+    for _, itemType in ipairs(Constants.repairTypes(entry)) do
+        names[#names + 1] = getItemNameFromFullType(itemType) or itemType
+    end
+    return "  " .. (entry.count or 1) .. " x " .. table.concat(names, " / ")
+end
+
 -- Tooltip for a disabled "Repair filter" option: current condition + the missing requirements.
 local function buildRepairTooltip(purifierObject, hasKit, hasWrench)
     local tooltip = ISWorldObjectContextMenu.addToolTip()
@@ -840,8 +864,7 @@ local function buildRepairTooltip(purifierObject, hasKit, hasWrench)
     end
     if not hasKit then
         for _, entry in ipairs(Constants.PURIFIER_REPAIR_ITEMS) do
-            local name = getItemNameFromFullType(entry.type) or entry.type
-            lines[#lines + 1] = "  " .. (entry.count or 1) .. " x " .. name
+            lines[#lines + 1] = describeRepairEntry(entry)
         end
     end
     tooltip.description = table.concat(lines, " <LINE> ")
@@ -1109,8 +1132,7 @@ local function buildDripRepairTooltip(hasKit, hasWrench)
     end
     if not hasKit then
         for _, entry in ipairs(Constants.DRIP_REPAIR_ITEMS) do
-            lines[#lines + 1] = "  " .. (entry.count or 1) .. " x "
-                .. (getItemNameFromFullType(entry.type) or entry.type)
+            lines[#lines + 1] = describeRepairEntry(entry)
         end
     end
     tooltip.description = table.concat(lines, " <LINE> ")
@@ -1231,16 +1253,23 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     if hasPurifierOption then
         addPurifierOptions(context, playerObj, purifierObject)
 
+        -- Ask the ANCHOR, not whichever of the 2x2 tiles happened to be clicked. The filter condition
+        -- lives in the anchor's modData because that is the tile the server processes the tank on, so
+        -- the other three read the default 100 -- and a worn filter offered no repair option at all
+        -- from three quarters of the machine, while the readout window (which resolves the anchor
+        -- properly) sat there showing 13%.
+        local anchor = resolvePurifierAnchor(purifierObject) or purifierObject
+
         -- "Repair filter" appears only once the filter has worn below full. Enabled when the player
         -- carries a pipe wrench and the repair kit; otherwise shown disabled with a requirements tooltip.
-        if Purifier.needsRepair(purifierObject) then
+        if Purifier.needsRepair(anchor) then
             local option = context:addOption(getText("ContextMenu_WaterPipesRepairFilter"),
-                playerObj, ContextMenu.repairPurifier, purifierObject)
+                playerObj, ContextMenu.repairPurifier, anchor)
             local hasWrench = playerHasPipeWrench(playerObj)
             local hasKit = ISRepairWaterPurifier.hasRepairKit(playerObj:getInventory())
             if not hasWrench or not hasKit then
                 option.notAvailable = true
-                option.toolTip = buildRepairTooltip(purifierObject, hasKit, hasWrench)
+                option.toolTip = buildRepairTooltip(anchor, hasKit, hasWrench)
             end
         end
     end
