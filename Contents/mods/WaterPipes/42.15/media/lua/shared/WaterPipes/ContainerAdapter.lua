@@ -527,9 +527,42 @@ function Adapter.writeWaterAmount(container, waterAmount)
     return false
 end
 
+-- The purifier's clean OUT buffer, written as an ordinary network container (see
+-- addPurifierOutletDescriptors in NetworkAccess). It is a modData number rather than a
+-- FluidContainer, so it is written by hand here.
+--
+-- Only ever holds clean Water: the outlet descriptor is left out of any network that already carries
+-- tainted water, so a rebalance can never arrive here with anything else. Refusing loudly rather than
+-- silently storing it, because a wrong answer at this point is water conjured or destroyed.
+local function writePurifierOutAmount(purifierObject, fluidAmount, fluidTypeName)
+    if not purifierObject or not purifierObject.getModData then
+        return false
+    end
+    if fluidAmount > 0 and fluidTypeName and fluidTypeName ~= "Water" then
+        return false
+    end
+
+    local ok, modData = pcall(purifierObject.getModData, purifierObject)
+    if not ok or not modData then
+        return false
+    end
+
+    modData[Constants.PURIFIER_OUT_AMOUNT_KEY] =
+        math.min(math.max(fluidAmount or 0, 0), Constants.PURIFIER_BUFFER_CAPACITY)
+
+    if purifierObject.transmitModData then
+        pcall(purifierObject.transmitModData, purifierObject)
+    end
+    return true
+end
+
 function Adapter.writeDescriptorWaterAmount(descriptor, fluidAmount, fluidTypeName)
     if not descriptor then
         return false
+    end
+
+    if descriptor.fluidMode == "purifierOut" then
+        return writePurifierOutAmount(descriptor.object, fluidAmount, fluidTypeName)
     end
 
     if descriptor.fluidMode == "worldObject" then
