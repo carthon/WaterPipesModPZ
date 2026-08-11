@@ -14,12 +14,14 @@
 require "WaterPipes/Constants"
 require "WaterPipes/Hydrant"
 require "WaterPipes/Irrigation"
+require "WaterPipes/WaterPipesTileRegistry"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.SprayFX = WaterPipes.SprayFX or {}
 
 local Hydrant = WaterPipes.Hydrant
 local Irrigation = WaterPipes.Irrigation
+local Registry = WaterPipes.TileRegistry
 local FX = WaterPipes.SprayFX
 
 -- ===== Tunables =====
@@ -79,10 +81,16 @@ local function phaseFor(x, y)
     return (x * 7 + y * 13) % FRAMES
 end
 
+-- Rebuild the list of tiles currently worth drawing a spray over.
+--
+-- This used to sweep the whole (2*DRAW_RADIUS+1)^2 block around the player and scan every tile's
+-- object list looking for something to draw -- ~1400 tiles and three object scans each, whether or
+-- not the save contained a single emitter. It now asks the tile registry, which remembers where they
+-- are, so the work is proportional to the number of emitters near the player rather than to the area
+-- around them. See WaterPipesTileRegistry.
 local function rescan()
     local player = getPlayer and getPlayer() or nil
-    local cell = getCell and getCell() or nil
-    if not player or not cell then
+    if not player then
         FX.active = {}
         return
     end
@@ -90,34 +98,35 @@ local function rescan()
     local py = math.floor(player:getY())
     local pz = math.floor(player:getZ())
     local list = {}
-    for dx = -DRAW_RADIUS, DRAW_RADIUS do
-        for dy = -DRAW_RADIUS, DRAW_RADIUS do
-            local sq = cell:getGridSquare(px + dx, py + dy, pz)
-            if sq then
-                local hydrant = Hydrant.findOnSquare(sq)
-                if hydrant and Hydrant.isFlowing(hydrant) then
-                    list[#list + 1] = { x = sq:getX(), y = sq:getY(), z = sq:getZ(),
-                                        kind = "hydrant", phase = phaseFor(sq:getX(), sq:getY()) }
-                else
-                    -- A tile carries a sprinkler OR a drip, never both; whichever is actually
-                    -- watering (has pressure + water + not burst) gets its spray this pass.
-                    local emitter = Irrigation.findSprinklerOnSquare(sq)
-                    local kind = emitter and "sprinkler" or nil
-                    if not emitter then
-                        emitter = Irrigation.findDripOnSquare(sq)
-                        kind = emitter and "drip" or nil
-                    end
-                    if emitter then
-                        local status = Irrigation.getEmitterStatus(emitter, sq)
-                        if status and status.active then
-                            list[#list + 1] = { x = sq:getX(), y = sq:getY(), z = sq:getZ(),
-                                                kind = kind, phase = phaseFor(sq:getX(), sq:getY()) }
-                        end
-                    end
-                end
+
+    -- Tiles already claimed by a hydrant. A pipe (and so an emitter) can legally share a hydrant's
+    -- tile, and the hydrant's gush is the bigger effect, so it wins the tile.
+    local claimed = {}
+    for _, found in ipairs(Registry.near("hydrants", px, py, pz, DRAW_RADIUS)) do
+        local sq = found.square
+        claimed[sq:getX() .. ":" .. sq:getY() .. ":" .. sq:getZ()] = true
+        if Hydrant.isFlowing(found.object) then
+            list[#list + 1] = { x = sq:getX(), y = sq:getY(), z = sq:getZ(),
+                                kind = "hydrant", phase = phaseFor(sq:getX(), sq:getY()) }
+        end
+    end
+
+    -- A tile carries a sprinkler OR a drip, never both; whichever is actually watering (has
+    -- pressure + water + not burst) gets its spray this pass. The status is cached per tile by the
+    -- registry -- it is derived from the network, which only moves on the server's minute pass, so
+    -- recomputing it on every rescan was asking a question whose answer could not have changed.
+    for _, found in ipairs(Registry.near("emitters", px, py, pz, DRAW_RADIUS)) do
+        local sq, emitter = found.square, found.object
+        if not claimed[sq:getX() .. ":" .. sq:getY() .. ":" .. sq:getZ()] then
+            local status = Registry.emitterStatus(emitter, sq)
+            if status and status.active then
+                local kind = Irrigation.isSprinkler(emitter) and "sprinkler" or "drip"
+                list[#list + 1] = { x = sq:getX(), y = sq:getY(), z = sq:getZ(),
+                                    kind = kind, phase = phaseFor(sq:getX(), sq:getY()) }
             end
         end
     end
+
     FX.active = list
 end
 

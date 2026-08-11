@@ -7,11 +7,13 @@
 -- "WaterPipes" group; we only read it), gated on the mod's SoundEnabled / SoundVolume options.
 
 require "WaterPipes/Hydrant"
+require "WaterPipes/WaterPipesTileRegistry"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.HydrantSound = WaterPipes.HydrantSound or {}
 
 local Hydrant = WaterPipes.Hydrant
+local Registry = WaterPipes.TileRegistry
 local Sound = WaterPipes.HydrantSound
 
 -- Placeholder like the sprite: the vanilla "liquid on the ground" pour, looped, reads as a hydrant
@@ -120,18 +122,16 @@ function Sound.update()
     local py = math.floor(player:getY())
     local pz = math.floor(player:getZ())
 
+    -- Driven by the tile registry rather than a (2*SCAN_RADIUS+1)^2 sweep: the old scan walked 841
+    -- tiles once a second scanning every object list, to manage a loop for the handful of hydrants
+    -- that actually exist. See WaterPipesTileRegistry.
     local seen = {}
-    for dx = -SCAN_RADIUS, SCAN_RADIUS do
-        for dy = -SCAN_RADIUS, SCAN_RADIUS do
-            local sq = cell:getGridSquare(px + dx, py + dy, pz)
-            if sq then
-                local hydrant = Hydrant.findOnSquare(sq)
-                if hydrant and Hydrant.isFlowing(hydrant) then
-                    local k = keyFor(sq)
-                    seen[k] = true
-                    ensureLoop(sq, k)
-                end
-            end
+    for _, found in ipairs(Registry.near("hydrants", px, py, pz, SCAN_RADIUS)) do
+        if Hydrant.isFlowing(found.object) then
+            local sq = found.square
+            local k = keyFor(sq)
+            seen[k] = true
+            ensureLoop(sq, k)
         end
     end
 
