@@ -131,7 +131,37 @@ local function rescan()
 end
 
 -- ===== Draw =====
-local drawTick = 0
+
+-- The animation is paced off REAL TIME, not off how many times we happen to be drawn.
+--
+-- PZ renders the UI to an offscreen buffer at its own configurable rate (Options -> UIRenderFPS,
+-- default 60), independent of the world's framerate -- and OnPreUIDraw fires at that rate. Advancing
+-- the frame with a draw counter therefore clocked the spray off a display setting: at 20 UI FPS the
+-- loop took three times as long and the water visibly crawled while the world around it ran fine.
+--
+-- Nothing about the animation was ever expensive; the counter costs nothing. It was being driven by
+-- the wrong thing. Vanilla hits the same problem and solves it the same way -- see the
+-- `30 / getPerformance():getUIRenderFPS()` scaling in ISVehicleDashboard and ISSkillProgressBar --
+-- and WaterPipesWetness in this mod is already paced off elapsed milliseconds for the same reason.
+--
+-- Pinned to the speed it had at the DEFAULT 60 UI FPS, so nothing changes for anyone on the default
+-- and it stops degrading for everyone below it. A low UI FPS still shows fewer steps of the loop --
+-- there is no way around that from the UI layer -- but it no longer plays in slow motion.
+local MS_PER_FRAME = 1000 * HOLD / 60
+
+local drawTick = 0   -- fallback only, for a build with no getTimestampMs
+
+local function animationFrame()
+    if getTimestampMs then
+        local ok, ms = pcall(getTimestampMs)
+        if ok and type(ms) == "number" then
+            return math.floor(ms / MS_PER_FRAME)
+        end
+    end
+    -- No clock available: count draws, which is exactly what this replaced.
+    drawTick = (drawTick + 1) % (FRAMES * HOLD)
+    return math.floor(drawTick / HOLD)
+end
 
 local function daylightAlpha()
     local world = getWorld and getWorld() or nil
@@ -170,7 +200,7 @@ function FX.render()
     if not zoom or zoom <= 0 then
         zoom = 1
     end
-    local frameIndex = math.floor(drawTick / HOLD)
+    local frameIndex = animationFrame()
     local alpha = daylightAlpha()
 
     for _, e in ipairs(list) do
@@ -185,11 +215,6 @@ function FX.render()
                 UIManager.DrawTexture(tex, sx, sy, size, size, alpha)
             end
         end
-    end
-
-    drawTick = drawTick + 1
-    if drawTick >= FRAMES * HOLD then
-        drawTick = 0
     end
 end
 
