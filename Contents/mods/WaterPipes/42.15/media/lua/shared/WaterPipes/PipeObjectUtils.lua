@@ -66,20 +66,66 @@ function PipeObjectUtils.hasWallCoverOnSquare(square)
     return false
 end
 
+-- ===== Per-frame scan memo =====
+--
+-- getPipeObjectsOnSquare is the most-called world accessor in the mod by a wide margin: a single
+-- network walk asks it about thirteen times per pipe tile -- the router check on the way in, then the
+-- pipe check and the router check again inside tryAdd, then the pump lookup, and all of that again
+-- from each of the four neighbours the tile is reached from. Every one of those calls walks the
+-- square's entire object list and allocates a fresh table.
+--
+-- The answer cannot change unless an object is added to or removed from the square, and both raise
+-- events. So it is memoised, and the memo is dropped on those events and, as a backstop, once per
+-- frame. That bounds staleness at a single frame while letting a whole periodic pass -- which runs
+-- inside one frame -- share one scan per tile instead of thirteen.
+local scanMemo = {}
+
+local function memoKey(square)
+    return tostring(square:getX()) .. ":" .. tostring(square:getY()) .. ":" .. tostring(square:getZ())
+end
+
+function PipeObjectUtils.invalidateScanCache()
+    scanMemo = {}
+end
+
+function PipeObjectUtils.invalidateSquareScan(square)
+    if square and square.getX then
+        scanMemo[memoKey(square)] = nil
+    end
+end
+
+-- The returned table is SHARED between callers and must be treated as READ-ONLY. Not returning a
+-- private copy is half the point: the allocation it avoids is as costly as the scan it avoids.
+-- The excludeObject form is the one exception -- it has to filter, so it builds its own table.
 function PipeObjectUtils.getPipeObjectsOnSquare(square, excludeObject)
     if not square or not square.getObjects then
         return {}
     end
 
+    local key = memoKey(square)
+    local cached = scanMemo[key]
+    if not cached then
+        cached = {}
+        local objects = square:getObjects()
+        for index = 0, objects:size() - 1 do
+            local worldObject = objects:get(index)
+            if PipeObjectUtils.isPipeObject(worldObject) then
+                cached[#cached + 1] = worldObject
+            end
+        end
+        scanMemo[key] = cached
+    end
+
+    if not excludeObject then
+        return cached
+    end
+
     local results = {}
-    local objects = square:getObjects()
-    for index = 0, objects:size() - 1 do
-        local worldObject = objects:get(index)
-        if worldObject ~= excludeObject and PipeObjectUtils.isPipeObject(worldObject) then
+    for _, worldObject in ipairs(cached) do
+        if worldObject ~= excludeObject then
             results[#results + 1] = worldObject
         end
     end
-
     return results
 end
 
@@ -160,6 +206,24 @@ function PipeObjectUtils.getRiserVerticalNeighborCoords(x, y, z)
     end
 
     return coords
+end
+
+-- The scan memo's invalidation. Object add/remove clears the square it happened on; the per-frame
+-- clear is the backstop that keeps any path we have not thought of from ever seeing a stale list for
+-- longer than one frame.
+if Events then
+    local function invalidateForObject(object)
+        local square = object and object.getSquare and object:getSquare() or nil
+        if square then
+            PipeObjectUtils.invalidateSquareScan(square)
+        else
+            PipeObjectUtils.invalidateScanCache()
+        end
+    end
+
+    if Events.OnObjectAdded then Events.OnObjectAdded.Add(invalidateForObject) end
+    if Events.OnObjectAboutToBeRemoved then Events.OnObjectAboutToBeRemoved.Add(invalidateForObject) end
+    if Events.OnTick then Events.OnTick.Add(PipeObjectUtils.invalidateScanCache) end
 end
 
 function PipeObjectUtils.getSquareFromWorldObjects(worldobjects)
