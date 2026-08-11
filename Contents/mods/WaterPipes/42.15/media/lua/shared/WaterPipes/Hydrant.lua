@@ -82,6 +82,14 @@ function Hydrant.setOpen(worldObject, open)
     if square then
         State.setHydrantOpen(square:getX(), square:getY(), square:getZ(), open and true or false)
     end
+
+    -- An open, mains-fed hydrant is a pressure floor the network walk records as it passes, so a
+    -- cached walk still reflects the old valve position. Resolved off the WaterPipes table:
+    -- NetworkAccess requires this module, so requiring it back would be a recursive require.
+    local NetworkAccess = WaterPipes.NetworkAccess
+    if NetworkAccess and NetworkAccess.invalidateTraversalCache then
+        NetworkAccess.invalidateTraversalCache()
+    end
 end
 
 -- ===== Reserve =====
