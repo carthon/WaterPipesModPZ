@@ -5,11 +5,13 @@
 
 require "WaterPipes/Constants"
 require "WaterPipes/Purifier"
+require "WaterPipes/WaterPipesTileRegistry"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.PurifierSound = WaterPipes.PurifierSound or {}
 
 local Purifier = WaterPipes.Purifier
+local Registry = WaterPipes.TileRegistry
 local Sound = WaterPipes.PurifierSound
 
 -- Tunables. Switch SOUND_NAME to "OldGeneratorLoop" for a rougher, older-motor hum.
@@ -131,18 +133,14 @@ function Sound.update()
     local py = math.floor(player:getY())
     local pz = math.floor(player:getZ())
 
+    -- Driven by the tile registry rather than a (2*SCAN_RADIUS+1)^2 sweep -- see the same change in
+    -- WaterPipesHydrantSound, and WaterPipesTileRegistry for why.
     local seen = {}
-    for dx = -SCAN_RADIUS, SCAN_RADIUS do
-        for dy = -SCAN_RADIUS, SCAN_RADIUS do
-            local sq = cell:getGridSquare(px + dx, py + dy, pz)
-            if sq then
-                local purifier = Purifier.findOnSquare(sq)
-                if purifier and Purifier.isWorking(purifier) then
-                    local k = keyFor(sq)
-                    seen[k] = true
-                    ensureLoop(sq, k)   -- (re)start the loop + refresh volume on a world free emitter
-                end
-            end
+    for _, found in ipairs(Registry.near("purifiers", px, py, pz, SCAN_RADIUS)) do
+        if Purifier.isWorking(found.object) then
+            local k = keyFor(found.square)
+            seen[k] = true
+            ensureLoop(found.square, k)   -- (re)start the loop + refresh volume on a world free emitter
         end
     end
 

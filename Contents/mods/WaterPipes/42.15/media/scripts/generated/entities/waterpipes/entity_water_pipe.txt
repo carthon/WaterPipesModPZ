@@ -152,11 +152,15 @@ module WaterPipes
         {
             timedAction = BuildLowNoTool,
             time = 200,
+            SkillRequired = Electricity:4;MetalWelding:3,
+            xpAward = Electricity:40;MetalWelding:30,
             category = Piping,
             Tooltip = Tooltip_craft_WaterPurifierElectricDesc,
             inputs
             {
                 item 1 [Base.PipeWrench] mode:keep flags[Prop1],
+                item 3 [Base.BlowTorch] flags[DontRecordInput],
+                item 2 [Base.WeldingRods] flags[DontRecordInput],
                 item 3 [Base.MetalPipe],
                 item 2 [Base.SheetMetal],
                 item 1 [Base.ElectronicsScrap],
@@ -194,14 +198,18 @@ module WaterPipes
         {
             timedAction = BuildLowNoTool,
             time = 180,
+            SkillRequired = Electricity:3;MetalWelding:2,
+            xpAward = Electricity:30;MetalWelding:20,
             category = Piping,
             Tooltip = Tooltip_craft_WaterPumpDesc,
             inputs
             {
                 item 1 [Base.PipeWrench] mode:keep flags[Prop1],
+                item 2 [Base.BlowTorch] flags[DontRecordInput],
+                item 1 [Base.WeldingRods] flags[DontRecordInput],
                 item 2 [Base.MetalPipe],
-                item 1 [Base.SheetMetal],
-                item 1 [Base.ElectronicsScrap],
+                item 4 [Base.SheetMetal],
+                item 2 [Base.ElectronicsScrap],
                 item 1 [Base.Wire],
             }
         }
@@ -233,6 +241,8 @@ module WaterPipes
         {
             timedAction = BuildLowNoTool,
             time = 60,
+            SkillRequired = Farming:1,
+            xpAward = Farming:10,
             category = Piping,
             Tooltip = Tooltip_craft_WaterPipeDripDesc,
             inputs
@@ -269,6 +279,8 @@ module WaterPipes
         {
             timedAction = BuildLowNoTool,
             time = 100,
+            SkillRequired = Farming:2,
+            xpAward = Farming:20,
             category = Piping,
             Tooltip = Tooltip_craft_WaterPipeSprinklerDesc,
             inputs

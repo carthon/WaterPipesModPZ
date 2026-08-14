@@ -233,17 +233,22 @@ local function processPurifierRouter(purifier, inSquare, outSquare, dt)
     -- call that "Stopped" purely because the levels looked static.
     local processed = false
 
-    -- 1. Output: push the (clean) OUT buffer into the OUT network.
+    -- 1. Output: even the OUT buffer out with the rest of the clean network.
+    --
+    -- This used to PUSH: read the buffer, ask the OUT network for headroom, fill it, subtract what
+    -- was taken. That was the right shape while the buffer was invisible to the network -- and it is
+    -- exactly wrong now that the buffer IS one of that network's containers, because the fill would
+    -- rebalance water back into the buffer and the subtraction would then remove it a second time.
+    -- Water would evaporate a little on every tick.
+    --
+    -- Settling instead moves nothing in or out, it only lets the level equalise between the buffer
+    -- and the barrels downstream. With no barrels it is a no-op and the water simply stays in the
+    -- buffer, where a tap can now reach it.
     local outAmount = Purifier.getOutAmount(purifier)
     if outAmount > 0 then
-        local pushHeadroom = NetworkAccess.availableToPush(outSquare, "Water")
-        local push = math.min(Constants.PURIFIER_OUTPUT_RATE * dt, outAmount, pushHeadroom)
-        if push > 0 then
-            local filled = NetworkAccess.fillFluidAtSquare(outSquare, "Water", push)
-            if filled and filled > 0 then
-                Purifier.removeOut(purifier, filled)
-                processed = true
-            end
+        local settled = NetworkAccess.settleAtSquare(outSquare)
+        if settled > 0 and Purifier.getOutAmount(purifier) ~= outAmount then
+            processed = true
         end
     end
 
@@ -488,6 +493,10 @@ function System.processHydrant(hydrant, square, dt)
     if not mainsFed then
         Hydrant.setReserve(hydrant, reserve - flow)
     end
+
+    -- The spilled water lands somewhere: the gush showers the hydrant's own 3x3 like a sprinkler,
+    -- watering whatever grows there. Free litres -- they are already leaving through the open cap.
+    Irrigation.waterHydrantSurroundings(square, dt / 60)
 end
 
 -- Driven by the open-hydrant registry rather than the pipe list, so a hydrant opened with no pipe on
@@ -637,6 +646,12 @@ function System.refreshPlumbedEndpoints()
 end
 
 function System.rebuild()
+    -- The pipe layout is about to be re-read, so anything cached off the OLD layout is now a lie.
+    -- Both caches self-clear once per frame, but a build and the rebuild it triggers happen inside
+    -- the same frame -- so without this the refresh that follows would still see the pre-build shape.
+    PipeObjectUtils.invalidateScanCache()
+    NetworkAccess.invalidateTraversalCache()
+
     System.scanContainersAroundPipes()
     State.rebuildGraph()
 end

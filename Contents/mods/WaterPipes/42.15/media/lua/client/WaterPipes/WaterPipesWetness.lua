@@ -16,6 +16,7 @@
 require "WaterPipes/Constants"
 require "WaterPipes/Hydrant"
 require "WaterPipes/Irrigation"
+require "WaterPipes/WaterPipesTileRegistry"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.Wetness = WaterPipes.Wetness or {}
@@ -23,6 +24,7 @@ WaterPipes.Wetness = WaterPipes.Wetness or {}
 local Constants = WaterPipes.Constants
 local Hydrant = WaterPipes.Hydrant
 local Irrigation = WaterPipes.Irrigation
+local Registry = WaterPipes.TileRegistry
 local Wetness = WaterPipes.Wetness
 
 -- ===== Tunables =====
@@ -43,49 +45,36 @@ local function maxWetness()
     return 100
 end
 
--- Is this square throwing water over its neighbours right now?
-local function squareIsSpraying(square)
-    if not square then
-        return false
-    end
-
-    local hydrant = Hydrant.findOnSquare(square)
-    if hydrant and Hydrant.isFlowing(hydrant) then
-        return true
-    end
-
-    -- Only the sprinkler: a drip emitter waters the soil of its own tile and would not wet a person
-    -- standing on it.
-    local sprinkler = Irrigation.findSprinklerOnSquare(square)
-    if sprinkler then
-        local status = Irrigation.getEmitterStatus(sprinkler, square)
-        if status and status.active then
-            return true
-        end
-    end
-
-    return false
-end
-
 -- The player is in the water when a running emitter sits within its own watering radius of them --
 -- the emitter covers the 3x3 around itself, so being within one tile of one is being under it.
+--
+-- This runs four times a second, so what it asks matters. It used to scan the 3x3 for objects and
+-- then ask Irrigation.getEmitterStatus, which walks the whole network twice -- meaning standing next
+-- to a sprinkler cost eight full network traversals per second for a yes/no. It now reads the tile
+-- registry (which remembers where emitters are) and its cached status. See WaterPipesTileRegistry.
 local function playerIsInSpray(player)
-    local cell = getCell and getCell() or nil
-    if not cell then
-        return false
-    end
     local px = math.floor(player:getX())
     local py = math.floor(player:getY())
     local pz = math.floor(player:getZ())
     local r = Constants.SPRINKLER_RADIUS or 1
 
-    for dx = -r, r do
-        for dy = -r, r do
-            if squareIsSpraying(cell:getGridSquare(px + dx, py + dy, pz)) then
+    for _, found in ipairs(Registry.near("hydrants", px, py, pz, r)) do
+        if Hydrant.isFlowing(found.object) then
+            return true
+        end
+    end
+
+    -- Only the sprinkler: a drip emitter waters the soil of its own tile and would not wet a person
+    -- standing on it.
+    for _, found in ipairs(Registry.near("emitters", px, py, pz, r)) do
+        if Irrigation.isSprinkler(found.object) then
+            local status = Registry.emitterStatus(found.object, found.square)
+            if status and status.active then
                 return true
             end
         end
     end
+
     return false
 end
 

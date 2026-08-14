@@ -16,9 +16,10 @@ local PipeObjectUtils = WaterPipes.PipeObjectUtils
 --
 -- What makes them different is efficiency, not throughput. That is deliberate: vanilla crops drain
 -- only 1 waterLvl per 5 in-game hours, so a barrel would keep a field alive for a year and water
--- COST can never be the balance. Instead the drip only spends litres on a tile that actually has a
--- thirsty crop, while the sprinkler sprays its whole 3x3 regardless -- which is exactly the
--- real-world trade and gives the player a reason to pick one.
+-- COST can never be the balance. Both spend water whenever they are actually emitting -- the spray
+-- you see is water leaving the line -- but the drip wets one tile while the sprinkler is charged
+-- for its whole 3x3, crops or not. Nine times the footprint, nine times the bill (plus the noise):
+-- that is the real-world trade and the reason to pick one over the other.
 
 local function getModData(worldObject)
     if not worldObject or not worldObject.getModData then
@@ -243,8 +244,10 @@ local function drawWater(square, litres, kind)
     return drawn or 0, fluidTypeName
 end
 
--- A drip emitter waters only its own tile, and only spends litres when that tile holds a thirsty
--- crop. That is its whole point: ~100% efficient, at the cost of needing one per tile.
+-- A drip emitter waters only its own tile. It drips whenever it can -- which is exactly what the
+-- spray FX shows -- so it spends its trickle whether or not anything grows below; a crop only
+-- changes where the water ends up. (It used to spend only with a thirsty crop on the tile, and the
+-- visible drip read as free water.) Still the efficient choice: one tile's bill, not nine.
 function Irrigation.processDrip(drip, square, dtHours)
     local pressure = NetworkAccess.getPressureAtSquare(square, Constants.PRESSURE_KIND_DRIP)
     if not pressure then
@@ -263,22 +266,27 @@ function Irrigation.processDrip(drip, square, dtHours)
         return
     end
 
-    local plant = thirstyPlantOn(square)
-    if not plant then
-        return   -- no crop, no water spent
-    end
-
     local want = Constants.DRIP_WATER_PER_HOUR * math.max(dtHours or 0, 0)
+    if want <= 0 then
+        return
+    end
     local drawn, fluidTypeName = drawWater(square, Irrigation.litresFor(want), Constants.PRESSURE_KIND_DRIP)
     if drawn <= 0 then
         debugLog("drip %d,%d,%d: reachable but drew no water (network dry?)",
             square:getX(), square:getY(), square:getZ())
         return
     end
-    local added = addWater(plant, drawn / Constants.IRRIGATION_LITRES_PER_WATER_LEVEL)
-    debugLog("drip %d,%d,%d: +%.1f waterLvl (now %.1f) from %s",
-        square:getX(), square:getY(), square:getZ(), added, plant.waterLvl or 0,
-        tostring(fluidTypeName))
+
+    local plant = thirstyPlantOn(square)
+    if plant then
+        local added = addWater(plant, drawn / Constants.IRRIGATION_LITRES_PER_WATER_LEVEL)
+        debugLog("drip %d,%d,%d: +%.1f waterLvl (now %.1f) from %s",
+            square:getX(), square:getY(), square:getZ(), added, plant.waterLvl or 0,
+            tostring(fluidTypeName))
+    else
+        debugLog("drip %d,%d,%d: %.2f L dripped away (no thirsty crop)",
+            square:getX(), square:getY(), square:getZ(), drawn)
+    end
 end
 
 local function sprinklerNoiseEnabled()
@@ -335,6 +343,34 @@ function Irrigation.processSprinkler(sprinkler, square, dtHours)
     if sprinklerNoiseEnabled() and addSound then
         pcall(addSound, sprinkler, x, y, z,
             Constants.SPRINKLER_NOISE_RADIUS, Constants.SPRINKLER_NOISE_VOLUME)
+    end
+end
+
+-- An open hydrant showers its own 3x3 like a sprinkler while it is losing water -- mains-fed or
+-- draining its reserve; the caller has already established that. It spends nothing new and walks
+-- nothing: the litres are the ones the open cap is already wasting (see System.processHydrant), so
+-- the crops just stand in them. Cost is nine plant lookups per OPEN hydrant per minute, driven off
+-- the open-hydrant registry -- no sweep, no network walk.
+function Irrigation.waterHydrantSurroundings(square, dtHours)
+    local perTile = Constants.SPRINKLER_WATER_PER_HOUR * math.max(dtHours or 0, 0)
+    if perTile <= 0 or not square then
+        return
+    end
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    local radius = Constants.SPRINKLER_RADIUS
+    local wateredTiles = 0
+    for dx = -radius, radius do
+        for dy = -radius, radius do
+            local plant = thirstyPlantOn(getCellSquare(x + dx, y + dy, z))
+            if plant then
+                addWater(plant, perTile)
+                wateredTiles = wateredTiles + 1
+            end
+        end
+    end
+    if wateredTiles > 0 then
+        debugLog("hydrant %d,%d,%d: watered %d crop(s) in 3x3 from the open flow",
+            x, y, z, wateredTiles)
     end
 end
 

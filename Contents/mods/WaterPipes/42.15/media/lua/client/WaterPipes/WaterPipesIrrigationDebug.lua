@@ -3,11 +3,11 @@ WaterPipes.IrrigationDebug = WaterPipes.IrrigationDebug or {}
 
 require "WaterPipes/Constants"
 require "WaterPipes/Irrigation"
-require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/WaterPipesTileRegistry"
 
 local Constants = WaterPipes.Constants
 local Irrigation = WaterPipes.Irrigation
-local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local Registry = WaterPipes.TileRegistry
 local IrrigationDebug = WaterPipes.IrrigationDebug
 
 -- A debug overlay that makes irrigation visible. While it is on, every crop near the player is tinted
@@ -86,7 +86,9 @@ local function cropWaterLevel(worldObject)
 end
 
 local function colorForEmitter(emitter, square)
-    local status = Irrigation.getEmitterStatus(emitter, square)
+    -- Through the registry's cache: the overlay refreshes four times a second and the status is
+    -- derived from a full network walk, which only changes when the server's minute pass runs.
+    local status = Registry.emitterStatus(emitter, square)
     if not status then
         return nil
     end
@@ -120,18 +122,21 @@ local function refresh()
         highlighted[worldObject] = nil   -- claimed; whatever's left in `highlighted` gets cleared
     end
 
+    -- Emitters first: they are the thing being tested. Taken from the registry, so the overlay no
+    -- longer asks every pipe object on 961 tiles whether it happens to be an emitter.
+    for _, found in ipairs(Registry.near("emitters", math.floor(px), math.floor(py),
+                                         math.floor(pz), SCAN_RADIUS)) do
+        local color = colorForEmitter(found.object, found.square)
+        if color then
+            tint(found.object, color)
+        end
+    end
+
+    -- Crops still need the area sweep: they are not pipe objects and nothing indexes them.
     for dx = -SCAN_RADIUS, SCAN_RADIUS do
         for dy = -SCAN_RADIUS, SCAN_RADIUS do
             local square = cell:getGridSquare(math.floor(px) + dx, math.floor(py) + dy, math.floor(pz))
             if square then
-                -- Emitters first: they are the thing being tested.
-                for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
-                    local color = colorForEmitter(worldObject, square)
-                    if color then
-                        tint(worldObject, color)
-                    end
-                end
-                -- Then any crop on the tile.
                 if square.getObjects then
                     local ok, objects = pcall(square.getObjects, square)
                     if ok and objects then

@@ -196,11 +196,15 @@ Constants.PURIFIER_OUT_AMOUNT_KEY = "waterpipesPurOut"
 Constants.PURIFIER_PROCESSING_KEY = "waterpipesPurBusy"
 Constants.PURIFIER_BUFFER_CAPACITY = 50
 -- Rates are per IN-GAME MINUTE (the server sub-steps them by elapsed game-time each tick, so throughput
--- is the same whatever the framerate). Intake is FASTER than convert/output on purpose: the IN buffer
--- fills faster than the filter processes it, so it visibly holds a level instead of draining to 0.
+-- is the same whatever the framerate). Intake is FASTER than convert on purpose: the IN buffer fills
+-- faster than the filter processes it, so it visibly holds a level instead of draining to 0.
+--
+-- There is no OUTPUT rate any more. The OUT buffer is storage belonging to the clean network now, not
+-- a tank that pushes into it, so its level simply evens out with whatever else is on that side -- the
+-- way two connected vessels do. Throughput is unchanged: the convert rate is still what limits how
+-- fast clean water appears, and that was always the real bottleneck.
 Constants.PURIFIER_INTAKE_RATE = 20
 Constants.PURIFIER_CONVERT_RATE = 10
-Constants.PURIFIER_OUTPUT_RATE = 10
 -- Electric purifier tank: a 2x2 multi-tile object. The vanilla industry_02 cylinder is split into
 -- four perspective quadrants (industry 72/73/74/75), tinted electric-blue and packed into atlas
 -- cells 36-39. The entity script (WaterPurifierElectric, face S) lays them on the footprint:

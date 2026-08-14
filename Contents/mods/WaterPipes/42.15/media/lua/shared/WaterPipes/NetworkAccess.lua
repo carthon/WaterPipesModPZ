@@ -265,7 +265,15 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
     local chains = {}   -- regulator chain each square was reached through (see newChain)
     local pipeSquares = {}
     local rootChain = newChain(nil, nil, 0, originSquare:getZ())
-    local zone = { pumps = {}, mains = {}, hydrants = {}, supplyHead = 0, rootChain = rootChain }
+    -- purifierOutlets: purifiers whose CLEAN side empties into this network (see recordPurifierOutlet).
+    local zone = { pumps = {}, mains = {}, hydrants = {}, purifierOutlets = {},
+                   supplyHead = 0, rootChain = rootChain }
+    -- Per-walk memo of "is there a purifier on this router tile", and of which outlets we have
+    -- already recorded. Two tables, not one: a router is visited from each of its neighbours, and the
+    -- lookup is a four-tile footprint scan -- but the ANSWER to "record the outlet" depends on which
+    -- side we arrived from, so reaching it first from the dirty side must not mark it done.
+    local purifierAt = {}
+    local outletSeen = {}
 
     local function tryAdd(square, distance, chain)
         if not square or not hasPipeOnSquare(square) or Router.hasRouterOnSquare(square) then
@@ -316,10 +324,77 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
         end
     end
 
-    -- Crossing a bare router, one way only: we may step from its OUT side back to its IN side, which
-    -- is a consumer reaching upstream for water. The reverse (IN side reaching downstream) would be
-    -- backflow, so it stays blocked and the router keeps its one-way meaning.
+    -- Crossing a bare router. It conducts in ONE direction, and which direction that is depends on
+    -- which way the water is going -- because a valve does not care who is asking, only which way the
+    -- flow runs through it:
+    --
+    --   "draw" -- a consumer reaching UPSTREAM for water. It stands on the outlet and steps back to
+    --             the inlet. The reverse would be a consumer siphoning through the valve backwards.
+    --   "fill" -- water flowing DOWNSTREAM from a supply. It stands on the inlet and steps to the
+    --             outlet, which is simply water going the way the router points.
+    --
+    -- Both are the same physical rule seen from the two ends, and having only the first is what made a
+    -- chain of routers a dead end: a fill query treated every router as a solid wall, so a router
+    -- whose outlet faced another router found no network to push into at all and moved nothing. A
+    -- bare router is meant to be an inline pressure-reducing valve -- water passes through it.
+    --
+    -- A router with a tank on it (the purifier) is still a hard boundary in BOTH directions: the fluid
+    -- is being transformed there and the two sides must never see each other.
+    -- A purifier's OUT buffer is storage belonging to the network on its clean side.
+    --
+    -- Without this the buffer was invisible to everything: a router whose outlet fed a bare pipe run
+    -- had nowhere to push its clean water, so the buffer filled to capacity, the convert step stalled
+    -- on no headroom, the intake stalled behind it, and the whole device stopped with 50 L trapped
+    -- inside it -- reported to the player as simply "Stopped". A tap on that side saw a network with
+    -- no containers at all and mirrored a 1-litre tank that never filled.
+    --
+    -- Recorded during the walk because this is the one place that already has the router and its
+    -- direction in hand; buildSummaryFromSquare turns it into a descriptor. Topology only -- the
+    -- amount is read fresh every query, like every other container.
+    local function recordPurifierOutlet(routerSquare, fromX, fromY, fromZ, distance, chain)
+        local key = squareKey(routerSquare)
+        if outletSeen[key] then
+            return
+        end
+
+        local purifier = purifierAt[key]
+        if purifier == nil then
+            purifier = Purifier.findForRouterSquare(routerSquare) or false
+            purifierAt[key] = purifier
+        end
+        if not purifier then
+            return
+        end
+
+        local router = Router.findOnSquare(routerSquare)
+        local out = router and Router.getOutOffset(router)
+        if not out then
+            return
+        end
+
+        -- Only the OUT side receives it. Reaching the router from its inlet means we are standing on
+        -- the dirty side, which must never see the clean water -- that is the whole point of the
+        -- purifier being a hard boundary.
+        local rx, ry, rz = routerSquare:getX(), routerSquare:getY(), routerSquare:getZ()
+        if fromX ~= rx + out.dx or fromY ~= ry + out.dy or fromZ ~= rz then
+            return
+        end
+
+        outletSeen[key] = true
+        zone.purifierOutlets[#zone.purifierOutlets + 1] = {
+            purifier = purifier,
+            routerKey = key,
+            x = fromX, y = fromY, z = fromZ,
+            -- `distance` is the hop the router tile occupies; the water lands on the square we came
+            -- from, one hop closer to the consumer.
+            hops = math.max((distance or 1) - 1, 0),
+            chain = chain,
+        }
+    end
+
     local function tryCrossRouter(routerSquare, fromX, fromY, fromZ, distance, chain)
+        recordPurifierOutlet(routerSquare, fromX, fromY, fromZ, distance, chain)
+
         if not conduct or routerIsHardBoundary(routerSquare) then
             return
         end
@@ -331,9 +406,23 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
         end
 
         local rx, ry, rz = routerSquare:getX(), routerSquare:getY(), routerSquare:getZ()
-        -- Are we standing on its OUT side?
-        if fromX ~= rx + out.dx or fromY ~= ry + out.dy or fromZ ~= rz then
+        if fromZ ~= rz then
             return
+        end
+
+        local nextX, nextY
+        if conduct == "draw" then
+            -- Must be standing on the OUT side; step to the IN side.
+            if fromX ~= rx + out.dx or fromY ~= ry + out.dy then
+                return
+            end
+            nextX, nextY = rx - out.dx, ry - out.dy
+        else
+            -- "fill": must be standing on the IN side; step to the OUT side.
+            if fromX ~= rx - out.dx or fromY ~= ry - out.dy then
+                return
+            end
+            nextX, nextY = rx + out.dx, ry + out.dy
         end
 
         -- `distance` is the hop the router tile itself occupies, which is exactly how far its outlet
@@ -345,7 +434,7 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
         end
 
         -- +1 for the router tile itself, which sits in the run but is never a network square.
-        tryAdd(getCellSquare(rx - out.dx, ry - out.dy, rz), distance + 1, nextChain)
+        tryAdd(getCellSquare(nextX, nextY, rz), distance + 1, nextChain)
     end
 
     local function visit(square, fromX, fromY, fromZ, distance, chain)
@@ -394,11 +483,60 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
     return pipeSquares, hops, zone, chains
 end
 
+-- ===== Per-frame traversal cache =====
+--
+-- The walk above is the mod's hot spot, and most consumers ask for it more than once from the SAME
+-- square in the same instant: a router runs availableToPull then drawFluidAtSquare on its IN side and
+-- availableToPush then fillFluidAtSquare on its OUT side -- four walks for two questions -- and the
+-- irrigation pass asks for pressure, then availability, then draws, all from the emitter's tile.
+--
+-- What is cached is ONLY topology: which squares are in the network, how far each sits from this
+-- origin, the regulator chains, and which pumps/inlets/hydrants the walk passed. None of it can move
+-- without a pipe being built or removed. The fluid itself is deliberately NOT cached -- every caller
+-- still re-reads the containers through collectStorageDescriptors -- so a draw and the fill that
+-- follows it always see real amounts, and no amount of caching can make water appear or vanish.
+--
+-- Keyed per ORIGIN, not per network, and that is not an oversight: hop counts and regulator chains
+-- are measured FROM the consumer, so two consumers on the same network genuinely have different
+-- answers and cannot share a walk. Sharing across origins needs the adjacency itself cached, which is
+-- a larger change.
+--
+-- Dropped once per frame, plus explicitly whenever the pipe layout changes.
+local traversalCache = {}
+
+-- `conduct` is part of the key, and it must be the VALUE, not its truthiness: a draw walk and a fill
+-- walk from the same square cross routers in opposite directions and so reach different squares.
+-- Collapsing them to a boolean would hand a fill query the draw query's network.
+local function traversalKey(square, verticalMode, conduct)
+    return squareKey(square) .. "|" .. tostring(verticalMode) .. "|" .. tostring(conduct)
+end
+
+function NetworkAccess.invalidateTraversalCache()
+    traversalCache = {}
+end
+
+local function collectPipeSquaresCached(originSquare, verticalMode, conduct)
+    if not originSquare then
+        return {}, {}, { pumps = {}, mains = {} }, {}
+    end
+
+    local key = traversalKey(originSquare, verticalMode, conduct)
+    local hit = traversalCache[key]
+    if hit then
+        return hit[1], hit[2], hit[3], hit[4]
+    end
+
+    local pipeSquares, hops, zone, chains =
+        collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
+    traversalCache[key] = { pipeSquares, hops, zone, chains }
+    return pipeSquares, hops, zone, chains
+end
+
 local function collectConnectedPipeSquares(endpointObject)
     if not endpointObject or not endpointObject.getSquare then
         return {}
     end
-    return collectPipeSquaresFromSquare(endpointObject:getSquare())
+    return collectPipeSquaresCached(endpointObject:getSquare())
 end
 
 local function collectStorageDescriptors(pipeSquares, hops, chains)
@@ -423,6 +561,46 @@ local function collectStorageDescriptors(pipeSquares, hops, chains)
     end
 
     return descriptors
+end
+
+-- Turn the purifier outlets the walk found into ordinary storage descriptors, so every consumer,
+-- gauge and rebalance treats the clean buffer as what it is: 50 litres of storage on that network.
+--
+-- Skipped entirely when the network already holds tainted water. The OUT buffer has no taint flag --
+-- it is clean by construction -- so letting it join a contaminated network would either quietly
+-- relabel its contents or force the writer to refuse a rebalance and break conservation. Standing
+-- aside until the line is clean again costs nothing and keeps the invariant true.
+local function addPurifierOutletDescriptors(descriptorMap, zone)
+    local outlets = zone and zone.purifierOutlets
+    if not outlets or #outlets == 0 then
+        return
+    end
+
+    for _, descriptor in pairs(descriptorMap) do
+        if (descriptor.waterAmount or 0) > 0 and descriptor.fluidType ~= "Water" then
+            return
+        end
+    end
+
+    for _, outlet in ipairs(outlets) do
+        local amount = Purifier.getOutAmount(outlet.purifier) or 0
+        local key = "purifierOut:" .. outlet.routerKey
+        descriptorMap[key] = {
+            key = key,
+            squareKey = outlet.routerKey,
+            x = outlet.x, y = outlet.y, z = outlet.z,
+            objectIndex = -1,
+            containerIndex = -1,
+            capacity = Constants.PURIFIER_BUFFER_CAPACITY,
+            waterAmount = amount,
+            fluidType = amount > 0 and "Water" or nil,
+            kind = "purifierOut",
+            fluidMode = "purifierOut",
+            object = outlet.purifier,
+            pipeHops = outlet.hops,
+            pressureChain = outlet.chain,
+        }
+    end
 end
 
 local function normalizeDescriptorList(descriptorMap)
@@ -498,15 +676,24 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill)
         return nil
     end
 
-    -- Only a draw reaches through a bare router; fills and visualization keep every router solid.
-    local conduct = kind ~= nil and not fill
+    -- Which way the water is travelling, which is what decides how a bare router may be crossed (see
+    -- tryCrossRouter). Visualization asks for neither and keeps every router solid, so the overlay
+    -- still draws the zones the player built rather than silently merging them.
+    local conduct = nil
+    if fill then
+        conduct = "fill"
+    elseif kind then
+        conduct = "draw"
+    end
+
     local pipeSquares, hops, zone, chains =
-        collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
+        collectPipeSquaresCached(originSquare, verticalMode, conduct)
     if #pipeSquares == 0 then
         return nil
     end
 
     local descriptorMap = collectStorageDescriptors(pipeSquares, hops, chains)
+    addPurifierOutletDescriptors(descriptorMap, zone)
     local descriptors = normalizeDescriptorList(descriptorMap)
     if #descriptors == 0 then
         return nil
@@ -630,6 +817,35 @@ local function mergeFluidNames(current, incoming)
     return nil
 end
 
+-- Take the purifier OUT buffers out of a summary and recompute its totals. Called by the fill paths
+-- the moment the fluid that will land is anything but clean Water.
+--
+-- The buffer is clean by construction and its writer (ContainerAdapter.writePurifierOutAmount)
+-- refuses everything else -- correctly. But a refusal DURING a rebalance is too late: the rebalance
+-- has already divided the total assuming the buffer takes its share, so the share it refuses is
+-- litres conjured or destroyed. The buffer has to leave the summary BEFORE the arithmetic, keeping
+-- its clean water and lending the dirty line neither its contents nor its capacity. It rejoins
+-- naturally once the line is clean again (addPurifierOutletDescriptors re-admits it per query).
+local function excludePurifierOutlets(summary)
+    local kept = {}
+    local removed = false
+    for _, descriptor in ipairs(summary.descriptors) do
+        if descriptor.fluidMode == "purifierOut" then
+            removed = true
+            summary.totalAmount = summary.totalAmount - math.max(descriptor.waterAmount or 0, 0)
+            summary.totalCapacity = summary.totalCapacity - math.max(descriptor.capacity or 0, 0)
+        else
+            kept[#kept + 1] = descriptor
+        end
+    end
+    if removed then
+        summary.descriptors = kept
+        summary.totalAmount = math.max(summary.totalAmount, 0)
+        summary.totalCapacity = math.max(summary.totalCapacity, 0)
+    end
+    return removed
+end
+
 local function rebalanceSummary(summary, remainingAmount)
     local fluidTypeName = remainingAmount > 0 and summary.fluidTypeName or nil
     local totalCapacity = math.max(summary.totalCapacity or 0, 0)
@@ -656,7 +872,7 @@ end
 -- redistribution step from seeing a half-and-half network and refusing to settle it. A no-op on an
 -- empty network, on petrol, or on water that is already tainted. Returns the litres turned.
 function NetworkAccess.taintNetworkAt(originSquare)
-    local pipeSquares, hops = collectPipeSquaresFromSquare(originSquare, "both")
+    local pipeSquares, hops = collectPipeSquaresCached(originSquare, "both")
     local descriptors = normalizeDescriptorList(collectStorageDescriptors(pipeSquares, hops))
     local turned = 0
     for _, descriptor in ipairs(descriptors) do
@@ -669,12 +885,54 @@ function NetworkAccess.taintNetworkAt(originSquare)
     return turned
 end
 
+-- Even the stored water out across the network reachable from `originSquare`, without adding or
+-- removing any. Returns the litres it had to move, or 0.
+--
+-- The purifier needs this. Its clean buffer is now ordinary storage on the OUT network, so it no
+-- longer PUSHES its water anywhere -- but nothing would move that water into the barrels either,
+-- because a network only settles when something draws from it or fills it. A purifier feeding a
+-- barrel farm that nobody is drinking from would sit at a full buffer and stall exactly as before.
+-- This is the missing nudge, and it is conservation-safe by construction: the total handed back to
+-- rebalanceSummary is the total it was given.
+function NetworkAccess.settleAtSquare(originSquare)
+    local summary = buildSummaryFromSquare(originSquare, nil, true)
+    if not summary or summary.isMixed or (summary.totalAmount or 0) <= 0 then
+        return 0
+    end
+    if #summary.descriptors < 2 then
+        return 0   -- nothing to even out against
+    end
+
+    -- Already level? Then say so and touch nothing. rebalanceSummary rewrites every vessel it is
+    -- given -- empty, refill, sync, transmit -- so running it unconditionally once a minute per
+    -- purifier would be a steady stream of writes and multiplayer traffic to change nothing.
+    local totalCapacity = math.max(summary.totalCapacity or 0, 0)
+    if totalCapacity <= 0 then
+        return 0
+    end
+    local ratio = math.min(summary.totalAmount / totalCapacity, 1)
+    local levelled = true
+    for _, descriptor in ipairs(summary.descriptors) do
+        local target = (descriptor.capacity or 0) * ratio
+        if math.abs((descriptor.waterAmount or 0) - target) > 0.01 then
+            levelled = false
+            break
+        end
+    end
+    if levelled then
+        return 0
+    end
+
+    rebalanceSummary(summary, summary.totalAmount)
+    return summary.totalAmount
+end
+
 -- For visualization: the pipe squares reachable from a square + the container descriptors on them.
 -- Unlike getFluidSummaryAtSquare it returns the pipe squares even when there are no containers.
 function NetworkAccess.getNetworkFromSquare(originSquare)
     -- Visualization: show the whole physically-connected network (both directions), not just the
     -- gravity-reachable part.
-    local pipeSquares, hops = collectPipeSquaresFromSquare(originSquare, "both")
+    local pipeSquares, hops = collectPipeSquaresCached(originSquare, "both")
     local descriptors = normalizeDescriptorList(collectStorageDescriptors(pipeSquares, hops))
     return pipeSquares, descriptors
 end
@@ -695,7 +953,8 @@ function NetworkAccess.getPressureReport(square)
         return nil
     end
 
-    local pipeSquares, hops, zone, chains = collectPipeSquaresFromSquare(square, "both", true)
+    -- "draw": the report answers "what can reach this point?", which is the consumer's question.
+    local pipeSquares, hops, zone, chains = collectPipeSquaresCached(square, "both", "draw")
     local report = {
         enabled = Pressure.isEnabled(),
         model = Pressure.model(),
@@ -780,14 +1039,21 @@ function NetworkAccess.availableToPush(square, fluidType)
     if not summary or summary.isMixed then
         return 0
     end
-    local headroom = (summary.totalCapacity or 0) - (summary.totalAmount or 0)
-    if headroom <= 0 then
-        return 0
-    end
     -- Clean water may always join a tainted line (it just becomes tainted); only a genuinely
     -- incompatible fluid is refused.
-    if (summary.totalAmount or 0) > 0 and summary.fluidTypeName
-        and not mergeFluidNames(summary.fluidTypeName, fluidType) then
+    local merged = mergeFluidNames(summary.fluidTypeName, fluidType)
+    if (summary.totalAmount or 0) > 0 and summary.fluidTypeName and not merged then
+        return 0
+    end
+    -- What the line would hold after the push. Anything but clean Water and the purifier buffers
+    -- stand aside (see excludePurifierOutlets) -- their headroom must not be promised to a fill
+    -- that their writer will refuse.
+    local landing = (summary.totalAmount or 0) > 0 and summary.fluidTypeName and merged or fluidType
+    if landing and landing ~= "Water" then
+        excludePurifierOutlets(summary)
+    end
+    local headroom = (summary.totalCapacity or 0) - (summary.totalAmount or 0)
+    if headroom <= 0 then
         return 0
     end
     return headroom
@@ -829,11 +1095,6 @@ function NetworkAccess.fillFluidAtSquare(originSquare, fluidType, amount)
         return 0
     end
 
-    local headroom = (summary.totalCapacity or 0) - (summary.totalAmount or 0)
-    if headroom <= 0 then
-        return 0
-    end
-
     -- A non-empty network takes the incoming fluid only if the two can share a pipe. Water and
     -- tainted water always can -- the result is tainted -- so this now refuses nothing but a real
     -- fluid clash (petrol into water).
@@ -842,15 +1103,28 @@ function NetworkAccess.fillFluidAtSquare(originSquare, fluidType, amount)
         return 0
     end
 
+    -- An empty network adopts the incoming fluid type; a stocked one takes the merged result, which
+    -- is what turns the whole line tainted the moment dirty water is pushed into it.
+    local landing = (summary.totalAmount or 0) <= 0 and fluidType or merged
+
+    -- The purifier's clean buffers leave the summary before the arithmetic when what lands is not
+    -- clean Water (see excludePurifierOutlets): they keep their clean water, and the headroom and
+    -- rebalance below are computed over the vessels that will actually take the fluid.
+    if landing ~= "Water" and excludePurifierOutlets(summary) and #summary.descriptors == 0 then
+        return 0
+    end
+
+    local headroom = (summary.totalCapacity or 0) - (summary.totalAmount or 0)
+    if headroom <= 0 then
+        return 0
+    end
+
     local added = math.min(math.max(amount or 0, 0), headroom)
     if added <= 0 then
         return 0
     end
 
-    -- An empty network adopts the incoming fluid type; a stocked one takes the merged result, which
-    -- is what turns the whole line tainted the moment dirty water is pushed into it.
-    summary.fluidTypeName = (summary.totalAmount or 0) <= 0 and fluidType or merged
-
+    summary.fluidTypeName = landing
     rebalanceSummary(summary, (summary.totalAmount or 0) + added)
     return added
 end
@@ -937,6 +1211,13 @@ function NetworkAccess.restoreFluid(endpointObject, amount, fluidTypeName)
         return 0
     end
 
+    -- Same rule as fillFluidAtSquare: restoring anything but clean Water and the purifier's clean
+    -- buffers step out of the summary first (see excludePurifierOutlets).
+    local landing = merged or fluidTypeName
+    if landing ~= "Water" and excludePurifierOutlets(summary) and #summary.descriptors == 0 then
+        return 0
+    end
+
     local clamped = math.max(amount or 0, 0)
     local availableCapacity = math.max((summary.totalCapacity or 0) - (summary.totalAmount or 0), 0)
     local restored = math.min(clamped, availableCapacity)
@@ -944,7 +1225,7 @@ function NetworkAccess.restoreFluid(endpointObject, amount, fluidTypeName)
         return 0
     end
 
-    summary.fluidTypeName = merged or fluidTypeName
+    summary.fluidTypeName = landing
     rebalanceSummary(summary, summary.totalAmount + restored)
     return restored
 end
@@ -1012,4 +1293,21 @@ function NetworkAccess.moveFluidToTemporaryContainer(endpointObject, amount)
 
     NetworkAccess.useFluid(endpointObject, taken)
     return temporaryContainer
+end
+
+-- The traversal cache's invalidation. Anything that changes what the walk would FIND has to drop it:
+-- a pipe appearing or disappearing changes the shape of the network, and a router's direction or its
+-- ceiling changes which squares are reachable and how they are priced. The per-frame clear is the
+-- backstop -- it means no mistake here can outlive a single frame -- and the explicit calls exist
+-- because a build and the network rebuild it triggers happen inside that same frame.
+if Events then
+    if Events.OnObjectAdded then
+        Events.OnObjectAdded.Add(NetworkAccess.invalidateTraversalCache)
+    end
+    if Events.OnObjectAboutToBeRemoved then
+        Events.OnObjectAboutToBeRemoved.Add(NetworkAccess.invalidateTraversalCache)
+    end
+    if Events.OnTick then
+        Events.OnTick.Add(NetworkAccess.invalidateTraversalCache)
+    end
 end

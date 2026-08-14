@@ -251,14 +251,9 @@ function Purifier.moveInToOut(worldObject, amount)
     transmit(worldObject)
 end
 
-function Purifier.removeOut(worldObject, amount)
-    local modData = getModData(worldObject)
-    if not modData or (amount or 0) <= 0 then
-        return
-    end
-    modData[Constants.PURIFIER_OUT_AMOUNT_KEY] = math.max(Purifier.getOutAmount(worldObject) - amount, 0)
-    transmit(worldObject)
-end
+-- (Purifier.removeOut is gone: the OUT buffer is a network container now, so the only thing that
+-- takes water out of it is an ordinary rebalance through ContainerAdapter.writeDescriptorWaterAmount.
+-- Keeping a second, hand-rolled way to drain it was how the old push step double-counted.)
 
 -- ===== Location =====
 

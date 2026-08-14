@@ -1,5 +1,10 @@
 # Dev tooling & image generation (not part of the shipped mod)
-tools/
+# (tools/* rather than tools/ so the exception below can be reached -- git will not
+# descend into an excluded DIRECTORY, so a negation inside one never matches.)
+tools/*
+# ...except the performance harness: its baseline.json is only worth anything if it
+# travels with the repo, so a regression shows up as a diff in review.
+!tools/perf/
 
 # Internal/dev notes not shipped with the mod
 docs/texturepack.md

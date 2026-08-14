@@ -14,12 +14,14 @@
 require "WaterPipes/Constants"
 require "WaterPipes/Hydrant"
 require "WaterPipes/Irrigation"
+require "WaterPipes/WaterPipesTileRegistry"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.SprayFX = WaterPipes.SprayFX or {}
 
 local Hydrant = WaterPipes.Hydrant
 local Irrigation = WaterPipes.Irrigation
+local Registry = WaterPipes.TileRegistry
 local FX = WaterPipes.SprayFX
 
 -- ===== Tunables =====
@@ -79,10 +81,16 @@ local function phaseFor(x, y)
     return (x * 7 + y * 13) % FRAMES
 end
 
+-- Rebuild the list of tiles currently worth drawing a spray over.
+--
+-- This used to sweep the whole (2*DRAW_RADIUS+1)^2 block around the player and scan every tile's
+-- object list looking for something to draw -- ~1400 tiles and three object scans each, whether or
+-- not the save contained a single emitter. It now asks the tile registry, which remembers where they
+-- are, so the work is proportional to the number of emitters near the player rather than to the area
+-- around them. See WaterPipesTileRegistry.
 local function rescan()
     local player = getPlayer and getPlayer() or nil
-    local cell = getCell and getCell() or nil
-    if not player or not cell then
+    if not player then
         FX.active = {}
         return
     end
@@ -90,39 +98,76 @@ local function rescan()
     local py = math.floor(player:getY())
     local pz = math.floor(player:getZ())
     local list = {}
-    for dx = -DRAW_RADIUS, DRAW_RADIUS do
-        for dy = -DRAW_RADIUS, DRAW_RADIUS do
-            local sq = cell:getGridSquare(px + dx, py + dy, pz)
-            if sq then
-                local hydrant = Hydrant.findOnSquare(sq)
-                if hydrant and Hydrant.isFlowing(hydrant) then
-                    list[#list + 1] = { x = sq:getX(), y = sq:getY(), z = sq:getZ(),
-                                        kind = "hydrant", phase = phaseFor(sq:getX(), sq:getY()) }
-                else
-                    -- A tile carries a sprinkler OR a drip, never both; whichever is actually
-                    -- watering (has pressure + water + not burst) gets its spray this pass.
-                    local emitter = Irrigation.findSprinklerOnSquare(sq)
-                    local kind = emitter and "sprinkler" or nil
-                    if not emitter then
-                        emitter = Irrigation.findDripOnSquare(sq)
-                        kind = emitter and "drip" or nil
-                    end
-                    if emitter then
-                        local status = Irrigation.getEmitterStatus(emitter, sq)
-                        if status and status.active then
-                            list[#list + 1] = { x = sq:getX(), y = sq:getY(), z = sq:getZ(),
-                                                kind = kind, phase = phaseFor(sq:getX(), sq:getY()) }
-                        end
-                    end
-                end
+
+    -- Tiles already claimed by a hydrant. A pipe (and so an emitter) can legally share a hydrant's
+    -- tile, and the hydrant's gush is the bigger effect, so it wins the tile.
+    local claimed = {}
+    for _, found in ipairs(Registry.near("hydrants", px, py, pz, DRAW_RADIUS)) do
+        local sq = found.square
+        claimed[sq:getX() .. ":" .. sq:getY() .. ":" .. sq:getZ()] = true
+        if Hydrant.isFlowing(found.object) then
+            list[#list + 1] = { x = sq:getX(), y = sq:getY(), z = sq:getZ(),
+                                kind = "hydrant", phase = phaseFor(sq:getX(), sq:getY()) }
+        end
+    end
+
+    -- A tile carries a sprinkler OR a drip, never both; whichever is actually watering (has
+    -- pressure + water + not burst) gets its spray this pass. The status is cached per tile by the
+    -- registry -- it is derived from the network, which only moves on the server's minute pass, so
+    -- recomputing it on every rescan was asking a question whose answer could not have changed.
+    for _, found in ipairs(Registry.near("emitters", px, py, pz, DRAW_RADIUS)) do
+        local sq, emitter = found.square, found.object
+        if not claimed[sq:getX() .. ":" .. sq:getY() .. ":" .. sq:getZ()] then
+            local status = Registry.emitterStatus(emitter, sq)
+            if status and status.active then
+                local kind = Irrigation.isSprinkler(emitter) and "sprinkler" or "drip"
+                list[#list + 1] = { x = sq:getX(), y = sq:getY(), z = sq:getZ(),
+                                    kind = kind, phase = phaseFor(sq:getX(), sq:getY()) }
             end
         end
     end
+
     FX.active = list
 end
 
 -- ===== Draw =====
-local drawTick = 0
+
+-- The animation is paced off REAL TIME, not off how many times we happen to be drawn.
+--
+-- PZ renders the UI to an offscreen buffer at its own configurable rate (Options -> UIRenderFPS,
+-- default 60), independent of the world's framerate -- and OnPreUIDraw fires at that rate. Advancing
+-- the frame with a draw counter therefore clocked the spray off a display setting: at 20 UI FPS the
+-- loop took three times as long and the water visibly crawled while the world around it ran fine.
+--
+-- Nothing about the animation was ever expensive; the counter costs nothing. It was being driven by
+-- the wrong thing. Vanilla hits the same problem and solves it the same way -- see the
+-- `30 / getPerformance():getUIRenderFPS()` scaling in ISVehicleDashboard and ISSkillProgressBar --
+-- and WaterPipesWetness in this mod is already paced off elapsed milliseconds for the same reason.
+--
+-- Pinned to the speed it had at the DEFAULT 60 UI FPS, so nothing changes for anyone on the default
+-- and it stops degrading for everyone below it. A low UI FPS still shows fewer steps of the loop --
+-- there is no way around that from the UI layer -- but it no longer plays in slow motion.
+local MS_PER_FRAME = 1000 * HOLD / 60
+
+local drawTick = 0   -- fallback only, for a build with no getTimestampMs
+
+local function animationFrame()
+    if getTimestampMs then
+        local ok, ms = pcall(getTimestampMs)
+        if ok and type(ms) == "number" then
+            -- Kahlua's % falls apart past ~2^31 -- in-game, (epoch_ms % 16) came back as an
+            -- 11-digit number, so every frame lookup missed and the spray silently vanished.
+            -- Fold the clock into a 2^20 ms (~17 min) window FIRST: the window is a power of
+            -- two, so the divide/floor/multiply below are all exact in doubles. The loop's
+            -- once-per-window phase jump is invisible.
+            local within = ms - math.floor(ms / 1048576) * 1048576
+            return math.floor(within / MS_PER_FRAME) % FRAMES
+        end
+    end
+    -- No clock available: count draws, which is exactly what this replaced.
+    drawTick = (drawTick + 1) % (FRAMES * HOLD)
+    return math.floor(drawTick / HOLD)
+end
 
 local function daylightAlpha()
     local world = getWorld and getWorld() or nil
@@ -161,7 +206,7 @@ function FX.render()
     if not zoom or zoom <= 0 then
         zoom = 1
     end
-    local frameIndex = math.floor(drawTick / HOLD)
+    local frameIndex = animationFrame()
     local alpha = daylightAlpha()
 
     for _, e in ipairs(list) do
@@ -176,11 +221,6 @@ function FX.render()
                 UIManager.DrawTexture(tex, sx, sy, size, size, alpha)
             end
         end
-    end
-
-    drawTick = drawTick + 1
-    if drawTick >= FRAMES * HOLD then
-        drawTick = 0
     end
 end
 

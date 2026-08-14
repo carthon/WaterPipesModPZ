@@ -123,6 +123,14 @@ function Router.setPressureCeiling(worldObject, value)
     if worldObject.transmitModData then
         pcall(worldObject.transmitModData, worldObject)
     end
+
+    -- The ceiling is baked into the regulator chains the network walk builds, so a cached walk still
+    -- prices the old setting. Resolved off the WaterPipes table rather than required at the top:
+    -- NetworkAccess already requires this module, and closing that loop is a recursive require.
+    local NetworkAccess = WaterPipes.NetworkAccess
+    if NetworkAccess and NetworkAccess.invalidateTraversalCache then
+        NetworkAccess.invalidateTraversalCache()
+    end
 end
 
 return Router
