@@ -155,7 +155,13 @@ local function animationFrame()
     if getTimestampMs then
         local ok, ms = pcall(getTimestampMs)
         if ok and type(ms) == "number" then
-            return math.floor(ms / MS_PER_FRAME)
+            -- Kahlua's % falls apart past ~2^31 -- in-game, (epoch_ms % 16) came back as an
+            -- 11-digit number, so every frame lookup missed and the spray silently vanished.
+            -- Fold the clock into a 2^20 ms (~17 min) window FIRST: the window is a power of
+            -- two, so the divide/floor/multiply below are all exact in doubles. The loop's
+            -- once-per-window phase jump is invisible.
+            local within = ms - math.floor(ms / 1048576) * 1048576
+            return math.floor(within / MS_PER_FRAME) % FRAMES
         end
     end
     -- No clock available: count draws, which is exactly what this replaced.
