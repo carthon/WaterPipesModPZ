@@ -493,6 +493,10 @@ function System.processHydrant(hydrant, square, dt)
     if not mainsFed then
         Hydrant.setReserve(hydrant, reserve - flow)
     end
+
+    -- The spilled water lands somewhere: the gush showers the hydrant's own 3x3 like a sprinkler,
+    -- watering whatever grows there. Free litres -- they are already leaving through the open cap.
+    Irrigation.waterHydrantSurroundings(square, dt / 60)
 end
 
 -- Driven by the open-hydrant registry rather than the pipe list, so a hydrant opened with no pipe on

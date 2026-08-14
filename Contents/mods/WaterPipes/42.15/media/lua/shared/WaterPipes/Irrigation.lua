@@ -338,6 +338,34 @@ function Irrigation.processSprinkler(sprinkler, square, dtHours)
     end
 end
 
+-- An open hydrant showers its own 3x3 like a sprinkler while it is losing water -- mains-fed or
+-- draining its reserve; the caller has already established that. It spends nothing new and walks
+-- nothing: the litres are the ones the open cap is already wasting (see System.processHydrant), so
+-- the crops just stand in them. Cost is nine plant lookups per OPEN hydrant per minute, driven off
+-- the open-hydrant registry -- no sweep, no network walk.
+function Irrigation.waterHydrantSurroundings(square, dtHours)
+    local perTile = Constants.SPRINKLER_WATER_PER_HOUR * math.max(dtHours or 0, 0)
+    if perTile <= 0 or not square then
+        return
+    end
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    local radius = Constants.SPRINKLER_RADIUS
+    local wateredTiles = 0
+    for dx = -radius, radius do
+        for dy = -radius, radius do
+            local plant = thirstyPlantOn(getCellSquare(x + dx, y + dy, z))
+            if plant then
+                addWater(plant, perTile)
+                wateredTiles = wateredTiles + 1
+            end
+        end
+    end
+    if wateredTiles > 0 then
+        debugLog("hydrant %d,%d,%d: watered %d crop(s) in 3x3 from the open flow",
+            x, y, z, wateredTiles)
+    end
+end
+
 -- Walk the registered pipes and run whatever emitters sit on them. Iterating State's pipe registry
 -- rather than scanning the map keeps this proportional to what the player actually built.
 -- Server-only, and deliberately on a slow cadence: this is the one place pressure gets computed.
