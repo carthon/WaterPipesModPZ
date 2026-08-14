@@ -817,6 +817,35 @@ local function mergeFluidNames(current, incoming)
     return nil
 end
 
+-- Take the purifier OUT buffers out of a summary and recompute its totals. Called by the fill paths
+-- the moment the fluid that will land is anything but clean Water.
+--
+-- The buffer is clean by construction and its writer (ContainerAdapter.writePurifierOutAmount)
+-- refuses everything else -- correctly. But a refusal DURING a rebalance is too late: the rebalance
+-- has already divided the total assuming the buffer takes its share, so the share it refuses is
+-- litres conjured or destroyed. The buffer has to leave the summary BEFORE the arithmetic, keeping
+-- its clean water and lending the dirty line neither its contents nor its capacity. It rejoins
+-- naturally once the line is clean again (addPurifierOutletDescriptors re-admits it per query).
+local function excludePurifierOutlets(summary)
+    local kept = {}
+    local removed = false
+    for _, descriptor in ipairs(summary.descriptors) do
+        if descriptor.fluidMode == "purifierOut" then
+            removed = true
+            summary.totalAmount = summary.totalAmount - math.max(descriptor.waterAmount or 0, 0)
+            summary.totalCapacity = summary.totalCapacity - math.max(descriptor.capacity or 0, 0)
+        else
+            kept[#kept + 1] = descriptor
+        end
+    end
+    if removed then
+        summary.descriptors = kept
+        summary.totalAmount = math.max(summary.totalAmount, 0)
+        summary.totalCapacity = math.max(summary.totalCapacity, 0)
+    end
+    return removed
+end
+
 local function rebalanceSummary(summary, remainingAmount)
     local fluidTypeName = remainingAmount > 0 and summary.fluidTypeName or nil
     local totalCapacity = math.max(summary.totalCapacity or 0, 0)
@@ -1010,14 +1039,21 @@ function NetworkAccess.availableToPush(square, fluidType)
     if not summary or summary.isMixed then
         return 0
     end
-    local headroom = (summary.totalCapacity or 0) - (summary.totalAmount or 0)
-    if headroom <= 0 then
-        return 0
-    end
     -- Clean water may always join a tainted line (it just becomes tainted); only a genuinely
     -- incompatible fluid is refused.
-    if (summary.totalAmount or 0) > 0 and summary.fluidTypeName
-        and not mergeFluidNames(summary.fluidTypeName, fluidType) then
+    local merged = mergeFluidNames(summary.fluidTypeName, fluidType)
+    if (summary.totalAmount or 0) > 0 and summary.fluidTypeName and not merged then
+        return 0
+    end
+    -- What the line would hold after the push. Anything but clean Water and the purifier buffers
+    -- stand aside (see excludePurifierOutlets) -- their headroom must not be promised to a fill
+    -- that their writer will refuse.
+    local landing = (summary.totalAmount or 0) > 0 and summary.fluidTypeName and merged or fluidType
+    if landing and landing ~= "Water" then
+        excludePurifierOutlets(summary)
+    end
+    local headroom = (summary.totalCapacity or 0) - (summary.totalAmount or 0)
+    if headroom <= 0 then
         return 0
     end
     return headroom
@@ -1059,11 +1095,6 @@ function NetworkAccess.fillFluidAtSquare(originSquare, fluidType, amount)
         return 0
     end
 
-    local headroom = (summary.totalCapacity or 0) - (summary.totalAmount or 0)
-    if headroom <= 0 then
-        return 0
-    end
-
     -- A non-empty network takes the incoming fluid only if the two can share a pipe. Water and
     -- tainted water always can -- the result is tainted -- so this now refuses nothing but a real
     -- fluid clash (petrol into water).
@@ -1072,15 +1103,28 @@ function NetworkAccess.fillFluidAtSquare(originSquare, fluidType, amount)
         return 0
     end
 
+    -- An empty network adopts the incoming fluid type; a stocked one takes the merged result, which
+    -- is what turns the whole line tainted the moment dirty water is pushed into it.
+    local landing = (summary.totalAmount or 0) <= 0 and fluidType or merged
+
+    -- The purifier's clean buffers leave the summary before the arithmetic when what lands is not
+    -- clean Water (see excludePurifierOutlets): they keep their clean water, and the headroom and
+    -- rebalance below are computed over the vessels that will actually take the fluid.
+    if landing ~= "Water" and excludePurifierOutlets(summary) and #summary.descriptors == 0 then
+        return 0
+    end
+
+    local headroom = (summary.totalCapacity or 0) - (summary.totalAmount or 0)
+    if headroom <= 0 then
+        return 0
+    end
+
     local added = math.min(math.max(amount or 0, 0), headroom)
     if added <= 0 then
         return 0
     end
 
-    -- An empty network adopts the incoming fluid type; a stocked one takes the merged result, which
-    -- is what turns the whole line tainted the moment dirty water is pushed into it.
-    summary.fluidTypeName = (summary.totalAmount or 0) <= 0 and fluidType or merged
-
+    summary.fluidTypeName = landing
     rebalanceSummary(summary, (summary.totalAmount or 0) + added)
     return added
 end
@@ -1167,6 +1211,13 @@ function NetworkAccess.restoreFluid(endpointObject, amount, fluidTypeName)
         return 0
     end
 
+    -- Same rule as fillFluidAtSquare: restoring anything but clean Water and the purifier's clean
+    -- buffers step out of the summary first (see excludePurifierOutlets).
+    local landing = merged or fluidTypeName
+    if landing ~= "Water" and excludePurifierOutlets(summary) and #summary.descriptors == 0 then
+        return 0
+    end
+
     local clamped = math.max(amount or 0, 0)
     local availableCapacity = math.max((summary.totalCapacity or 0) - (summary.totalAmount or 0), 0)
     local restored = math.min(clamped, availableCapacity)
@@ -1174,7 +1225,7 @@ function NetworkAccess.restoreFluid(endpointObject, amount, fluidTypeName)
         return 0
     end
 
-    summary.fluidTypeName = merged or fluidTypeName
+    summary.fluidTypeName = landing
     rebalanceSummary(summary, summary.totalAmount + restored)
     return restored
 end
