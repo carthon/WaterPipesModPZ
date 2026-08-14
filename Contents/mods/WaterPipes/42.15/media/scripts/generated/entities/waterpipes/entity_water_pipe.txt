@@ -208,8 +208,8 @@ module WaterPipes
                 item 2 [Base.BlowTorch] flags[DontRecordInput],
                 item 1 [Base.WeldingRods] flags[DontRecordInput],
                 item 2 [Base.MetalPipe],
-                item 1 [Base.SheetMetal],
-                item 1 [Base.ElectronicsScrap],
+                item 4 [Base.SheetMetal],
+                item 2 [Base.ElectronicsScrap],
                 item 1 [Base.Wire],
             }
         }
