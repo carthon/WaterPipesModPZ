@@ -737,7 +737,13 @@ end
 -- pipe. Deferring a frame lets us read the true post-removal world state. The next-tick guard
 -- (no pipe left on the square) also handles multi-pipe squares and cancelled removals uniformly.
 local pendingPipeRemovals = {}
+local pendingMaterialDrops = {}
 local pendingRemovalScheduled = false
+
+-- Chance a dismantled pipe hands its build material back -- the same 90% the old static scrap
+-- entry used (see WaterPipeScrap.lua for why the return moved here: the scrap table cannot know
+-- what the pipe was built FROM, this code can).
+local DISMANTLE_RETURN_CHANCE = 90
 
 local function processPendingPipeRemovals()
     pendingRemovalScheduled = false
@@ -747,6 +753,28 @@ local function processPendingPipeRemovals()
 
     local toProcess = pendingPipeRemovals
     pendingPipeRemovals = {}
+    local drops = pendingMaterialDrops
+    pendingMaterialDrops = {}
+
+    -- Material returns first, one per dismantled OBJECT: the entry only pays out when its object
+    -- really left the square, so a cancelled removal drops nothing and a multi-pipe square (floor
+    -- pipe + riser) pays for exactly the pipe that was taken down.
+    for _, drop in ipairs(drops) do
+        local square = getSquare(drop.x, drop.y, drop.z)
+        if square and square.getObjects then
+            local stillThere = false
+            local objects = square:getObjects()
+            for index = 0, objects:size() - 1 do
+                if objects:get(index) == drop.object then
+                    stillThere = true
+                    break
+                end
+            end
+            if not stillThere and ZombRand and ZombRand(100) < DISMANTLE_RETURN_CHANCE then
+                pcall(square.AddWorldInventoryItem, square, drop.itemType, 0.5, 0.5, 0.0)
+            end
+        end
+    end
 
     for _, position in pairs(toProcess) do
         local square = getSquare(position.x, position.y, position.z)
@@ -757,7 +785,7 @@ local function processPendingPipeRemovals()
     end
 end
 
-local function schedulePipeRemoval(object)
+local function schedulePipeRemoval(object, returnsMaterial)
     if not object or not PipeObjectUtils.isPipeObject(object) then
         return
     end
@@ -770,6 +798,18 @@ local function schedulePipeRemoval(object)
     local x, y, z = square:getX(), square:getY(), square:getZ()
     pendingPipeRemovals[tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)] = { x = x, y = y, z = z }
 
+    -- The material has to be read NOW: by the time the removal is confirmed next tick, the object
+    -- and its modData are gone. Pumps/routers/etc. also pass through here and return their pipe.
+    if returnsMaterial then
+        local ok, modData = pcall(object.getModData, object)
+        local clay = ok and modData
+            and modData[Constants.PIPE_MATERIAL_MODDATA_KEY] == Constants.PIPE_MATERIAL_CLAY
+        pendingMaterialDrops[#pendingMaterialDrops + 1] = {
+            x = x, y = y, z = z, object = object,
+            itemType = clay and Constants.PIPE_CLAY_ITEM_TYPE or "Base.MetalPipe",
+        }
+    end
+
     if not pendingRemovalScheduled and Events and Events.OnTick then
         pendingRemovalScheduled = true
         Events.OnTick.Add(processPendingPipeRemovals)
@@ -780,13 +820,15 @@ local function schedulePipeRemoval(object)
 end
 
 local function onDestroyIsoThumpable(thump, player)
-    schedulePipeRemoval(thump)
+    -- Sledgehammer: destruction, not dismantling -- nothing comes back, as before.
+    schedulePipeRemoval(thump, false)
 end
 
 -- Fires for moveable "Pick Up" and other lua-driven removals; without it a removed pipe would
--- stay registered and its endpoints would still read as connected.
+-- stay registered and its endpoints would still read as connected. Dismantling (the scrap action)
+-- comes through here, so this path hands the build material back.
 local function onObjectAboutToBeRemoved(object)
-    schedulePipeRemoval(object)
+    schedulePipeRemoval(object, true)
 end
 
 local function onEveryTenMinutes()

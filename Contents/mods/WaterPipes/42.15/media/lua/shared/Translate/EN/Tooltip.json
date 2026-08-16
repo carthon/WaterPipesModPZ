@@ -1,5 +1,5 @@
 {
-    "Tooltip_craft_WaterPipeDesc": "Carries water or fuel. Auto-connects into a network. Plumb sinks, showers and toilets; link barrels, rain collectors and vessels. Needs a Pipe Wrench.",
+    "Tooltip_craft_WaterPipeDesc": "Carries water or fuel. Auto-connects into a network. Plumb sinks, showers and toilets; link barrels, rain collectors and vessels. Built from a metal pipe or a fired clay pipe segment. Needs a Pipe Wrench.",
     "Tooltip_craft_WaterPipeRiserDesc": "A pipe run up a wall. Links floor pipes on both sides and connects different floors. Needs a Pipe Wrench.",
     "Tooltip_craft_WaterPipeHiddenDesc": "A pipe plastered out of sight. Carries fluid like a normal one. Reveal it with 'Show pipe network'. Needs a Pipe Wrench and a bucket of mixed cement.",
     "Tooltip_craft_WaterPipeRiserHiddenDesc": "A vertical pipe plastered into the wall. Links floors out of sight. Reveal it with 'Show pipe network'. Needs a Pipe Wrench and a bucket of mixed cement.",

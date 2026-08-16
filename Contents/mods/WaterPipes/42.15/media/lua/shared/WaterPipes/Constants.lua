@@ -19,6 +19,12 @@ Constants.PIPE_TOOL_TYPE = "Base.PipeWrench"
 Constants.PIPE_MODDATA_KEY = "waterpipesPipe"
 Constants.PIPE_SURFACE_MODDATA_KEY = "waterpipesSurface"
 Constants.PIPE_AXIS_MODDATA_KEY = "waterpipesAxis"
+-- What the pipe was built FROM. Only set when it is not the default metal ("clay" today), so
+-- every pipe built before this key existed reads as metal -- which is what it was.
+-- Dismantling reads it to hand back the right material (see WaterPipeSystem's removal drop).
+Constants.PIPE_MATERIAL_MODDATA_KEY = "waterpipesMaterial"
+Constants.PIPE_MATERIAL_CLAY = "clay"
+Constants.PIPE_CLAY_ITEM_TYPE = "Base.ClayPipeSegment"
 Constants.PLUMBED_ENDPOINT_MODDATA_KEY = "waterpipesEndpointPlumbed"
 Constants.PLUMBED_ENDPOINT_SOURCE_MODDATA_KEY = "waterpipesEndpointSource"
 -- Snapshot of the endpoint's own FluidContainer before we overwrite it with the network mirror,

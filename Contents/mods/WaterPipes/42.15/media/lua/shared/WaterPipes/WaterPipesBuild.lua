@@ -112,6 +112,29 @@ function Build.riserOnIsValid(params)
     return not squareHasRiserEdge(params and params.square, edgeFromFacing(params))
 end
 
+-- Did this build consume a fired clay pipe segment instead of a metal pipe? The recipe records its
+-- consumed inputs (kept tools and DontRecordInput items excluded), which is the same mechanism
+-- vanilla barricades use to know which plank went in. Guarded throughout: an engine build that does
+-- not expose craftRecipeData simply reads as metal, the default.
+local function consumedClay(params)
+    local data = params and params.craftRecipeData
+    if not data or not data.getAllRecordedConsumedItems then
+        return false
+    end
+    local ok, items = pcall(data.getAllRecordedConsumedItems, data)
+    if not ok or not items or not items.size then
+        return false
+    end
+    for index = 0, items:size() - 1 do
+        local item = items:get(index)
+        local okType, fullType = item and pcall(item.getFullType, item)
+        if okType and fullType == Constants.PIPE_CLAY_ITEM_TYPE then
+            return true
+        end
+    end
+    return false
+end
+
 -- ===== OnCreate (server / single-player) =====
 
 -- opts: surface, riser, edge, hidden, router, routerDirection, pump, drip, sprinkler, axis.
@@ -128,6 +151,8 @@ local function markAndRegister(thumpable, opts)
         modData[Constants.PIPE_MODDATA_KEY] = true
         modData[Constants.PIPE_SURFACE_MODDATA_KEY] = opts.surface
         modData[Constants.PIPE_AXIS_MODDATA_KEY] = opts.axis or Constants.PIPE_AXIS_EW
+        -- Build material: only stamped when it is not the metal default, so old pipes stay metal.
+        modData[Constants.PIPE_MATERIAL_MODDATA_KEY] = opts.clay and Constants.PIPE_MATERIAL_CLAY or nil
         modData[Constants.PIPE_RISER_MODDATA_KEY] = opts.riser and true or nil
         modData[Constants.PIPE_RISER_EDGE_MODDATA_KEY] = opts.edge or nil
         -- Concealed variant: baked in at build; clients render it with a transparent tile.
@@ -165,24 +190,30 @@ local function markAndRegister(thumpable, opts)
 end
 
 function Build.floorOnCreate(params)
-    markAndRegister(params and params.thumpable, { surface = Constants.PIPE_SURFACE_FLOOR })
+    markAndRegister(params and params.thumpable, {
+        surface = Constants.PIPE_SURFACE_FLOOR, clay = consumedClay(params),
+    })
 end
 
 function Build.riserOnCreate(params)
     markAndRegister(params and params.thumpable, {
         surface = Constants.PIPE_SURFACE_WALLCOVER, riser = true, edge = edgeFromFacing(params),
+        clay = consumedClay(params),
     })
 end
 
 -- Concealed variants: identical placement/registration, but flagged hidden so each client renders
 -- them invisible. Network, auto-connect and verticality are unaffected (detection is modData-based).
 function Build.floorHiddenOnCreate(params)
-    markAndRegister(params and params.thumpable, { surface = Constants.PIPE_SURFACE_FLOOR, hidden = true })
+    markAndRegister(params and params.thumpable, {
+        surface = Constants.PIPE_SURFACE_FLOOR, hidden = true, clay = consumedClay(params),
+    })
 end
 
 function Build.riserHiddenOnCreate(params)
     markAndRegister(params and params.thumpable, {
         surface = Constants.PIPE_SURFACE_WALLCOVER, riser = true, edge = edgeFromFacing(params), hidden = true,
+        clay = consumedClay(params),
     })
 end
 
