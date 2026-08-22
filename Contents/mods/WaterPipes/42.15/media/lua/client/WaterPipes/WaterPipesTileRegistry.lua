@@ -267,9 +267,10 @@ function Registry.near(kind, px, py, pz, radius)
     return results
 end
 
--- Irrigation.getEmitterStatus walks the whole network twice (pressure, then available fluid). The
--- presentational callers ask it several times a second, per emitter, for an answer that only changes
--- when the server's minute pass runs -- so it is cached per tile for STATUS_TTL_MS.
+-- Irrigation.getEmitterStatus walks the whole network (once: pressure and available fluid are two
+-- readings off one summary). The presentational callers ask it several times a second, per emitter,
+-- for an answer that only changes when the server's minute pass runs -- so it is cached per tile
+-- for STATUS_TTL_MS.
 function Registry.emitterStatus(emitter, square)
     if not emitter or not square then
         return nil

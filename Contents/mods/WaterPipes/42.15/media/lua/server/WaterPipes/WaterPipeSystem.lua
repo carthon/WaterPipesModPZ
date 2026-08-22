@@ -875,7 +875,9 @@ end
 -- faster would be pure overhead. It is also the only place pressure is computed for emitters, which
 -- keeps that cost pinned to the slowest cadence in the mod.
 local function onEveryHours()
-    local ok, err = pcall(Irrigation.run, 1.0)
+    -- Queued rather than run outright: the pass hands itself out a few emitters per frame (see
+    -- drainIrrigationPass), so a field of thirty sprinklers no longer lands as one hourly hitch.
+    local ok, err = pcall(Irrigation.beginPass, 1.0)
     if not ok then
         Logger.error("Irrigation pass failed: " .. tostring(err))
     end
@@ -885,6 +887,21 @@ local function onEveryHours()
     local okStag, errStag = pcall(System.processStagnation)
     if not okStag then
         Logger.error("Stagnation pass failed: " .. tostring(errStag))
+    end
+end
+
+-- The only per-frame work the system does, and it costs one nil check on the frames where there is
+-- no pass draining -- which is all but a handful an hour.
+local function drainIrrigationPass()
+    if not Irrigation.hasPendingPass() then
+        return
+    end
+
+    local ok, err = pcall(Irrigation.stepPass, Constants.IRRIGATION_EMITTERS_PER_TICK)
+    if not ok then
+        Logger.error("Irrigation step failed: " .. tostring(err))
+        -- Drop the pass rather than retry the same failing emitter every frame from here to eternity.
+        pcall(Irrigation.cancelPass)
     end
 end
 
@@ -1103,6 +1120,10 @@ if Events then
 
     if Events.EveryHours then
         Events.EveryHours.Add(onEveryHours)
+    end
+
+    if Events.OnTick then
+        Events.OnTick.Add(drainIrrigationPass)
     end
 
     if Events.OnDestroyIsoThumpable then

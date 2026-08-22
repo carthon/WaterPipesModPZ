@@ -49,8 +49,8 @@ end
 -- the emitter covers the 3x3 around itself, so being within one tile of one is being under it.
 --
 -- This runs four times a second, so what it asks matters. It used to scan the 3x3 for objects and
--- then ask Irrigation.getEmitterStatus, which walks the whole network twice -- meaning standing next
--- to a sprinkler cost eight full network traversals per second for a yes/no. It now reads the tile
+-- then ask Irrigation.getEmitterStatus, which walks the whole network -- meaning standing next
+-- to a sprinkler cost a full network traversal several times a second for a yes/no. It now reads the tile
 -- registry (which remembers where emitters are) and its cached status. See WaterPipesTileRegistry.
 local function playerIsInSpray(player)
     local px = math.floor(player:getX())

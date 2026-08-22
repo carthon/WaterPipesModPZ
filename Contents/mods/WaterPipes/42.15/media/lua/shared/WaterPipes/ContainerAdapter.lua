@@ -556,17 +556,61 @@ local function writePurifierOutAmount(purifierObject, fluidAmount, fluidTypeName
     return true
 end
 
-function Adapter.writeDescriptorWaterAmount(descriptor, fluidAmount, fluidTypeName)
-    if not descriptor then
+-- Would writing `fluidAmount` of `fluidTypeName` to this descriptor change anything a player could
+-- see? Descriptors carry the amount and type read when the summary was built, so this is answered
+-- without touching the world.
+--
+-- The TYPE half is not optional. Stagnation and rain contamination write the SAME amount back with a
+-- new type (see NetworkAccess.taintNetworkAt); comparing litres alone would silently skip those and
+-- leave half a network clean that should have turned.
+local function writeIsNoOp(descriptor, fluidAmount, fluidTypeName)
+    local current = descriptor.waterAmount
+    if not current then
+        return false   -- unknown current amount: never assume, just write
+    end
+
+    local target = fluidAmount or 0
+    if math.abs(current - target) > Constants.FLUID_WRITE_EPSILON then
         return false
     end
 
+    -- An empty vessel staying empty has no meaningful type either way.
+    if target <= 0 and current <= 0 then
+        return true
+    end
+
+    return descriptor.fluidType == fluidTypeName
+end
+
+-- Returns (ok, touchedTheWorld).
+--
+-- The second value is what lets a caller keep its books straight. `ok` means "the vessel is in the
+-- state you asked for", which is ALSO true when the request was close enough to what it already held
+-- that writing was not worth it -- and in that case the vessel still holds its old amount, not the
+-- requested one. A caller doing conservation arithmetic (rebalanceSummary) has to know the
+-- difference, or it would credit itself litres that never moved.
+-- `force` overrides the no-op guard. A consumer that must actually move SOMETHING -- a draw that has
+-- already promised its caller the litres -- passes it for the vessel it settles on, so a request too
+-- small to clear the epsilon still lands instead of silently doing nothing forever.
+function Adapter.writeDescriptorWaterAmount(descriptor, fluidAmount, fluidTypeName, force)
+    if not descriptor then
+        return false, false
+    end
+
+    -- Nothing worth doing. Reported as success because the vessel is already in the requested state
+    -- to within a hundredth of a litre; the caller carries the remainder to the next vessel.
+    if not force and writeIsNoOp(descriptor, fluidAmount, fluidTypeName) then
+        return true, false
+    end
+
     if descriptor.fluidMode == "purifierOut" then
-        return writePurifierOutAmount(descriptor.object, fluidAmount, fluidTypeName)
+        local ok = writePurifierOutAmount(descriptor.object, fluidAmount, fluidTypeName)
+        return ok, ok
     end
 
     if descriptor.fluidMode == "worldObject" then
-        return Adapter.writeWorldFluidAmount(descriptor.object, fluidAmount, fluidTypeName)
+        local ok = Adapter.writeWorldFluidAmount(descriptor.object, fluidAmount, fluidTypeName)
+        return ok, ok
     end
 
     if descriptor.container then
@@ -574,10 +618,10 @@ function Adapter.writeDescriptorWaterAmount(descriptor, fluidAmount, fluidTypeNa
         if ok and descriptor.container.setTaintedWater then
             pcall(descriptor.container.setTaintedWater, descriptor.container, fluidTypeName == "TaintedWater")
         end
-        return ok
+        return ok, ok
     end
 
-    return false
+    return false, false
 end
 
 -- Compat (Take A Bath And Shower): its "TubFluidContainer" is a special fluid container the network
@@ -629,16 +673,48 @@ function Adapter.isWaterCandidate(container)
     return Adapter.readWaterAmount(container) >= 0
 end
 
-function Adapter.collectSquareContainers(square)
-    local result = {}
+-- ===== Per-frame vessel memo =====
+--
+-- Deciding whether one IsoObject is network storage is the single most repeated question in the mod.
+-- Answering it costs roughly twenty pcall'd Java calls -- isEndpointCandidate alone runs three
+-- instanceof checks for the washer classes and pulls the sprite's property list -- and it is asked
+-- about EVERY object on EVERY pipe tile, on every network summary. A farm with 32 sprinklers on a
+-- 200-tile network asked it about a million times in a single frame, which is exactly the stall a
+-- player reports as "the mod lags".
+--
+-- The answer only changes when an object appears on or leaves the tile, and both raise events. So it
+-- is memoised -- but ONLY the classification: which objects are vessels, their capacity, their index
+-- and their key. The AMOUNT and the FLUID TYPE are re-read on every single call, because those are
+-- what the network arithmetic is made of and a stale one would conjure or destroy water.
+--
+-- Descriptors themselves are deliberately NOT cached, and that is not an oversight. The callers
+-- decorate them per query -- collectStorageDescriptors writes pipeHops and pressureChain, the
+-- pressure gate writes pressure -- and all three are measured FROM the consumer. Handing two
+-- consumers the same table would have the second silently overwrite the first's hop count.
+local vesselMemo = {}
 
-    if not square or not square.getObjects then
-        return result
+local function vesselMemoKey(square)
+    return tostring(square:getX()) .. ":" .. tostring(square:getY()) .. ":" .. tostring(square:getZ())
+end
+
+function Adapter.invalidateVesselCache()
+    vesselMemo = {}
+end
+
+function Adapter.invalidateSquareVessels(square)
+    if square and square.getX then
+        vesselMemo[vesselMemoKey(square)] = nil
     end
+end
+
+-- The expensive half, run once per square per frame. Returns a list of the fixed facts about each
+-- vessel found; never the fluid it holds.
+local function classifySquareVessels(square)
+    local vessels = {}
 
     local objects = square:getObjects()
     if not objects or not objects.size then
-        return result
+        return vessels
     end
 
     local x = square:getX()
@@ -654,20 +730,14 @@ function Adapter.collectSquareContainers(square)
             if fluidKind then
                 local capacity = getRawWorldFluidCapacity(worldObject)
                 if capacity and capacity > 0 then
-                    local key = squareKey .. ":" .. tostring(objectIndex) .. ":fluid"
-                    result[key] = {
-                        key = key,
+                    vessels[#vessels + 1] = {
+                        key = squareKey .. ":" .. tostring(objectIndex) .. ":fluid",
                         squareKey = squareKey,
                         x = x,
                         y = y,
                         z = z,
                         objectIndex = objectIndex,
-                        containerIndex = -1,
                         capacity = capacity,
-                        waterAmount = getRawWorldFluidAmount(worldObject) or 0,
-                        fluidType = readRawWorldFluidType(worldObject),
-                        kind = "worldFluid",
-                        fluidMode = "worldObject",
                         object = worldObject,
                     }
                 end
@@ -675,5 +745,77 @@ function Adapter.collectSquareContainers(square)
         end
     end
 
+    return vessels
+end
+
+-- The memo is keyed on the square and the object INDEX is part of every descriptor key, so anything
+-- that renumbers the tile's object list has to drop it. Add/remove do exactly that and both raise an
+-- event; the per-frame clear is the backstop, bounding any path we have not thought of at one frame.
+local function classifySquareVesselsCached(square)
+    local key = vesselMemoKey(square)
+    local cached = vesselMemo[key]
+    if not cached then
+        cached = classifySquareVessels(square)
+        vesselMemo[key] = cached
+    end
+    return cached
+end
+
+-- Is there any network vessel on this square at all? The router walk asks this per crossing and does
+-- not care what is inside, so it never pays for a fluid read.
+function Adapter.hasSquareContainers(square)
+    if not square or not square.getObjects then
+        return false
+    end
+    return #classifySquareVesselsCached(square) > 0
+end
+
+function Adapter.collectSquareContainers(square)
+    local result = {}
+
+    if not square or not square.getObjects then
+        return result
+    end
+
+    for _, vessel in ipairs(classifySquareVesselsCached(square)) do
+        result[vessel.key] = {
+            key = vessel.key,
+            squareKey = vessel.squareKey,
+            x = vessel.x,
+            y = vessel.y,
+            z = vessel.z,
+            objectIndex = vessel.objectIndex,
+            containerIndex = -1,
+            capacity = vessel.capacity,
+            -- Read fresh, every time. See the memo's note above.
+            waterAmount = getRawWorldFluidAmount(vessel.object) or 0,
+            fluidType = readRawWorldFluidType(vessel.object),
+            kind = "worldFluid",
+            fluidMode = "worldObject",
+            object = vessel.object,
+        }
+    end
+
     return result
+end
+
+-- The vessel memo's invalidation, mirroring PipeObjectUtils' scan memo: an object appearing on or
+-- leaving a square renumbers that square's object list, and the index is baked into every descriptor
+-- key -- so the affected square is dropped at once. The per-frame clear is the backstop.
+--
+-- Note this does NOT need to fire on water moving. Amounts and fluid types are never memoised, so a
+-- barrel filling or emptying is seen by the very next query without any invalidation at all.
+if Events then
+    local function invalidateForObject(object)
+        local square = object and object.getSquare and object:getSquare() or nil
+        if square then
+            Adapter.invalidateSquareVessels(square)
+        else
+            Adapter.invalidateVesselCache()
+        end
+    end
+
+    if Events.OnObjectAdded then Events.OnObjectAdded.Add(invalidateForObject) end
+    if Events.OnObjectAboutToBeRemoved then Events.OnObjectAboutToBeRemoved.Add(invalidateForObject) end
+    if Events.OnTick then Events.OnTick.Add(Adapter.invalidateVesselCache) end
 end

@@ -200,18 +200,21 @@ function Irrigation.getEmitterStatus(worldObject, square)
 
     local NetworkAccess = WaterPipes.NetworkAccess
     local kind = isDrip and Constants.PRESSURE_KIND_DRIP or Constants.PRESSURE_KIND_SPRINKLER
+    -- One summary answers both questions the readout asks -- what head reaches here, and whether
+    -- there is water behind it. Asking them separately built the same network summary twice.
+    local summary = NetworkAccess.getDrawSummary(square, kind)
     local status = {
         kind = kind,
-        pressure = NetworkAccess.getPressureAtSquare(square, kind),
+        pressure = summary and summary.pressure or nil,
         minimum = WaterPipes.Pressure.minimumFor(kind),
         burst = isDrip and Irrigation.isDripBurst(worldObject) or false,
     }
 
     -- Is there actually water to draw here? (A dry network makes an emitter idle even at full pressure.)
-    local available, fluidTypeName = NetworkAccess.availableToPull(square, kind)
+    local fluidTypeName = summary and not summary.isMixed and summary.fluidTypeName or nil
     status.hasWater = fluidTypeName ~= nil
         and (fluidTypeName == "Water" or fluidTypeName == "TaintedWater")
-        and (available or 0) > 0
+        and (summary.totalAmount or 0) > 0
 
     -- With the pressure model off every connected emitter qualifies, exactly as the irrigation pass
     -- itself decides (Pressure.canReach short-circuits) -- otherwise the readout would call an emitter
@@ -231,16 +234,21 @@ local function isWaterFluid(fluidTypeName)
     return fluidTypeName == "Water" or fluidTypeName == "TaintedWater"
 end
 
--- Pull `litres` of whatever water the network holds at `square`. Returns (drawn, fluidTypeName).
-local function drawWater(square, litres, kind)
-    if litres <= 0 then
+-- Pull `litres` of whatever water an already-built summary holds. Returns (drawn, fluidTypeName).
+--
+-- Takes a summary rather than a square on purpose. Each emitter used to build three identical network
+-- summaries -- pressure, availability, draw -- and on a field of sprinklers that tripling was the
+-- single biggest cost in the mod. One summary answers all three, and because the summary is live the
+-- draw it performs is visible to whatever asks it next.
+local function drawWater(summary, litres)
+    if litres <= 0 or not summary then
         return 0, nil
     end
-    local available, fluidTypeName = NetworkAccess.availableToPull(square, kind)
-    if not fluidTypeName or not isWaterFluid(fluidTypeName) or (available or 0) <= 0 then
+    local fluidTypeName = summary.isMixed and nil or summary.fluidTypeName
+    if not fluidTypeName or not isWaterFluid(fluidTypeName) or (summary.totalAmount or 0) <= 0 then
         return 0, nil
     end
-    local drawn = NetworkAccess.drawFluidAtSquare(square, fluidTypeName, math.min(litres, available), kind)
+    local drawn = NetworkAccess.drawFromSummary(summary, fluidTypeName, litres)
     return drawn or 0, fluidTypeName
 end
 
@@ -248,8 +256,12 @@ end
 -- spray FX shows -- so it spends its trickle whether or not anything grows below; a crop only
 -- changes where the water ends up. (It used to spend only with a thirsty crop on the tile, and the
 -- visible drip read as free water.) Still the efficient choice: one tile's bill, not nine.
-function Irrigation.processDrip(drip, square, dtHours)
-    local pressure = NetworkAccess.getPressureAtSquare(square, Constants.PRESSURE_KIND_DRIP)
+-- `summary` is the network as seen from this tile, built by the caller (see Irrigation.run) so a whole
+-- row of emitters on one line can share one. Omitted, it is built here -- which is what the debug
+-- overlay and any single-emitter caller want.
+function Irrigation.processDrip(drip, square, dtHours, summary)
+    summary = summary or NetworkAccess.getDrawSummary(square, Constants.PRESSURE_KIND_DRIP)
+    local pressure = summary and summary.pressure or nil
     if not pressure then
         return   -- nothing can reach this emitter
     end
@@ -270,7 +282,7 @@ function Irrigation.processDrip(drip, square, dtHours)
     if want <= 0 then
         return
     end
-    local drawn, fluidTypeName = drawWater(square, Irrigation.litresFor(want), Constants.PRESSURE_KIND_DRIP)
+    local drawn, fluidTypeName = drawWater(summary, Irrigation.litresFor(want))
     if drawn <= 0 then
         debugLog("drip %d,%d,%d: reachable but drew no water (network dry?)",
             square:getX(), square:getY(), square:getZ())
@@ -301,10 +313,12 @@ end
 -- A sprinkler covers the 3x3 around it but needs real pressure, and is charged for every tile it
 -- sprays whether or not anything is growing there. It is loud, too: that noise plus the wasted water
 -- is what the player pays for the coverage.
-function Irrigation.processSprinkler(sprinkler, square, dtHours)
-    -- getPressureAtSquare already applies the sprinkler's own minimum head, so nil means either
+-- `summary` is the shared network snapshot; see processDrip.
+function Irrigation.processSprinkler(sprinkler, square, dtHours, summary)
+    -- The summary's pressure already applies the sprinkler's own minimum head, so nil means either
     -- unreachable or not enough pressure -- which for a sprinkler is the same thing.
-    local pressure = NetworkAccess.getPressureAtSquare(square, Constants.PRESSURE_KIND_SPRINKLER)
+    summary = summary or NetworkAccess.getDrawSummary(square, Constants.PRESSURE_KIND_SPRINKLER)
+    local pressure = summary and summary.pressure or nil
     if not pressure then
         return
     end
@@ -316,7 +330,7 @@ function Irrigation.processSprinkler(sprinkler, square, dtHours)
 
     -- Charged for the whole footprint up front: the spray does not care what is under it.
     local litres = Irrigation.litresFor(perTile) * Constants.SPRINKLER_WASTE_TILES
-    local drawn = drawWater(square, litres, Constants.PRESSURE_KIND_SPRINKLER)
+    local drawn = drawWater(summary, litres)
     if drawn <= 0 then
         debugLog("sprinkler %d,%d,%d: has %.1f pressure but drew no water (network dry?)",
             square:getX(), square:getY(), square:getZ(), pressure)
@@ -374,32 +388,121 @@ function Irrigation.waterHydrantSurroundings(square, dtHours)
     end
 end
 
--- Walk the registered pipes and run whatever emitters sit on them. Iterating State's pipe registry
+-- Walk the registered pipes and list every emitter sitting on one. Iterating State's pipe registry
 -- rather than scanning the map keeps this proportional to what the player actually built.
--- Server-only, and deliberately on a slow cadence: this is the one place pressure gets computed.
-function Irrigation.run(dtHours)
-    if isClient and isClient() then
-        return
-    end
-
+local function collectEmitters()
     local State = WaterPipes.State
     local state = State and State.ensure and State.ensure() or nil
     if not state or not state.pipes then
-        return
+        return {}
     end
 
+    local emitters = {}
     for _, pipeData in pairs(state.pipes) do
         local square = getCellSquare(pipeData.x, pipeData.y, pipeData.z)
         if square then
             local drip = Irrigation.findDripOnSquare(square)
             if drip then
-                Irrigation.processDrip(drip, square, dtHours)
+                emitters[#emitters + 1] = { object = drip, square = square, drip = true }
             end
             local sprinkler = Irrigation.findSprinklerOnSquare(square)
             if sprinkler then
-                Irrigation.processSprinkler(sprinkler, square, dtHours)
+                emitters[#emitters + 1] = { object = sprinkler, square = square, drip = false }
             end
         end
+    end
+    return emitters
+end
+
+local function processEmitter(emitter, dtHours)
+    if emitter.drip then
+        Irrigation.processDrip(emitter.object, emitter.square, dtHours)
+    else
+        Irrigation.processSprinkler(emitter.object, emitter.square, dtHours)
+    end
+end
+
+-- ===== The pass, spread over frames =====
+--
+-- Irrigation is hourly, but "hourly" used to mean every emitter on the map ran inside ONE frame. A
+-- field of thirty-odd sprinklers therefore paid its whole bill as a single visible hitch every game
+-- hour, which is how a cost shows up to a player even after the cost itself has come down. The work
+-- is now handed out a few emitters per tick instead.
+--
+-- Each emitter still gets the same dtHours, so the water delivered is identical -- only the frame it
+-- lands in moves, by at most a second or two of real time on a network of any size.
+local pendingPass = nil
+
+function Irrigation.hasPendingPass()
+    return pendingPass ~= nil
+end
+
+-- Start a pass. Any pass still draining is finished off first, so a slow frame can never let two
+-- hours' worth of emitters pile up into one queue and silently skip an hour of watering.
+function Irrigation.beginPass(dtHours)
+    if isClient and isClient() then
+        return
+    end
+
+    if pendingPass then
+        Irrigation.finishPass()
+    end
+
+    local emitters = collectEmitters()
+    if #emitters == 0 then
+        return
+    end
+
+    pendingPass = { emitters = emitters, index = 1, dtHours = dtHours }
+end
+
+-- Run up to `budget` emitters. Returns true once the pass is done.
+function Irrigation.stepPass(budget)
+    if not pendingPass then
+        return true
+    end
+
+    local emitters = pendingPass.emitters
+    local dtHours = pendingPass.dtHours
+    local last = math.min(pendingPass.index + math.max(budget or 1, 1) - 1, #emitters)
+
+    for index = pendingPass.index, last do
+        processEmitter(emitters[index], dtHours)
+    end
+
+    pendingPass.index = last + 1
+    if pendingPass.index > #emitters then
+        pendingPass = nil
+        return true
+    end
+    return false
+end
+
+-- Abandon whatever is left of the current pass. The emitters already processed keep their water;
+-- the rest simply miss this hour.
+function Irrigation.cancelPass()
+    pendingPass = nil
+end
+
+-- Drain whatever is left of the current pass in this frame. A plain emitter count as the budget --
+-- not math.huge, which Kahlua would carry through the index arithmetic.
+function Irrigation.finishPass()
+    if not pendingPass then
+        return
+    end
+    Irrigation.stepPass(#pendingPass.emitters)
+end
+
+-- Run a whole pass right now, in this frame. The debug command and anything that wants the result
+-- immediately use this; the hourly tick uses beginPass/stepPass instead.
+-- Server-only: this is the one place pressure gets computed for emitters.
+function Irrigation.run(dtHours)
+    if isClient and isClient() then
+        return
+    end
+
+    for _, emitter in ipairs(collectEmitters()) do
+        processEmitter(emitter, dtHours)
     end
 end
 

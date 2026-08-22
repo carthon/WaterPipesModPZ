@@ -40,14 +40,10 @@ local function routerIsHardBoundary(routerSquare)
     if Purifier and Purifier.findForRouterSquare and Purifier.findForRouterSquare(routerSquare) then
         return true
     end
-    -- Any other vessel parked on the crossing buffers the flow, so treat it as a boundary too.
-    -- Iterate rather than use next(): PZ's Lua does not expose next, and the descriptors are a
-    -- string-keyed map so # would not work either.
-    local containers = Adapter.collectSquareContainers(routerSquare)
-    for _ in pairs(containers) do
-        return true
-    end
-    return false
+    -- Any other vessel parked on the crossing buffers the flow, so treat it as a boundary too. This
+    -- runs per router crossing inside the network walk and only needs a yes/no, so it asks the
+    -- adapter's classification directly rather than building descriptors and reading their fluid.
+    return Adapter.hasSquareContainers(routerSquare)
 end
 
 local function getCellSquare(x, y, z)
@@ -846,15 +842,56 @@ local function excludePurifierOutlets(summary)
     return removed
 end
 
+-- Spread `remainingAmount` over the summary's vessels in proportion to their capacity, and leave the
+-- summary describing what the world now holds.
+--
+-- Two things here are load-bearing:
+--
+-- CARRY. Adapter.writeDescriptorWaterAmount refuses writes that would move less than
+-- Constants.FLUID_WRITE_EPSILON, because the write itself (empty, refill, sync, transmitModData,
+-- OnWaterAmountChange) costs far more than a hundredth of a litre is worth. But the caller has
+-- already been told it drew those litres -- drawFluidAtSquare returns `drawn` whatever the writes do
+-- -- so litres a skipped write leaves behind must land somewhere or the network conjures water out
+-- of nothing. They are carried to the next vessel; the last one absorbs whatever is left. A vessel
+-- that clamps at its capacity feeds its overflow into the same carry, which is the same arithmetic.
+--
+-- WRITE-BACK. The descriptors and the totals are updated to what was actually written, so the
+-- summary stays a true picture of the network after the call. A summary is now handed around and
+-- drawn from more than once (see getDrawSummary), and without this the second draw would price
+-- itself against water the first one already took.
 local function rebalanceSummary(summary, remainingAmount)
     local fluidTypeName = remainingAmount > 0 and summary.fluidTypeName or nil
     local totalCapacity = math.max(summary.totalCapacity or 0, 0)
     local ratio = totalCapacity > 0 and math.min(remainingAmount / totalCapacity, 1) or 0
 
+    local carry = 0
+    local written = 0
+
     for _, descriptor in ipairs(summary.descriptors) do
-        local nextAmount = (descriptor.capacity or 0) * ratio
-        Adapter.writeDescriptorWaterAmount(descriptor, nextAmount, fluidTypeName)
+        local capacity = math.max(descriptor.capacity or 0, 0)
+        local share = capacity * ratio
+        local target = math.min(math.max(share + carry, 0), capacity)
+        local before = math.max(descriptor.waterAmount or 0, 0)
+
+        local ok, wrote = Adapter.writeDescriptorWaterAmount(descriptor, target, fluidTypeName)
+        local landed
+        if ok and wrote then
+            landed = target
+            descriptor.waterAmount = target
+            descriptor.fluidType = target > 0 and fluidTypeName or nil
+        else
+            -- Either the write was skipped as not worth doing, or it failed outright (a vessel that
+            -- refused the fluid). Either way the vessel still holds what it held, and the difference
+            -- rolls on to the next one rather than evaporating.
+            landed = before
+        end
+
+        carry = carry + share - landed
+        written = written + landed
     end
+
+    summary.totalAmount = written
+    summary.fluidTypeName = written > 0 and fluidTypeName or nil
 end
 
 function NetworkAccess.getSummary(endpointObject)
@@ -1059,12 +1096,106 @@ function NetworkAccess.availableToPush(square, fluidType)
     return headroom
 end
 
--- Draw up to `amount` of `requiredFluidType` from the network reachable from `originSquare`.
--- Only works on a single-fluid network whose fluid matches requiredFluidType. Returns the
--- amount actually drawn (rebalanced out of the network's containers).
-function NetworkAccess.drawFluidAtSquare(originSquare, requiredFluidType, amount, kind)
-    -- Drawing is consumption: only fluid whose head reaches this square is available.
-    local summary = buildSummaryFromSquare(originSquare, "both", kind or Constants.PRESSURE_KIND_TAP)
+-- The summary a consumer standing on `square` needs, built ONCE.
+--
+-- Every draw used to build three of these -- one to read the pressure, one to ask what was available,
+-- one to actually take it -- all with identical arguments and all rebuilding the container
+-- descriptors from scratch. The traversal cache spared the walk but not that, and on a farm network
+-- it was the walk's cost all over again, three times per emitter. The summary already carries every
+-- answer all three wanted: `pressure`, `totalAmount` + `fluidTypeName`, and `descriptors`.
+--
+-- The returned summary is LIVE: drawFromSummary updates it in place, so a caller may draw from it
+-- repeatedly and each draw sees what the previous one left. It is a snapshot of topology and of the
+-- fluid at build time -- so do not hold one across a frame, or across anything that could move water
+-- behind its back.
+function NetworkAccess.getDrawSummary(square, kind)
+    return buildSummaryFromSquare(square, "both", kind or Constants.PRESSURE_KIND_TAP)
+end
+
+-- Take `amount` out of an already-built summary. Returns the amount actually drawn.
+--
+-- Deliberately NOT a rebalance. Re-levelling the whole network on every sip made the vessel count a
+-- term in the cost of every draw: a sprinkler taking 1.8 L from ten barrels rewrote all ten -- empty,
+-- refill, sync, transmitModData, OnWaterAmountChange, ten times -- to move 0.18 L into each. Thirty-
+-- two sprinklers made that 320 vessel writes per pass where 32 would do.
+--
+-- (Measured, so it is not oversold: on a 250-tile farm those writes are a small share of the pass
+-- next to the per-emitter network summaries -- see tools/perf. This removes the term rather than the
+-- bottleneck. It matters most in multiplayer, where every write is also a packet, and for whatever
+-- other mods hang off OnWaterAmountChange.)
+--
+-- So we empty the nearest vessels instead, taking all of one before touching the next. One write for
+-- a typical draw, whatever the network holds. Nothing is lost by not levelling here: gravity settle
+-- (System.redistributeWater, every ten in-game minutes) is what evens the network out, and it was
+-- always the thing doing that job -- the rebalance here was only ever duplicating it, once per sip.
+--
+-- Nearest-first is not arbitrary either. It is what a real line does: the consumer pulls from the
+-- vessel with the shortest run to it, and the rest of the line refills that one at its own pace.
+local function drawFromSummaryDescriptors(summary, amount)
+    local order = {}
+    for _, descriptor in ipairs(summary.descriptors) do
+        if (descriptor.waterAmount or 0) > 0 then
+            order[#order + 1] = descriptor
+        end
+    end
+
+    table.sort(order, function(left, right)
+        local leftHops, rightHops = left.pipeHops or 0, right.pipeHops or 0
+        if leftHops ~= rightHops then
+            return leftHops < rightHops
+        end
+        -- Same distance: drain the fullest first, so a network settles toward level rather than away
+        -- from it between gravity passes.
+        local leftAmount, rightAmount = left.waterAmount or 0, right.waterAmount or 0
+        if leftAmount ~= rightAmount then
+            return leftAmount > rightAmount
+        end
+        return tostring(left.key) < tostring(right.key)
+    end)
+
+    local remaining = amount
+    local removed = 0
+
+    for _, descriptor in ipairs(order) do
+        if remaining <= 0 then
+            break
+        end
+
+        local have = math.max(descriptor.waterAmount or 0, 0)
+        local take = math.min(have, remaining)
+        local target = have - take
+        -- Falling back to the network's fluid is not belt-and-braces: writeWorldFluidAmount empties
+        -- the vessel and only refills it when it is given a type, so handing it a positive amount
+        -- with no type would destroy the remainder outright.
+        local fluidTypeName = nil
+        if target > 0 then
+            fluidTypeName = descriptor.fluidType or summary.fluidTypeName
+            if not fluidTypeName then
+                -- Unknown fluid and water still in the vessel: leave it alone rather than risk it.
+                break
+            end
+        end
+
+        -- Force the write once nothing has moved yet: the caller is about to be told it drew these
+        -- litres, so a request too small to clear the epsilon must still land somewhere.
+        local force = (removed <= 0)
+        local ok, wrote = Adapter.writeDescriptorWaterAmount(descriptor, target, fluidTypeName, force)
+        if ok and wrote then
+            descriptor.waterAmount = target
+            descriptor.fluidType = fluidTypeName
+            removed = removed + take
+            remaining = remaining - take
+        end
+    end
+
+    summary.totalAmount = math.max((summary.totalAmount or 0) - removed, 0)
+    if summary.totalAmount <= 0 then
+        summary.fluidTypeName = nil
+    end
+    return removed
+end
+
+function NetworkAccess.drawFromSummary(summary, requiredFluidType, amount)
     if not summary or summary.isMixed or (summary.totalAmount or 0) <= 0 then
         return 0
     end
@@ -1073,13 +1204,22 @@ function NetworkAccess.drawFluidAtSquare(originSquare, requiredFluidType, amount
         return 0
     end
 
-    local drawn = math.min(math.max(amount or 0, 0), summary.totalAmount)
-    if drawn <= 0 then
+    local wanted = math.min(math.max(amount or 0, 0), summary.totalAmount)
+    if wanted <= 0 then
         return 0
     end
 
-    rebalanceSummary(summary, summary.totalAmount - drawn)
-    return drawn
+    return drawFromSummaryDescriptors(summary, wanted)
+end
+
+-- Draw up to `amount` of `requiredFluidType` from the network reachable from `originSquare`.
+-- Only works on a single-fluid network whose fluid matches requiredFluidType. Returns the
+-- amount actually drawn. Kept as the one-shot form for callers with no summary in hand.
+function NetworkAccess.drawFluidAtSquare(originSquare, requiredFluidType, amount, kind)
+    -- Drawing is consumption: only fluid whose head reaches this square is available.
+    return NetworkAccess.drawFromSummary(
+        buildSummaryFromSquare(originSquare, "both", kind or Constants.PRESSURE_KIND_TAP),
+        requiredFluidType, amount)
 end
 
 -- Add up to `amount` of `fluidType` into the network reachable from `originSquare`. Only works if
@@ -1192,8 +1332,9 @@ function NetworkAccess.useFluid(endpointObject, amount)
         return 0
     end
 
-    rebalanceSummary(summary, summary.totalAmount - clamped)
-    return clamped
+    -- Same nearest-vessel draw a sprinkler uses: a tap emptying the barrel next to it is what the
+    -- plumbing does anyway, and it costs one vessel write instead of one per vessel on the line.
+    return drawFromSummaryDescriptors(summary, clamped)
 end
 
 function NetworkAccess.restoreFluid(endpointObject, amount, fluidTypeName)

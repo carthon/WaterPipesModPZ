@@ -405,6 +405,20 @@ Constants.SPRINKLER_NOISE_VOLUME = 8
 Constants.IRRIGATION_LITRES_PER_WATER_LEVEL = 0.02
 Constants.IRRIGATION_MAX_WATER_LEVEL = 100
 
+-- ===== Fluid writes =====
+-- Litres below which writing a vessel is not worth doing. A write is NOT cheap: it resolves the
+-- sprite-grid target, empties the FluidContainer, refills it, sync()s the object, transmitModData()s
+-- it and fires OnWaterAmountChange for external mods. Doing all that to move a hundredth of a litre
+-- is pure cost -- and on a farm network it is that cost, multiplied by vessels x emitters, that the
+-- player feels as a stall. Anything the guard skips is carried to the next vessel by the caller
+-- (see rebalanceSummary), so conservation is exact whatever this is set to.
+Constants.FLUID_WRITE_EPSILON = 0.01
+
+-- Emitters processed per frame while an irrigation pass drains (see Irrigation.beginPass). Low
+-- enough that no single frame carries a visible share of the pass, high enough that even a very
+-- large field is finished inside a second or two of real time -- long before the next hourly tick.
+Constants.IRRIGATION_EMITTERS_PER_TICK = 4
+
 -- ===== Pressure gauge =====
 -- Pressure is otherwise an invisible number; this is the only way the player can see it.
 Constants.GAUGE_MODDATA_KEY = "waterpipesGauge"

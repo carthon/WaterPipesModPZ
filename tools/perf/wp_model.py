@@ -103,11 +103,17 @@ def isPipeObject(o):
 # whenever the pipe layout changes. frame_reset() is that boundary.
 PIPE_SCAN_MEMO = {}
 TRAVERSAL_CACHE = {}
+# ContainerAdapter's vessel memo: which objects on a square are network storage, and
+# their capacity. Same one-frame lifetime and the same invalidation events. Only the
+# classification is remembered -- the amount and the fluid type are read fresh on
+# every call, which is why collectSquareContainers still costs something on a hit.
+VESSEL_MEMO = {}
 
 
 def frame_reset():
     PIPE_SCAN_MEMO.clear()
     TRAVERSAL_CACHE.clear()
+    VESSEL_MEMO.clear()
 
 
 def getPipeObjectsOnSquare(sq):
@@ -203,21 +209,54 @@ def getDirectWorldFluidKind(o):
     return "worldFluid"
 
 
-def collectSquareContainers(sq):
-    """The single most expensive per-square routine in the mod."""
-    CALLS["collectSquareContainers"] += 1
-    if sq is None:
-        return {}
+def classifySquareVessels(sq):
+    """Adapter.classifySquareVessels: the expensive half, memoised per frame.
+
+    This used to be the single most expensive per-square routine in the mod, and it
+    ran on every network summary. The classification cannot change unless an object
+    joins or leaves the tile, and both raise events -- so it is remembered.
+    """
+    CALLS["classifySquareVessels"] += 1
     bc("getObjects", 1)
-    res = {}
+    out = []
     for i, o in enumerate(sq.objects):
         bc("getObjects", 1)
         if isEndpointCandidate(o):
             continue
         bc("isExcludedByName", 1)      # pcall getName
         if getDirectWorldFluidKind(o):
-            bc("descriptor", 4)        # capacity + amount + fluid type reads
-            res[(sq.x, sq.y, sq.z, i)] = {"z": sq.z, "obj": o}
+            bc("descriptor", 1)        # capacity read (fixed, so it is memoised too)
+            out.append((i, o))
+    return out
+
+
+def classifySquareVesselsCached(sq):
+    k = (sq.x, sq.y, sq.z)
+    hit = VESSEL_MEMO.get(k)
+    if hit is not None:
+        CALLS["vesselMemoHit"] += 1
+        return hit
+    out = classifySquareVessels(sq)
+    VESSEL_MEMO[k] = out
+    return out
+
+
+def hasSquareContainers(sq):
+    """Adapter.hasSquareContainers: classification only, no fluid read."""
+    if sq is None:
+        return False
+    return bool(classifySquareVesselsCached(sq))
+
+
+def collectSquareContainers(sq):
+    CALLS["collectSquareContainers"] += 1
+    if sq is None:
+        return {}
+    res = {}
+    for i, o in classifySquareVesselsCached(sq):
+        # Read fresh every time, memo or no memo: a stale amount would conjure water.
+        bc("descriptor", 3)            # amount + fluid type reads
+        res[(sq.x, sq.y, sq.z, i)] = {"z": sq.z, "obj": o}
     return res
 
 
@@ -353,7 +392,8 @@ CARDINAL = ((1, 0), (-1, 0), (0, 1), (0, -1))
 def routerIsHardBoundary(sq):
     if Purifier_findForRouterSquare(sq):
         return True
-    return bool(collectSquareContainers(sq))
+    # Only needs a yes/no, so it asks the classification and never reads a fluid.
+    return hasSquareContainers(sq)
 
 
 def collectPipeSquaresFromSquare(origin, conduct=False):
@@ -456,10 +496,25 @@ def buildSummaryFromSquare(origin, kind=None, fill=False):
     return {"descriptors": desc, "pipeSquares": pipe_squares}
 
 
+# One vessel write: resolveFluidTarget (sprite-grid scan) + emptyFluid + addFluid
+# + sync + transmitModData + fireExternalWaterChange (read + triggerEvent).
+WRITE_BC = 8
+
+
 def rebalanceSummary(summary):
-    # one write per descriptor: emptyFluid + addFluid + sync + transmitModData
-    # + fireExternalWaterChange (read + triggerEvent)
-    bc("fluidWrite", 8 * len(summary["descriptors"]))
+    """Fills still level the whole network: every vessel takes a share."""
+    bc("fluidWrite", WRITE_BC * len(summary["descriptors"]))
+
+
+def drawFromSummary(summary):
+    """Draws empty the nearest vessels instead of re-levelling everything.
+
+    This is what stops the vessel count being a performance setting. A sprinkler
+    taking its 1.8 L used to rewrite every barrel on the line; it now writes one.
+    """
+    if not summary["descriptors"]:
+        return
+    bc("fluidWrite", WRITE_BC)
 
 
 def availableToPull(sq):
@@ -473,7 +528,7 @@ def availableToPush(sq):
 def drawFluidAtSquare(sq):
     s = buildSummaryFromSquare(sq, kind="tap")
     if s:
-        rebalanceSummary(s)
+        drawFromSummary(s)
     return s
 
 
@@ -715,13 +770,23 @@ def pass_redistributeWater(sc):
 
 
 def pass_irrigation(sc):
+    """Irrigation.run: one summary per emitter, and one vessel write per draw.
+
+    Each emitter used to build three identical summaries -- pressure, availability,
+    draw -- and then re-level every vessel on the network. It now builds one and
+    empties the nearest vessel.
+
+    The real pass is handed out a few emitters per frame (Irrigation.beginPass), so
+    this total is spread over IRRIGATION_EMITTERS_PER_TICK-sized slices rather than
+    landing in one. The work is the same; only the frame it lands in moves.
+    """
     for (x, y, z) in sc.pipe_coords:
         sq = getGridSquare(x, y, z)
         d = Irrigation_findDripOnSquare(sq)
         if d:
-            getPressureAtSquare(sq, "drip")     # BFS 1
-            availableToPull(sq)                 # BFS 2
-            drawFluidAtSquare(sq)               # BFS 3
+            s = buildSummaryFromSquare(sq, kind="drip")   # the only BFS
+            if s:
+                drawFromSummary(s)
         Irrigation_findSprinklerOnSquare(sq)
 
 
@@ -799,13 +864,16 @@ def registry_near(kind, px, py, pz, radius):
 
 
 def emitter_status(sq):
-    """Registry.emitterStatus: 2 BFS on a miss, free on a hit."""
+    """Registry.emitterStatus: 1 BFS on a miss, free on a hit.
+
+    Pressure and availability are two questions with one answer, so the readout
+    builds a single summary and reads both off it.
+    """
     k = (sq.x, sq.y, sq.z)
     if STATUS_TTL_HITS and k in STATUS_CACHE:
         CALLS["statusCacheHit"] += 1
         return STATUS_CACHE[k]
-    getPressureAtSquare(sq, "drip")     # BFS 1
-    availableToPull(sq)                 # BFS 2
+    buildSummaryFromSquare(sq, kind="drip")
     STATUS_CACHE[k] = True
     return True
 
