@@ -884,11 +884,13 @@ local function onServerCommand(module, command, args)
     end
 end
 
--- An entry may accept several interchangeable items (either charcoal), so the requirement is shown
--- as "A / B" rather than pinning the player to the one they happen not to have.
+-- An entry may accept several interchangeable items, so the requirement is shown as "A / B" rather
+-- than pinning the player to the one they happen not to have. A tag-only entry (charcoal) names its
+-- displayType instead: the tag has no name a player would recognise, and listing every item carrying
+-- it would be a wall of text that grows with each mod installed.
 local function describeRepairEntry(entry)
     local names = {}
-    for _, itemType in ipairs(Constants.repairTypes(entry)) do
+    for _, itemType in ipairs(Constants.repairLabelTypes(entry)) do
         names[#names + 1] = getItemNameFromFullType(itemType) or itemType
     end
     return "  " .. (entry.count or 1) .. " x " .. table.concat(names, " / ")

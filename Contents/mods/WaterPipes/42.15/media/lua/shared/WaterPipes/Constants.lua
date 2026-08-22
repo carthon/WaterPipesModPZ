@@ -110,42 +110,76 @@ Constants.PURIFIER_FILTER_MAX_CONDITION = 100              -- % scale; a fresh/r
 Constants.PURIFIER_FILTER_WEAR_PER_UNIT = 0.02            -- % lost per unit of tainted water filtered
 Constants.PURIFIER_FILTER_WARN_CONDITION = 25             -- UI turns amber at/below this (repair soon)
 -- Repair kit: consumed by the "Repair Filter" timed action to restore condition to MAX.
--- A repair entry takes either one `type` or a list of interchangeable `types`.
+-- A repair entry matches by `tag`, by one `type`, or by a list of interchangeable `types`.
 --
--- Charcoal comes in two items that share the base:charcoal tag: Base.Charcoal, which you scavenge,
--- and Base.CharcoalCrafted, which you burn yourself in a charcoal pit. Accepting only the scavenged
--- one meant a player who had set up their own supply could not use it, which is backwards -- the
--- crafted one is the renewable resource.
+-- CHARCOAL IS MATCHED BY TAG, NEVER BY ITEM NAME. Vanilla ships two charcoals -- Base.Charcoal,
+-- which you scavenge, and Base.CharcoalCrafted, which you burn yourself in a pit -- and both carry
+-- base:charcoal, as does any charcoal another mod adds. A type list can only ever name the ones we
+-- knew about when we wrote it; the tag catches the rest for free, and it is the same thing the build
+-- recipes ask for (tags[base:charcoal]), so the two halves of the mod agree on what charcoal is.
+--
+-- `displayType` is the item the tooltip NAMES. Presentation only -- nothing is ever matched against
+-- it -- and it exists because a tag has no name a player would recognise.
 Constants.PURIFIER_REPAIR_ITEMS = {
-    { types = { "Base.Charcoal", "Base.CharcoalCrafted" }, tag = "CHARCOAL", count = 1 },
+    { tag = "CHARCOAL", displayType = "Base.Charcoal", count = 1 },
     { type = "Base.RippedSheets", count = 2 },
 }
 
--- The item types a repair entry will accept, whichever shape it was written in.
+-- The item types a repair entry MATCHES, whichever shape it was written in. Empty for a tag-only
+-- entry, which is correct: it matches by tag and by nothing else.
 function Constants.repairTypes(entry)
     return entry and (entry.types or { entry.type }) or {}
 end
 
--- An entry may also name an ItemTag member, which catches anything carrying that tag -- including
+-- The item types a repair entry is DESCRIBED by in the UI. Same list, except a tag-only entry falls
+-- back to its displayType so the tooltip can name something instead of showing an empty requirement.
+function Constants.repairLabelTypes(entry)
+    local types = Constants.repairTypes(entry)
+    if #types == 0 and entry and entry.displayType then
+        return { entry.displayType }
+    end
+    return types
+end
+
+-- An entry may name an ItemTag member, which catches anything carrying that tag -- including
 -- charcoal added by other mods, which an explicit list never will.
 --
--- Resolved by NAME and guarded, because whether the game actually defines the member can only be
--- settled in game: vanilla's own Lua uses the ItemTag enum everywhere and never a string, and it
--- never mentions CHARCOAL. If it does not resolve, the type list below still covers both vanilla
--- charcoals, so nothing breaks either way.
+-- Resolved by NAME because Lua cannot spell an enum member it was handed as a string. ItemTag.CHARCOAL
+-- does exist -- checked against the ItemTag enum in the shipped projectzomboid.jar, alongside the
+-- base:charcoal tag on both vanilla charcoal items -- so this resolves on a stock B42.
+--
+-- Still guarded, and now loud about it. A tag-only entry that fails to resolve matches NOTHING, which
+-- would leave the filter permanently unrepairable with no clue why; a line in console.txt is the
+-- difference between a five-minute diagnosis and a bug report nobody can reproduce.
+local warnedMissingTags = {}
 function Constants.repairTag(entry)
     local name = entry and entry.tag
-    if not name or not ItemTag then
+    if not name then
         return nil
     end
-    local ok, value = pcall(function() return ItemTag[name] end)
-    return ok and value or nil
+
+    local value = nil
+    if ItemTag then
+        local ok, resolved = pcall(function() return ItemTag[name] end)
+        value = ok and resolved or nil
+    end
+
+    if not value and not warnedMissingTags[name] then
+        warnedMissingTags[name] = true
+        if WaterPipes.Logger and WaterPipes.Logger.warn then
+            WaterPipes.Logger.warn("ItemTag." .. tostring(name)
+                .. " did not resolve -- any repair entry matching only that tag will never be satisfied")
+        end
+    end
+
+    return value
 end
 
 -- How many of `entry` the inventory holds, by type and by tag.
 --
--- The MAXIMUM of the two, never the sum: a tagged charcoal is also in the type list, so adding them
--- would count the same item twice and let a repair start with half the materials.
+-- The MAXIMUM of the two, never the sum. An entry naming both would otherwise count the same item
+-- twice -- a tagged item is usually in the type list too -- and let a repair start with half the
+-- materials. A tag-only entry (charcoal) just returns the tag count.
 function Constants.countRepairItems(inventory, entry)
     if not inventory or not entry then
         return 0
