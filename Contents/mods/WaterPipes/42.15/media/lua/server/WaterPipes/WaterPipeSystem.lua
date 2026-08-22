@@ -901,14 +901,22 @@ local function schedulePipeRemoval(object, returnsMaterial)
 
     -- The material has to be read NOW: by the time the removal is confirmed next tick, the object
     -- and its modData are gone. Pumps/routers/etc. also pass through here and return their pipe.
+    --
+    -- CLAY GIVES NOTHING BACK. A fired clay segment cannot be unfired, and prying a brittle one out
+    -- of a run breaks it -- so a clay pipe is spent the moment it is laid. That is the whole trade
+    -- against metal: clay is cheap and needs no forge, but it is one-way, while a metal pipe is
+    -- salvage you can move around your base. Without this, clay was strictly better than metal and
+    -- there was no reason to ever forge one.
     if returnsMaterial then
         local ok, modData = pcall(object.getModData, object)
         local clay = ok and modData
             and modData[Constants.PIPE_MATERIAL_MODDATA_KEY] == Constants.PIPE_MATERIAL_CLAY
-        pendingMaterialDrops[#pendingMaterialDrops + 1] = {
-            x = x, y = y, z = z, object = object,
-            itemType = clay and Constants.PIPE_CLAY_ITEM_TYPE or "Base.MetalPipe",
-        }
+        if not clay then
+            pendingMaterialDrops[#pendingMaterialDrops + 1] = {
+                x = x, y = y, z = z, object = object,
+                itemType = "Base.MetalPipe",
+            }
+        end
     end
 
     if not pendingRemovalScheduled and Events and Events.OnTick then

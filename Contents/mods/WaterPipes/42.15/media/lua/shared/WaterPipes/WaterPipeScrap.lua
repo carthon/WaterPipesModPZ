@@ -5,8 +5,9 @@
 -- The pipe tiles use the custom material "WaterPipesScrap"; here we register the disassemble
 -- action itself (hammer, low Woodwork). The material RETURN is deliberately NOT registered here:
 -- a scrap table is keyed by tile material and cannot know whether the pipe was built from a metal
--- pipe or a clay segment. The mod's own removal hook reads the pipe's modData and drops the right
--- item at the old 90% (see WaterPipeSystem's pendingMaterialDrops).
+-- pipe or a clay segment, and the two do not pay out the same: metal comes back at the old 90%,
+-- clay comes back not at all. The mod's own removal hook reads the pipe's modData and decides
+-- (see WaterPipeSystem's schedulePipeRemoval).
 
 require "Moveables/ISMoveableDefinitions"
 

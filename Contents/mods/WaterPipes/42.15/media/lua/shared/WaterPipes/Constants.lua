@@ -21,7 +21,8 @@ Constants.PIPE_SURFACE_MODDATA_KEY = "waterpipesSurface"
 Constants.PIPE_AXIS_MODDATA_KEY = "waterpipesAxis"
 -- What the pipe was built FROM. Only set when it is not the default metal ("clay" today), so
 -- every pipe built before this key existed reads as metal -- which is what it was.
--- Dismantling reads it to hand back the right material (see WaterPipeSystem's removal drop).
+-- Dismantling reads it to decide whether anything comes back at all: metal is salvage, clay is
+-- spent the moment it is laid (see WaterPipeSystem's schedulePipeRemoval).
 Constants.PIPE_MATERIAL_MODDATA_KEY = "waterpipesMaterial"
 Constants.PIPE_MATERIAL_CLAY = "clay"
 Constants.PIPE_CLAY_ITEM_TYPE = "Base.ClayPipeSegment"
