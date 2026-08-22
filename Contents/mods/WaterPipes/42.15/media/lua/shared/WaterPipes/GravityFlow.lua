@@ -39,13 +39,31 @@ function GravityFlow.settle(containers, totalWater, fluidTypeName)
     -- Lowest floor first.
     table.sort(zList)
 
+    -- `carry` is what a vessel did not take, rolled into the next one: either because it clamped at
+    -- its capacity, or because the change was too small for Adapter.writeDescriptorWaterAmount to
+    -- think it worth a write. Without it this relocation would not conserve -- a settle that declines
+    -- a hundredth of a litre per vessel is a hundredth of a litre lost, every ten in-game minutes,
+    -- forever. It is a relocation, so the litres have to come out the same as they went in.
     local remaining = math.max(totalWater or 0, 0)
+    local carry = 0
     for _, z in ipairs(zList) do
         local level = levels[z]
         local give = math.min(remaining, level.capacity)
         local ratio = level.capacity > 0 and (give / level.capacity) or 0
         for _, descriptor in ipairs(level.descriptors) do
-            Adapter.writeDescriptorWaterAmount(descriptor, (descriptor.capacity or 0) * ratio, fluidTypeName)
+            local capacity = math.max(descriptor.capacity or 0, 0)
+            local share = capacity * ratio
+            local target = math.min(math.max(share + carry, 0), capacity)
+            local before = math.max(descriptor.waterAmount or 0, 0)
+
+            local ok, wrote = Adapter.writeDescriptorWaterAmount(descriptor, target, fluidTypeName)
+            local landed = before
+            if ok and wrote then
+                landed = target
+                descriptor.waterAmount = target
+                descriptor.fluidType = target > 0 and fluidTypeName or nil
+            end
+            carry = carry + share - landed
         end
         remaining = remaining - give
     end

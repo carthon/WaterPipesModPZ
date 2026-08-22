@@ -143,6 +143,107 @@ function System.scanContainersAroundPipes()
     return found
 end
 
+-- ===== Conservation accounting =====
+--
+-- Every litre the mod is holding anywhere, counted by reading the WORLD rather than any summary,
+-- cache or graph. That independence is the whole point: a check that asked NetworkAccess how much
+-- water there is would be grading the network's arithmetic against itself and would pass however
+-- broken the writes were. This walks the pipe registry and reads each vessel's own amount.
+--
+-- Counted: every fluid vessel sharing a tile with a registered pipe (which includes router tiles),
+-- plus the IN and OUT buffers of any purifier, since those are modData numbers rather than
+-- FluidContainers and no container scan would ever see them.
+--
+-- Returns (litres, vesselCount).
+function System.totalNetworkWater()
+    local state = State.ensure()
+    local total = 0
+    local vessels = 0
+
+    -- Vessels are keyed by descriptor key, purifiers by object, so a device reachable from two
+    -- registered tiles (a purifier straddling two routers) is still counted once.
+    local seenVessels = {}
+    local seenPurifiers = {}
+
+    for _, pipeData in pairs(state.pipes) do
+        local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
+        if square then
+            for key, descriptor in pairs(Adapter.collectSquareContainers(square)) do
+                if not seenVessels[key] then
+                    seenVessels[key] = true
+                    total = total + math.max(descriptor.waterAmount or 0, 0)
+                    vessels = vessels + 1
+                end
+            end
+
+            -- findForRouterSquare scans a 2x2 footprint, so it is only worth asking on the tiles that
+            -- actually carry a router. Elsewhere the cheap same-tile lookup is enough.
+            local purifier
+            if pipeData.metadata and pipeData.metadata.router == true then
+                purifier = Purifier.findForRouterSquare(square)
+            else
+                purifier = Purifier.findOnSquare(square)
+            end
+            if purifier and not seenPurifiers[tostring(purifier)] then
+                seenPurifiers[tostring(purifier)] = true
+                total = total + math.max(Purifier.getInAmount(purifier) or 0, 0)
+                    + math.max(Purifier.getOutAmount(purifier) or 0, 0)
+                vessels = vessels + 1
+            end
+        end
+    end
+
+    return total, vessels
+end
+
+-- Run one irrigation pass and check the books: the litres the emitters report spending must equal
+-- the litres the world is missing afterwards.
+--
+-- This exists because the water accounting is spread across five places -- the epsilon guard that
+-- may decline a write, the carry that re-homes what it declined, the nearest-vessel draw, the
+-- summary write-back, and the emitters' own bookkeeping -- and every one of them is a place where a
+-- litre could be conjured or destroyed without anything looking wrong on screen.
+--
+-- `error` is (missing - spent). Positive means the network lost MORE than the emitters claim, i.e.
+-- water was destroyed; negative means it lost less, i.e. water was conjured. Either is a bug.
+function System.checkIrrigationConservation(dtHours)
+    dtHours = dtHours or 1.0
+
+    -- Read the world cold. The classification memo is keyed per frame and the traversal cache per
+    -- origin; dropping both means neither measurement can be served from something built earlier in
+    -- this same frame by whatever triggered the check.
+    Adapter.invalidateVesselCache()
+    NetworkAccess.invalidateTraversalCache()
+    PipeObjectUtils.invalidateScanCache()
+
+    local before, vessels = System.totalNetworkWater()
+    local spent = Irrigation.run(dtHours) or 0
+
+    Adapter.invalidateVesselCache()
+    local after = System.totalNetworkWater()
+
+    local missing = before - after
+    local report = {
+        dtHours = dtHours,
+        before = before,
+        after = after,
+        missing = missing,
+        spent = spent,
+        error = missing - spent,
+        vessels = vessels,
+    }
+    -- One hundredth of a litre is the write guard's own threshold, so anything at or under it is the
+    -- rounding the design allows. Above it, something is genuinely losing or inventing water.
+    report.ok = math.abs(report.error) <= Constants.FLUID_WRITE_EPSILON
+
+    Logger.log(string.format(
+        "[conservation] dt=%.2fh vessels=%d | before %.4f L -> after %.4f L | missing %.4f L, emitters spent %.4f L | error %+.4f L -> %s",
+        report.dtHours, report.vessels, report.before, report.after,
+        report.missing, report.spent, report.error, report.ok and "OK" or "MISMATCH"))
+
+    return report
+end
+
 function System.redistributeWater()
     local components = State.getComponents()
 
@@ -1078,6 +1179,21 @@ local function onClientCommand(module, command, player, args)
             return
         end
         Pump.setEnabled(pump, args and args.enabled)
+        return
+    end
+
+    -- Debug: run a pass and balance the books (see System.checkIrrigationConservation). The result
+    -- goes back to the caller so it can be read in-game, and to console.txt either way.
+    if command == "checkIrrigationConservation" then
+        local dt = args and tonumber(args.dt) or 1.0
+        local ok, report = pcall(System.checkIrrigationConservation, dt)
+        if not ok then
+            Logger.error("Conservation check failed: " .. tostring(report))
+            return
+        end
+        if player and sendServerCommand then
+            sendServerCommand(player, "WaterPipes", "debugIrrigationConservation", report)
+        end
         return
     end
 

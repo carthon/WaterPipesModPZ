@@ -659,6 +659,8 @@ local function addDebugMenu(context, subMenu, playerObj, endpointObject, square)
         and "Irrigation Overlay: ON" or "Irrigation Overlay: OFF"
     debugSubMenu:addOption(overlayName, playerObj, ContextMenu.toggleIrrigationOverlay)
     debugSubMenu:addOption("Run Irrigation Now (+2h)", playerObj, ContextMenu.runIrrigationNow)
+    debugSubMenu:addOption("Check Irrigation Conservation (+2h)", playerObj,
+        ContextMenu.checkIrrigationConservation)
     if endpointObject then
         debugSubMenu:addOption("Dump Plumbing Diagnostics", playerObj, ContextMenu.dumpPlumbingDiagnostics, endpointObject)
         debugSubMenu:addOption("Dump Adapter Diagnostics", playerObj, ContextMenu.dumpAdapterDiagnostics, endpointObject)
@@ -820,6 +822,47 @@ local function addModPlumbOption(context, playerObj, endpointObject, worldobject
     applyPlumbOptionIcon(context:addOption(optionName, worldobjects, ISWorldObjectContextMenu.onPlumbItem, playerObj:getPlayerNum(), endpointObject))
 end
 
+-- The conservation check's verdict, in one line for the halo and a few for console.txt. Kept here so
+-- the single-player path and the multiplayer reply render identically.
+local function reportConservation(playerObj, report)
+    if not report then
+        return
+    end
+    local headline = string.format("Water Pipes: conservation %s (error %+.4f L)",
+        report.ok and "OK" or "MISMATCH", report.error or 0)
+    if HaloTextHelper then
+        if report.ok then
+            HaloTextHelper.addGoodText(playerObj, headline)
+        elseif HaloTextHelper.addBadText then
+            HaloTextHelper.addBadText(playerObj, headline)
+        else
+            HaloTextHelper.addText(playerObj, headline)
+        end
+    end
+    Logger.log(string.format(
+        "[conservation] dt=%.2fh over %d vessel(s): before %.4f L, after %.4f L",
+        report.dtHours or 0, report.vessels or 0, report.before or 0, report.after or 0))
+    Logger.log(string.format(
+        "[conservation] network is missing %.4f L, emitters spent %.4f L, error %+.4f L -> %s",
+        report.missing or 0, report.spent or 0, report.error or 0,
+        report.ok and "OK" or "MISMATCH -- water was conjured or destroyed"))
+end
+
+-- Run an irrigation pass and check that the water the emitters spent is exactly the water the network
+-- lost. Server-owned -- the farming system and the network state both live there -- and routed
+-- through a command in single-player too, exactly like forceNetworkTick, so there is one path to
+-- test rather than two. The verdict comes back as debugIrrigationConservation.
+function ContextMenu.checkIrrigationConservation(playerObj)
+    if not isDebugActive() or not playerObj then
+        return
+    end
+
+    sendClientCommand(playerObj, "WaterPipes", "checkIrrigationConservation", { dt = 2.0 })
+    if HaloTextHelper then
+        HaloTextHelper.addText(playerObj, "Water Pipes: checking conservation...")
+    end
+end
+
 local function onServerCommand(module, command, args)
     if module ~= "WaterPipes" then
         return
@@ -836,6 +879,8 @@ local function onServerCommand(module, command, args)
     elseif command == "debugNetworkTickApplied" then
         HaloTextHelper.addGoodText(playerObj, "Water Pipes: network tick updated")
         Logger.log("Debug network tick applied")
+    elseif command == "debugIrrigationConservation" then
+        reportConservation(playerObj, args)
     end
 end
 
