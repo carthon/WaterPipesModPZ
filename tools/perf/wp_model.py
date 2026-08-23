@@ -13,6 +13,7 @@ Cost model: 1 bridge call (BC) = 0.8 us nominal (range 0.3 - 2.0 us).
 Frame budget at 60 FPS = 16.7 ms. PZ runs Lua on the main thread.
 """
 
+import math
 from collections import defaultdict
 import sys
 
@@ -21,19 +22,41 @@ import sys
 # ----------------------------------------------------------------------------
 BC = defaultdict(int)          # bridge calls, by bucket
 CALLS = defaultdict(int)       # function invocation counts
+LUA = defaultdict(int)         # pure-Lua node visits, by bucket
 
 
 def bc(bucket, n=1):
     BC[bucket] += n
 
 
+# Pure-Lua work: table reads, inserts and comparisons that never cross into Java.
+#
+# This bucket did not exist while every hot path was a world walk, and the README said so outright --
+# "pure Lua arithmetic is noise next to [bridge calls]". The hydraulic solver broke that assumption.
+# It trades world access for a servable-set search and a relaxation, both of which are hundreds of
+# table operations per node and cross nothing. Counting only bridge calls reported that change as
+# free, and it was not: it was a real frame cost the harness could not see.
+#
+# Deliberately reported SEPARATELY rather than folded into the bridge total. One Kahlua table read is
+# nowhere near one JNI call, and adding them would invent a exchange rate nobody measured. What this
+# is for is spotting the shape -- work that grows with emitters x network, or per frame instead of per
+# minute -- which is exactly the class of mistake that made this counter necessary.
+def lua(bucket, n=1):
+    LUA[bucket] += n
+
+
 def reset():
     BC.clear()
     CALLS.clear()
+    LUA.clear()
 
 
 def total_bc():
     return sum(BC.values())
+
+
+def total_lua():
+    return sum(LUA.values())
 
 
 # ----------------------------------------------------------------------------
@@ -110,10 +133,18 @@ TRAVERSAL_CACHE = {}
 VESSEL_MEMO = {}
 
 
+HYDRAULIC_CACHE = {}
+ZONE_OF_NODE = {}
+
+
 def frame_reset():
     PIPE_SCAN_MEMO.clear()
     TRAVERSAL_CACHE.clear()
     VESSEL_MEMO.clear()
+    # NOT the head field. It is dropped by the per-minute pass and by layout /
+    # pump / valve changes, never by a frame boundary -- see the note on
+    # NetworkAccess.invalidateTraversalCache. Clearing it here is what the Lua
+    # used to do, and it cost a full servable-set search every single frame.
 
 
 def getPipeObjectsOnSquare(sq):
@@ -480,12 +511,122 @@ def collectPipeSquaresCached(origin, conduct=False):
     return result
 
 
+# ----------------------------------------------------------------------------
+# Hydraulics: the per-ZONE head field
+# ----------------------------------------------------------------------------
+# The point of the module, in cost terms: the walk below is the same shape as
+# collectPipeSquaresFromSquare, but it is keyed by ZONE instead of by origin, so
+# every consumer standing on a network shares one of them. The sweeps that follow
+# it (demand accumulation, head propagation, the starvation iterations) are pure
+# Lua over tables already in hand and cost no bridge calls at all -- which is why
+# HYDRAULIC_ITERATIONS does not appear in this model.
+def hydraulics_discover(seed):
+    """Port of Hydraulics.discover: undirected, purifier routers are walls."""
+    CALLS["hydraulicBFS"] += 1
+    seen = set()
+    queue = [seed]
+    seen.add((seed.x, seed.y, seed.z))
+    order = []
+
+    def consider(sq, _from):
+        if sq is None:
+            return
+        if Router_hasRouterOnSquare(sq):         # pipe scan on every neighbour
+            Router_findOnSquare(sq)
+            if routerIsHardBoundary(sq):
+                Purifier_findForRouterSquare(sq)
+                return
+            # Both sides of a bare regulator join the same zone: the valve prices
+            # the crossing, it does not sever it. Two lookups, whatever its axis.
+            for nb in (getGridSquare(sq.x + 1, sq.y, sq.z),
+                       getGridSquare(sq.x - 1, sq.y, sq.z)):
+                if nb is not None and getPipeOnSquare(nb) is not None:
+                    k = (nb.x, nb.y, nb.z)
+                    if k not in seen:
+                        seen.add(k)
+                        queue.append(nb)
+            return
+        if getPipeOnSquare(sq) is None:          # hasPipeOnSquare -> full pipe scan
+            return
+        k = (sq.x, sq.y, sq.z)
+        if k not in seen:
+            seen.add(k)
+            queue.append(sq)
+
+    i = 0
+    while i < len(queue):
+        cur = queue[i]
+        i += 1
+        order.append(cur)
+        for dx, dy in CARDINAL:
+            consider(getGridSquare(cur.x + dx, cur.y + dy, cur.z), cur)
+        for (cx, cy, cz) in getRiserVerticalNeighborCoords(cur.x, cur.y, cur.z):
+            consider(getGridSquare(cx, cy, cz), cur)
+    return order
+
+
+def hydraulics_solveAt(origin):
+    """Port of Hydraulics.solveAt -- cached per ZONE, not per origin."""
+    if origin is None:
+        return None
+    k = (origin.x, origin.y, origin.z)
+    zone = ZONE_OF_NODE.get(k)
+    if zone is not None and zone in HYDRAULIC_CACHE:
+        CALLS["hydraulicCacheHit"] += 1
+        return HYDRAULIC_CACHE[zone]
+
+    order = hydraulics_discover(origin)
+    # collectSupplyAndDemand: one pass, every object question asked once per node.
+    emitters = 0
+    for sq in order:
+        collectSquareContainers(sq)              # sources + their live amounts
+        Mains_findOnSquare(sq)
+        Hydrant_findOnSquare(sq)
+        Pump_findOnSquare(sq)
+        getPipeObjectsOnSquare(sq)               # emitter demand lookup
+        if getattr(sq, "emitter", False):
+            emitters += 1
+
+    # buildFeeders: once per solve, ~4 links a node.
+    lua("hydraulic/feeders", len(order) * 4)
+
+    # The servable-set search: about log2(emitters) probes, each an accumulate
+    # (one pass) plus a relaxation (converges in ~3 alternating sweeps), plus the
+    # final re-price. All pure Lua over tables already in hand.
+    probes = max(1, int(math.log2(emitters)) + 2) if emitters else 1
+    sweeps = 3
+    lua("hydraulic/solve", probes * len(order) * (1 + sweeps * 5))
+
+    solution = {"order": order}
+    HYDRAULIC_CACHE[k] = solution
+    for sq in order:
+        ZONE_OF_NODE[(sq.x, sq.y, sq.z)] = k
+    ZONE_OF_NODE[k] = k
+    return solution
+
+
 def buildSummaryFromSquare(origin, kind=None, fill=False):
     CALLS["buildSummary"] += 1
     # Matches the Lua: nil / "draw" / "fill". A fill walk now crosses bare routers
     # too (downstream), which also means it pays the hard-boundary check.
     conduct = "fill" if fill else ("draw" if kind else None)
-    pipe_squares, hops = collectPipeSquaresCached(origin, conduct)
+    if kind and not fill:
+        # DRAW: topology comes from the shared solve. distancesFrom is a BFS over
+        # the solved adjacency -- pure Lua, no world access -- so it costs nothing
+        # here by construction.
+        solution = hydraulics_solveAt(origin)
+        if solution is None:
+            return None
+        pipe_squares = solution["order"]        # by reference, not rebuilt
+        # distancesFrom: one BFS over the solved feeder lists, memoised per origin
+        # for the life of the solve.
+        seen_from = solution.setdefault("_distances", set())
+        k = (origin.x, origin.y, origin.z)
+        if k not in seen_from:
+            seen_from.add(k)
+            lua("hydraulic/distances", len(pipe_squares) * 5)
+    else:
+        pipe_squares, hops = collectPipeSquaresCached(origin, conduct)
     if not pipe_squares:
         return None
     # Deliberately NOT cached: the fluid amounts have to be read fresh every time,
@@ -635,16 +776,22 @@ class Scenario:
 def pass_refreshPlumbedEndpoints(sc):
     """WaterPipeSystem.refreshPlumbedEndpoints -- runs EVERY in-game minute
     AND again inside System.tick every ten minutes."""
+    # collectPipeNeighbourhood: DEDUPLICATED. On a dense grid nearly every pipe's
+    # six neighbours are themselves pipes or neighbours of pipes, so this used to
+    # hand both passes below ~5x more coordinates than there were distinct tiles.
+    seen_coords = set()
     coords = []
     for (x, y, z) in sc.pipe_coords:
-        coords.append((x, y, z))
-        for dx, dy, dz in ((1,0,0), (-1,0,0), (0,1,0), (0,-1,0), (0,0,1), (0,0,-1)):
-            coords.append((x + dx, y + dy, z + dz))
+        for dx, dy, dz in ((0,0,0), (1,0,0), (-1,0,0), (0,1,0), (0,-1,0), (0,0,1), (0,0,-1)):
+            k = (x + dx, y + dy, z + dz)
+            if k not in seen_coords:
+                seen_coords.add(k)
+                coords.append(k)
 
     # refreshPlumbedEndpointsNearCoordinates. The `visited` set DOES stop the
     # endpoint from being re-synced, but it is consulted only AFTER the
-    # expensive collectOnSquare scan -- so the scan itself still runs once per
-    # duplicate coordinate (and the list has no dedup).
+    # expensive collectOnSquare scan -- which is why deduplicating the LIST is
+    # what actually removed the work, not the set.
     visited = set()
     for (x, y, z) in coords:
         sq = getGridSquare(x, y, z)

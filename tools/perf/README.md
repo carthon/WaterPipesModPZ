@@ -6,6 +6,16 @@ transcription of the mod's hot paths that counts **Lua → Java bridge calls**
 `pcall`-wrapped accessors). Those calls are what costs time in PZ's Kahlua VM; pure
 Lua arithmetic is noise next to them.
 
+**Two counters, not one.** `bc()` counts Lua->Java bridge calls; `lua()` counts pure-Lua
+node visits. The second exists because the sentence below used to be the whole story and
+stopped being true: the hydraulic solver trades world access for a servable-set search and
+a relaxation, which cross into Java never and cost real frames anyway. A harness that
+counted only bridge calls reported that trade as free, and a regression that made the
+field re-solve every frame instead of every in-game minute -- 145x more Lua work -- showed
+up as "no change". They are reported separately on purpose: one table read is nowhere near
+one JNI call, and adding them would invent an exchange rate nobody measured. Use each to
+spot its own shape.
+
 It is deliberately approximate. What it gets right is the shape — how many network
 walks each pass makes, how many object scans each walk makes, and how both grow with
 the size of the build. **Use the deltas, not the absolute numbers.**

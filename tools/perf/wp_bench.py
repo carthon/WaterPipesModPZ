@@ -128,6 +128,7 @@ def run_suite():
             M.pass_sound_rescan(sc, kind="hydrant")
             M.pass_sound_rescan(sc, kind="purifier")
         row["client/15s steady"] = M.total_bc()
+        row["client/15s steady :lua"] = M.total_lua()
         row["client/15s steady :walks"] = M.CALLS.get("BFS", 0)
 
         # The four EveryOneMinute handlers all run inside ONE frame, so they share the
