@@ -168,8 +168,15 @@ local function describeCraftInputs(data)
                 local types = {}
                 for index = 0, count - 1 do
                     local okGet, item = pcall(items.get, items, index)
-                    local okType, fullType = okGet and item and pcall(item.getFullType, item)
-                    types[#types + 1] = (okType and tostring(fullType)) or "?"
+                    -- Each pcall on its own statement. `a and b and pcall(f)` truncates to ONE value,
+                    -- so folding these into a chain silently throws the type away and reports every
+                    -- item as nil -- which is exactly what this line did on its first outing.
+                    local fullType = nil
+                    if okGet and item then
+                        local okType, resolved = pcall(item.getFullType, item)
+                        fullType = okType and resolved or nil
+                    end
+                    types[#types + 1] = fullType and tostring(fullType) or "?"
                 end
                 parts[#parts + 1] = accessor .. "=[" .. table.concat(types, " ") .. "]"
             end
@@ -179,19 +186,27 @@ local function describeCraftInputs(data)
 end
 
 local warnedNoInputs = false
-local describedInputs = false
+-- Reported once per OUTCOME, not once per session: a player testing this builds one of each, and
+-- both lines have to land or the log cannot tell "clay was detected" from "clay was never tried".
+-- Two lines a session, and they are the only thing that answers "did the stamp work" without
+-- dismantling the pipe to find out.
+local describedOutcome = { [true] = false, [false] = false }
+
+local function reportMaterial(data, isClay)
+    if describedOutcome[isClay] then
+        return
+    end
+    describedOutcome[isClay] = true
+    if WaterPipes.Logger and WaterPipes.Logger.log then
+        WaterPipes.Logger.log("build material = " .. (isClay and "CLAY" or "metal")
+            .. " | " .. describeCraftInputs(data))
+    end
+end
 
 local function consumedClay(params)
     local data = params and params.craftRecipeData
     if not data then
         return false
-    end
-
-    if not describedInputs then
-        describedInputs = true
-        if WaterPipes.Logger and WaterPipes.Logger.log then
-            WaterPipes.Logger.log("build inputs (first build this session): " .. describeCraftInputs(data))
-        end
     end
 
     local sawAnyItem = false
@@ -204,11 +219,14 @@ local function consumedClay(params)
                     sawAnyItem = true
                 end
                 if isClay then
+                    reportMaterial(data, true)
                     return true
                 end
             end
         end
     end
+
+    reportMaterial(data, false)
 
     -- Every accessor came back empty. That is not "a metal pipe was used" -- it is "we could not
     -- tell", and the two are indistinguishable downstream, so say so once.
