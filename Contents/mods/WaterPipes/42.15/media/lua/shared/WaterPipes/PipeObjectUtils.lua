@@ -67,40 +67,34 @@ function PipeObjectUtils.hasWallCoverOnSquare(square)
 end
 
 -- What a pipe was built from: Constants.PIPE_MATERIAL_CLAY or nil for the metal default. Also
--- returns a short string naming WHERE the answer came from, for the dismantle log.
+-- returns a short string naming where the answer came from, for the dismantle log.
 --
--- Two sources, in order:
+-- The stamp WaterPipesBuild writes at build time is the only source, and a pipe without one reads as
+-- metal. That is not a gap worth closing: the clay recipe has never shipped, so the only pipes in
+-- existence that predate the stamp are the ones on a developer's own test save, and rebuilding those
+-- takes seconds.
 --
--- 1. OUR STAMP. WaterPipesBuild writes waterpipesMaterial at build time. Authoritative when present,
---    and the only one that could ever carry a material the engine does not model as an item.
---
--- 2. THE ENGINE'S OWN RECORD. An IsoThumpable remembers the item it was built from and getFullType()
---    hands it back -- it sits right next to the thump sound in the save file, reading
---    "Base.MetalPipe" or "Base.ClayPipeSegment". This is what makes the answer RETROACTIVE: a clay
---    pipe laid before the stamp existed still reads as clay, so an existing save is not stuck handing
---    metal pipes back forever. Without it the fix would only apply to pipes built after the update,
---    which for a player mid-save is indistinguishable from it not working at all.
+-- A fallback did live here, reading the item the IsoThumpable was built from -- the save file does
+-- carry "Base.MetalPipe" / "Base.ClayPipeSegment" right beside the thump sound, so the record exists.
+-- getFullType() is not how you reach it: in game it returned nothing usable and every pre-stamp pipe
+-- came back "unknown, assuming metal". It is gone rather than left in place, because a fallback that
+-- silently does not work is worse than no fallback -- it makes the log claim a source it never used.
+-- The modData read is pcall'd here specifically, unlike everywhere else in this file. This one runs
+-- against an object the engine is in the middle of REMOVING, which is the one moment a world object
+-- is least likely to answer normally -- and the cost of it throwing is a dismantle that errors out
+-- instead of handing the player their pipe back.
 function PipeObjectUtils.getBuildMaterial(worldObject)
     if not worldObject then
         return nil, "no object"
     end
 
-    local modData = getPipeModData(worldObject)
-    local stamped = modData and modData[Constants.PIPE_MATERIAL_MODDATA_KEY] or nil
+    local ok, modData = pcall(getPipeModData, worldObject)
+    local stamped = ok and modData and modData[Constants.PIPE_MATERIAL_MODDATA_KEY] or nil
     if stamped then
         return stamped, "modData=" .. tostring(stamped)
     end
 
-    if worldObject.getFullType then
-        local ok, fullType = pcall(worldObject.getFullType, worldObject)
-        if ok and type(fullType) == "string" and fullType ~= "" then
-            local material = fullType == Constants.PIPE_CLAY_ITEM_TYPE
-                and Constants.PIPE_MATERIAL_CLAY or nil
-            return material, "getFullType=" .. fullType
-        end
-    end
-
-    return nil, "unknown, assuming metal"
+    return nil, "no material stamp (built before the stamp existed), assuming metal"
 end
 
 function PipeObjectUtils.isClayBuilt(worldObject)
