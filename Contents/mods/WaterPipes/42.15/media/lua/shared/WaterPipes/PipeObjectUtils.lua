@@ -66,6 +66,48 @@ function PipeObjectUtils.hasWallCoverOnSquare(square)
     return false
 end
 
+-- What a pipe was built from: Constants.PIPE_MATERIAL_CLAY or nil for the metal default. Also
+-- returns a short string naming WHERE the answer came from, for the dismantle log.
+--
+-- Two sources, in order:
+--
+-- 1. OUR STAMP. WaterPipesBuild writes waterpipesMaterial at build time. Authoritative when present,
+--    and the only one that could ever carry a material the engine does not model as an item.
+--
+-- 2. THE ENGINE'S OWN RECORD. An IsoThumpable remembers the item it was built from and getFullType()
+--    hands it back -- it sits right next to the thump sound in the save file, reading
+--    "Base.MetalPipe" or "Base.ClayPipeSegment". This is what makes the answer RETROACTIVE: a clay
+--    pipe laid before the stamp existed still reads as clay, so an existing save is not stuck handing
+--    metal pipes back forever. Without it the fix would only apply to pipes built after the update,
+--    which for a player mid-save is indistinguishable from it not working at all.
+function PipeObjectUtils.getBuildMaterial(worldObject)
+    if not worldObject then
+        return nil, "no object"
+    end
+
+    local modData = getPipeModData(worldObject)
+    local stamped = modData and modData[Constants.PIPE_MATERIAL_MODDATA_KEY] or nil
+    if stamped then
+        return stamped, "modData=" .. tostring(stamped)
+    end
+
+    if worldObject.getFullType then
+        local ok, fullType = pcall(worldObject.getFullType, worldObject)
+        if ok and type(fullType) == "string" and fullType ~= "" then
+            local material = fullType == Constants.PIPE_CLAY_ITEM_TYPE
+                and Constants.PIPE_MATERIAL_CLAY or nil
+            return material, "getFullType=" .. fullType
+        end
+    end
+
+    return nil, "unknown, assuming metal"
+end
+
+function PipeObjectUtils.isClayBuilt(worldObject)
+    local material, source = PipeObjectUtils.getBuildMaterial(worldObject)
+    return material == Constants.PIPE_MATERIAL_CLAY, source
+end
+
 -- ===== Per-frame scan memo =====
 --
 -- getPipeObjectsOnSquare is the most-called world accessor in the mod by a wide margin: a single

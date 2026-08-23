@@ -846,6 +846,29 @@ local pendingRemovalScheduled = false
 -- what the pipe was built FROM, this code can).
 local DISMANTLE_RETURN_CHANCE = 90
 
+-- Diagnostics for the build-material stamp, logged once per outcome (see schedulePipeRemoval).
+local loggedDismantleMaterial = { [true] = false, [false] = false }
+
+-- Every key a pipe's modData actually carries, sorted. If the material stamp is missing, the next
+-- question is always "is anything else there either, or just that one key?" -- a pipe that lost all
+-- its modData is a different bug from one that only lost the material.
+local function describeModDataKeys(modData)
+    if not modData then
+        return "<no modData>"
+    end
+    local keys = {}
+    local ok = pcall(function()
+        for key in pairs(modData) do
+            keys[#keys + 1] = tostring(key)
+        end
+    end)
+    if not ok then
+        return "<unreadable>"
+    end
+    table.sort(keys)
+    return "{" .. table.concat(keys, ",") .. "}"
+end
+
 local function processPendingPipeRemovals()
     pendingRemovalScheduled = false
     if Events and Events.OnTick then
@@ -908,9 +931,20 @@ local function schedulePipeRemoval(object, returnsMaterial)
     -- salvage you can move around your base. Without this, clay was strictly better than metal and
     -- there was no reason to ever forge one.
     if returnsMaterial then
-        local ok, modData = pcall(object.getModData, object)
-        local clay = ok and modData
-            and modData[Constants.PIPE_MATERIAL_MODDATA_KEY] == Constants.PIPE_MATERIAL_CLAY
+        local clay, source = PipeObjectUtils.isClayBuilt(object)
+
+        -- Once per outcome per session. The build side logs what it stamped; this logs what the other
+        -- end concluded and which source it came from, which is the only way to tell "never stamped"
+        -- from "stamped and lost" -- and those need completely different fixes.
+        if not loggedDismantleMaterial[clay] then
+            loggedDismantleMaterial[clay] = true
+            local okMod, modData = pcall(object.getModData, object)
+            Logger.log(string.format(
+                "dismantle at %d:%d:%d -> %s (via %s, modData keys=%s)",
+                x, y, z, clay and "CLAY, returns nothing" or "metal, returns a pipe",
+                source, describeModDataKeys(okMod and modData or nil)))
+        end
+
         if not clay then
             pendingMaterialDrops[#pendingMaterialDrops + 1] = {
                 x = x, y = y, z = z, object = object,
