@@ -304,6 +304,65 @@ Constants.PRESSURE_MODEL_REALISTIC = 1      -- full model: height, distance, pum
 Constants.PRESSURE_MODEL_SIMPLE = 2         -- height only: no distance loss
 Constants.PRESSURE_MODEL_OFF = 3            -- pre-pressure behaviour: pure gravity reachability
 
+-- ===== Hydraulic solver (demand-aware head field) =====
+--
+-- The block above prices a run as `friction(kind) * hops`, where `kind` is the CONSUMER'S OWN flow
+-- rate. That is right for one consumer and wrong for a field: thirty sprinklers on one line each
+-- computed their loss as if they were the only thing drawing, so two pumps fed all thirty and the
+-- line never noticed. The pipe does not care who is asking -- it cares how many litres per hour are
+-- going through it -- so the loss belongs to the EDGE, not to the consumer.
+--
+-- The solver (Hydraulics.lua) therefore works in piezometric head, the way real hydraulics does:
+--
+--     H[node]                              -- total head at a node, m.c.a. above the z=0 datum
+--     H[source] = PRESSURE_PER_LEVEL * z + CONTAINER_BASE_PRESSURE
+--     H[child]  = H[parent] - HYDRAULIC_FRICTION_K * Q(edge) ^ HYDRAULIC_FRICTION_EXPONENT
+--     P[node]   = H[node] - PRESSURE_PER_LEVEL * z            -- what a consumer there can use
+--
+-- Elevation drops out of the loss term entirely (it lives in the datum), which is what lets one
+-- forward sweep price height, distance, pumps and regulators in a single pass -- and is why the
+-- regulator CHAIN machinery could go: running the walk in the water's direction turns "the tightest
+-- valve behind me" into a running minimum.
+--
+-- CALIBRATION. Q is in litres per in-game hour, and the coefficient is not invented: it is read back
+-- out of the friction constants above. A sprinkler draws SPRINKLER_WATER_PER_HOUR * SPRINKLER_WASTE_
+-- TILES * IRRIGATION_LITRES_PER_WATER_LEVEL = 1.8 L/h and was priced at 0.2/tile; a drip draws 0.2
+-- L/h and was priced at 0.02/tile. 0.2/1.8 = 0.111 and 0.02/0.2 = 0.100 -- the old table was already
+-- almost exactly LINEAR in flow, it just had no way to add two consumers together. So K = 0.111 with
+-- exponent 1 reproduces both old coefficients to within 11%, and the promise that buys is worth
+-- stating plainly: A NETWORK WITH ONE EMITTER BEHAVES EXACTLY AS IT DID BEFORE. What changed is that
+-- the thirty-first sprinkler now costs the thirty before it something.
+Constants.HYDRAULIC_FRICTION_K = 0.111      -- m.c.a. lost per tile, per litre/hour through it
+-- Real pipe loss is superlinear (Hazen-Williams uses 1.85, Darcy-Weisbach 2). Left at 1 because that
+-- is what the constants it replaces actually encode, and because raising it makes a shared line
+-- collapse far faster than it makes it realistic. Exposed so a save can ask for the harsher curve.
+Constants.HYDRAULIC_FRICTION_EXPONENT = 1.0
+-- Nominal flow for a consumer with no rate of its own (taps, generators, the router's own transfers).
+-- Back-derived the same way: PRESSURE_FRICTION_TAP / HYDRAULIC_FRICTION_K = 0.05 / 0.111.
+Constants.HYDRAULIC_TAP_FLOW = 0.45         -- litres per in-game hour
+
+-- How much of the SHARED demand an edge is charged for. This is the one knob that spans the old
+-- model and the new one, and it is a real dial rather than a fudge:
+--   1.0 -> the edge carries everything flowing through it. Full demand realism.
+--   0.0 -> the edge carries only the single largest consumer downstream of it, which is precisely
+--          the old per-consumer arithmetic. Existing saves can have their old behaviour back.
+-- Anything between scales the crowding effect linearly, so a server that wants sprinkler fields to
+-- cost something without making them impossible has somewhere to sit.
+Constants.HYDRAULIC_DEMAND_SCALE = 1.0
+
+-- Starved consumers stop drawing, which frees head for the rest, so who runs is a fixed point rather
+-- than a single calculation. Hydraulics finds it with a monotone binary search over "how many of the
+-- easiest-to-serve consumers can run at once", which needs no tuning constant and cannot oscillate --
+-- see the comment on that search for why the obvious iterate-until-stable version does oscillate, and
+-- why capping its iteration count merely hides that.
+
+-- Sweeps the head relaxation is allowed before it gives up (see Hydraulics' phase 5). Head propagates
+-- by relaxation rather than by a single ordered walk, because a node that supplies itself -- a barrel
+-- sitting on the line -- still has to be able to receive a pump's head from its neighbour. Alternating
+-- the sweep direction converges on grid-shaped networks in two or three rounds; the cap is what stops
+-- a pathological layout from spinning, and the loop exits early the moment nothing moves.
+Constants.HYDRAULIC_RELAX_PASSES = 12
+
 -- ===== Water pump =====
 -- A pump is a pipe variant that needs power. Where you PUT it decides what it does, exactly like a
 -- real self-priming surface pump:

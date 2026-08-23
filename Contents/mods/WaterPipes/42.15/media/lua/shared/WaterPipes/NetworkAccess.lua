@@ -5,6 +5,7 @@ require "WaterPipes/Constants"
 require "WaterPipes/ContainerAdapter"
 require "WaterPipes/EndpointObjects"
 require "WaterPipes/Hydrant"
+require "WaterPipes/Hydraulics"
 require "WaterPipes/Logger"
 require "WaterPipes/Mains"
 require "WaterPipes/PipeObjectUtils"
@@ -17,6 +18,7 @@ local Adapter = WaterPipes.ContainerAdapter
 local Constants = WaterPipes.Constants
 local EndpointObjects = WaterPipes.EndpointObjects
 local Hydrant = WaterPipes.Hydrant
+local Hydraulics = WaterPipes.Hydraulics
 local Logger = WaterPipes.Logger
 local Mains = WaterPipes.Mains
 local NetworkAccess = WaterPipes.NetworkAccess
@@ -162,76 +164,15 @@ local function newChain(parent, ceiling, hops, z)
     return { parent = parent, ceiling = ceiling, hops = hops, z = z, pumps = {}, supplyHead = 0 }
 end
 
--- Head the pumps between `chain` and the consumer add, inclusive of the chain's own stretch. Pumps ADD
--- UP: they sit in series, and buying a second one is meant to buy more head. Cached per node, so a
--- network with two routers and forty pipes asks this once per node.
-local function chainPumpHead(chain)
-    if not chain then
-        return 0
-    end
-    if not chain.pumpHead then
-        chain.pumpHead = chainPumpHead(chain.parent) + Pump.headForPumps(chain.pumps)
-    end
-    return chain.pumpHead
-end
-
--- The pressure a municipal supply on `chain` floors the run at. A utility (the town mains, or an open
--- fire hydrant fed by it) holds its main at a set pressure, and every connection sits at that pressure
--- -- so it is a FLOOR under the whole run, not head added on top of a source. Two supplies do not
--- stack: they are the same town water, so the floor is simply the highest one present, which is what
--- taking the max gives. Each chain node records the best floor contributed by sources on its own
--- squares (see tryAdd); this walks node + parents for the best between `chain` and the consumer.
--- Deliberately uncached, unlike chainPumpHead: `supplyHead` is still being raised as the walk finds
--- squares, so caching could freeze a value taken before a later inlet was reached.
-local function chainSupplyHead(chain)
-    if not chain then
-        return 0
-    end
-    return math.max(chain.supplyHead or 0, chainSupplyHead(chain.parent))
-end
-
--- Everything a source on `chain` gets for free, applied to a head it computed on its own.
-local function applyChainSupply(head, chain)
-    return math.max(head, chainSupplyHead(chain))
-end
-
--- What a source at (z, hops) on `chain` actually delivers to a `kind` consumer at consumerZ: the
--- unregulated head, then held down by every valve on the way, each priced from where it stands.
-local function headThroughChain(sourceZ, consumerZ, hops, kind, chain)
-    local head = applyChainSupply(
-        Pressure.delivered(sourceZ, consumerZ, hops, kind, chainPumpHead(chain)), chain)
-
-    local node = chain
-    while node do
-        if node.ceiling then
-            -- A valve is priced from where it stands, and then gets whatever is BETWEEN it and the
-            -- consumer: pumps in front of it boost its branch, and an inlet in front of it holds that
-            -- branch at mains pressure no matter what the valve is set to. It cannot regulate a supply
-            -- that joins downstream of itself -- only what flows through it.
-            local capped = applyChainSupply(
-                Pressure.atRegulator(node.ceiling, node.z, consumerZ, node.hops, kind,
-                    chainPumpHead(node.parent)), node.parent)
-            if capped < head then
-                head = capped
-            end
-        end
-        node = node.parent
-    end
-    return head
-end
-
--- The tightest raw setting on a chain, for readouts that want to name the regulator responsible.
-local function chainTightestCeiling(chain)
-    local tightest = nil
-    local node = chain
-    while node do
-        if node.ceiling and (not tightest or node.ceiling < tightest) then
-            tightest = node.ceiling
-        end
-        node = node.parent
-    end
-    return tightest
-end
+-- The regulator CHAIN arithmetic that used to live here is gone. It existed only because the walk ran
+-- BACKWARDS, from the consumer toward the sources: a walk in that direction has to carry a linked list
+-- of every valve it has crossed and re-price each one from where it stands. Hydraulics.lua runs the
+-- other way, with the water, so it meets each valve once in the order the water does and "the tightest
+-- ceiling upstream" is a running minimum -- see its forward sweep.
+--
+-- The walk below still THREADS a chain through, because the fill and visualization paths share its
+-- code and it is their `zone` bookkeeping that hangs off the same parameter. Nothing reads the chain
+-- any more; unpicking it from the fill path is a separate change with its own risk.
 
 -- Returns (pipeSquares, hopsByKey, zone). hopsByKey is the min hop count from originSquare to each
 -- pipe square, which is all the pressure model needs from the traversal: head loss is friction *
@@ -294,7 +235,7 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
             chain.pumps[#chain.pumps + 1] = pump
         end
 
-        -- Municipal supplies floor the run at their pressure (see chainSupplyHead). A plumbed fixture
+        -- Municipal supplies floor the run at their pressure. A plumbed fixture
         -- with live town water behind it, and an OPEN hydrant that is still mains-fed, are both such
         -- floors; each raises the chain node's best floor and the zone's, so a regulator holds them
         -- down the same way it holds a pump down.
@@ -507,8 +448,27 @@ local function traversalKey(square, verticalMode, conduct)
     return squareKey(square) .. "|" .. tostring(verticalMode) .. "|" .. tostring(conduct)
 end
 
+-- Two caches with two different lifetimes, and conflating them cost real frames.
+--
+-- The traversal cache is a WITHIN-FRAME memo: it exists so a router asking availableToPull and then
+-- drawFluidAtSquare in the same instant walks once instead of twice. Dropping it every frame is
+-- exactly right and costs nothing.
+--
+-- The head field is not that. Solving one costs a servable-set search over the whole network, and it
+-- only changes when the layout, a pump, a valve or a vessel's emptiness changes -- none of which a
+-- frame boundary implies. Wiring it to the same OnTick meant rebuilding it sixty times a second to
+-- get the same answer, which is what made the pressure work feel slower than the walk it replaced.
+local function dropTraversalCacheOnly()
+    traversalCache = {}
+end
+
+-- The layout changed: drop both. This is what a build, a removal, a valve setting or a hydrant toggle
+-- wants -- the shape the field was solved against no longer exists.
 function NetworkAccess.invalidateTraversalCache()
     traversalCache = {}
+    if Hydraulics and Hydraulics.invalidate then
+        Hydraulics.invalidate()
+    end
 end
 
 local function collectPipeSquaresCached(originSquare, verticalMode, conduct)
@@ -620,26 +580,45 @@ end
 -- water arriving through a router set to 12 leaves the valve at 12 and then loses head over the run
 -- home, while a barrel on the consumer's own side is untouched.
 -- No pumpHead argument: each source's chain already carries the pumps that are allowed to help it.
-local function applyPressureGate(descriptors, originSquare, kind)
+-- Rewritten onto the hydraulic solver (see Hydraulics.lua). What changed, and why it is two gates now
+-- where it used to be one:
+--
+--   PRESSURE is a property of the CONSUMER'S TILE, not of each source separately. The solver has
+--   already propagated one head field over the whole zone with every consumer's demand priced into
+--   it, so the question "can this sprinkler run?" is a single lookup -- and, for the first time, its
+--   answer depends on how many other sprinklers are running. That is the entire point of the change.
+--
+--   LIFT is still per source, because it is a different question. A barrel on the floor below cannot
+--   feed a tap upstairs however much head the field says is available at that tap, and the field
+--   cannot say so on its own: it reports the BEST head reaching the tile, which may be coming from
+--   some other, higher source. So each vessel is still asked whether the zone's pumps can raise its
+--   water to the consumer -- the same rule, and the same function, that fills already use.
+--
+-- With the pressure model off both gates stand aside and every connected vessel qualifies, exactly as
+-- before.
+local function applyPressureGate(descriptors, originSquare, kind, solution, zoneLift)
     local enabled = Pressure.isEnabled()
-    local minimum = Pressure.minimumFor(kind)
-    local consumerZ = originSquare:getZ()
-    local best = nil
-    local reachable = {}
+    if not enabled then
+        return descriptors, Pressure.containerBase()
+    end
 
+    -- Hydraulics.canDrawAt, not a head comparison of our own: a consumer the solve excluded reads a
+    -- healthy head precisely BECAUSE it was excluded, so anything that re-derives the answer from the
+    -- field here lets every starved emitter straight through. See that function.
+    local canDraw, head = Hydraulics.canDrawAt(solution, originSquare, kind)
+    if not canDraw then
+        return {}, nil
+    end
+
+    local reachable = {}
     for _, descriptor in ipairs(descriptors) do
-        local head = headThroughChain(descriptor.z, consumerZ, descriptor.pipeHops, kind,
-            descriptor.pressureChain)
-        if not enabled or head >= minimum then
+        if Pressure.canFillTo(descriptor.z, originSquare:getZ(), zoneLift) then
             descriptor.pressure = head
             reachable[#reachable + 1] = descriptor
-            if not best or head > best then
-                best = head
-            end
         end
     end
 
-    return reachable, best
+    return reachable, head
 end
 
 -- Which containers can fluid entering at originSquare actually reach? Only lift is priced (see
@@ -667,6 +646,42 @@ end
 -- nothing is lost. The one liberty it takes: a route that climbs over a hump higher than its source
 -- is allowed. Real closed pipes do siphon over humps up to ~10 m, so this is right below ~3 floors
 -- and merely generous above that -- and above that you almost certainly have a pump anyway.
+-- Re-shape a solved zone into what collectStorageDescriptors and addPurifierOutletDescriptors were
+-- already written to take: a list of squares, a hop count per square key, and a `zone` of the pumps
+-- and inlets found in it. Nothing is recomputed here -- the solve carries all of it -- so this is a
+-- projection, not a second pass.
+local function squaresFromSolution(solution, originSquare)
+    -- By reference, not rebuilt: these are properties of the zone, identical for every consumer on it.
+    local pipeSquares = Hydraulics.pipeSquares(solution)
+
+    -- Hop counts still measured FROM THE CONSUMER, because that is what the nearest-vessel draw order
+    -- means and no cheaper proxy survives contact with a real layout (every supply node sits at depth
+    -- 0, so ordering by distance-from-supply is degenerate). It stays affordable by walking the solved
+    -- adjacency instead of the world: pure Lua, zero bridge calls.
+    local hops = Hydraulics.distancesFrom(solution, originSquare)
+
+    local pumps = Hydraulics.poweredPumps(solution)
+
+    local outlets = {}
+    for _, outlet in pairs(solution.purifierOutlets or {}) do
+        outlets[#outlets + 1] = {
+            purifier = outlet.purifier,
+            routerKey = outlet.routerKey,
+            x = outlet.x, y = outlet.y, z = outlet.z,
+            hops = hops[outlet.nodeKey] or 0,
+        }
+    end
+
+    return pipeSquares, hops, {
+        pumps = pumps,
+        mains = {},
+        hydrants = {},
+        purifierOutlets = outlets,
+        -- The RELATIVE utility pressure, not the field's absolute floor: this feeds the lift gate.
+        supplyHead = (solution.stats and solution.stats.supplyHead) or 0,
+    }
+end
+
 local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill)
     if not originSquare then
         return nil
@@ -682,8 +697,24 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill)
         conduct = "draw"
     end
 
-    local pipeSquares, hops, zone, chains =
-        collectPipeSquaresCached(originSquare, verticalMode, conduct)
+    -- A DRAW query takes its topology from the hydraulic solve, which is shared by every consumer on
+    -- the zone. That is the perf half of this change: the walk below is O(network) and used to run
+    -- once PER CONSUMER, so a field of thirty-eight emitters on a 192-tile grid walked 7 300 tiles a
+    -- pass -- and the client walked it again, per emitter, every three seconds for the spray FX. Fills
+    -- and visualization keep the old per-origin walk: they ask a different question (where can water
+    -- GO from here), cross routers the other way, and are not on the hot path.
+    local pipeSquares, hops, zone, chains
+    local solution = nil
+    if kind and not fill then
+        solution = Hydraulics.solveAt(originSquare)
+        if not solution then
+            return nil
+        end
+        pipeSquares, hops, zone = squaresFromSolution(solution, originSquare)
+    else
+        pipeSquares, hops, zone, chains =
+            collectPipeSquaresCached(originSquare, verticalMode, conduct)
+    end
     if #pipeSquares == 0 then
         return nil
     end
@@ -706,7 +737,8 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill)
         if fill then
             descriptors = applyFillGate(descriptors, originSquare, liftHead)
         else
-            descriptors, pressure = applyPressureGate(descriptors, originSquare, kind)
+            descriptors, pressure = applyPressureGate(descriptors, originSquare, kind,
+                solution, liftHead)
         end
         if #descriptors == 0 then
             return nil
@@ -977,82 +1009,128 @@ end
 -- Best head (m.c.a.) available to a `kind` consumer standing on `square`, or nil when nothing can
 -- reach it. Public because the pump, the sprinkler and the gauge all need to ask the same question.
 function NetworkAccess.getPressureAtSquare(square, kind)
-    local summary = buildSummaryFromSquare(square, "both", kind or Constants.PRESSURE_KIND_TAP)
-    return summary and summary.pressure or nil
+    -- Straight to the head field. This used to build a whole network summary -- walk, descriptors,
+    -- gate -- to read one number, and it is called by the gauge, by every pump's status line and by
+    -- every emitter the spray FX draws. Now it is a lookup on a solve the zone already shares.
+    return Hydraulics.pressureAt(Hydraulics.solveAt(square), square,
+        kind or Constants.PRESSURE_KIND_TAP)
 end
 
 -- Everything the pressure model knows about one point, for the debug readout. The gauge answers
--- "how much?"; this answers "why?" -- it breaks out every term that fed the number, so a surprising
--- reading can be traced to the source, hop count, pump or router ceiling responsible for it.
--- One walk serves the whole report.
+-- "how much?"; this answers "why?".
+--
+-- Rebased on the solver, and one field is genuinely new: FLOW. That is the number that explains
+-- everything the player is looking at. A line reading 68 L/h at the pump and 1.8 L/h at its far end
+-- has just told them, in units they can act on, that the far end is dry because thirty-seven other
+-- emitters are upstream of it -- a question the old readout could not even phrase, because nothing
+-- in the old model knew that the other emitters existed.
 function NetworkAccess.getPressureReport(square)
     if not square then
         return nil
     end
 
-    -- "draw": the report answers "what can reach this point?", which is the consumer's question.
-    local pipeSquares, hops, zone, chains = collectPipeSquaresCached(square, "both", "draw")
+    local solution = Hydraulics.solveAt(square)
     local report = {
         enabled = Pressure.isEnabled(),
         model = Pressure.model(),
-        pipeCount = #pipeSquares,
-        pumpCount = #zone.pumps,
-        poweredPumps = 0,
-        mainsCount = #zone.mains,
-        hydrantCount = #zone.hydrants,
+        pipeCount = solution and #solution.order or 0,
         sources = {},
         kinds = {},
+        demandScale = Hydraulics.demandScale(),
     }
 
-    for _, pump in ipairs(zone.pumps) do
-        if Pump.isPowered(pump) then
-            report.poweredPumps = report.poweredPumps + 1
-        end
-    end
-    report.pumpHead = Pump.headForPumps(zone.pumps)
-    report.mainsHead = #zone.mains > 0 and Mains.head() or 0
-    -- The supply floor the whole zone sits at, whichever municipal source is highest.
-    report.supplyHead = zone.supplyHead or 0
-
-    if #pipeSquares == 0 then
+    if not solution then
+        report.pumpCount, report.poweredPumps = 0, 0
+        report.mainsCount, report.hydrantCount = 0, 0
+        report.pumpHead, report.mainsHead, report.supplyHead = 0, 0, 0
         return report
     end
 
-    local descriptors = normalizeDescriptorList(collectStorageDescriptors(pipeSquares, hops, chains))
-    report.containerCount = #descriptors
+    local stats = solution.stats or {}
+    report.pumpCount = stats.pumpCount or 0
+    report.poweredPumps = stats.poweredPumps or 0
+    report.mainsCount = stats.mainsCount or 0
+    report.hydrantCount = stats.hydrantCount or 0
+    report.pumpHead = stats.pumpHead or 0
+    report.mainsHead = (stats.mainsCount or 0) > 0 and Mains.head() or 0
+    report.supplyHead = stats.supplyHead or 0
 
-    -- Per source: what it holds and the head it actually lands here with (tap flow).
-    local consumerZ = square:getZ()
-    for _, descriptor in ipairs(descriptors) do
-        report.sources[#report.sources + 1] = {
-            key = tostring(descriptor.key),
-            z = descriptor.z,
-            hops = descriptor.pipeHops,
-            amount = descriptor.waterAmount,
-            capacity = descriptor.capacity,
-            fluidType = descriptor.fluidType,
-            ceiling = chainTightestCeiling(descriptor.pressureChain),
-            head = headThroughChain(descriptor.z, consumerZ, descriptor.pipeHops,
-                Constants.PRESSURE_KIND_TAP, descriptor.pressureChain),
-        }
+    -- Load: what the zone is being asked for, and how much of it is actually being served.
+    local totalDemand, servedDemand, emitterCount, starvedCount = 0, 0, 0, 0
+    for key, litres in pairs(solution.demand or {}) do
+        emitterCount = emitterCount + 1
+        totalDemand = totalDemand + litres
+        if solution.starved[key] then
+            starvedCount = starvedCount + 1
+        else
+            servedDemand = servedDemand + litres
+        end
+    end
+    report.emitterCount = emitterCount
+    report.starvedCount = starvedCount
+    report.totalDemand = totalDemand
+    report.servedDemand = servedDemand
+    report.iterations = solution.iterations
+    report.flow = Hydraulics.flowAt(solution, square) or 0
+
+    if report.pipeCount == 0 then
+        return report
     end
 
-    -- Per consumer kind: the head the best source delivers, and whether that clears its minimum.
+    -- Hop counts are measured over the solved adjacency, which costs no world access at all.
+    local distance = Hydraulics.distancesFrom(solution, square)
+    local consumerZ = square:getZ()
+    local levelHead = Pressure.levelHead()
+    local containerBase = Pressure.containerBase()
+
+    local seen = {}
+    for _, descriptor in ipairs(solution.sources or {}) do
+        if not seen[descriptor.key] then
+            seen[descriptor.key] = true
+            report.sources[#report.sources + 1] = {
+                key = tostring(descriptor.key),
+                z = descriptor.z,
+                hops = distance[descriptor.nodeKey],
+                amount = descriptor.waterAmount,
+                capacity = descriptor.capacity,
+                fluidType = descriptor.fluidType,
+                -- Two different numbers, and the readout needs both to be answerable.
+                --
+                -- `staticHead` is what gravity alone gives this vessel here: whether it sits high
+                -- enough to help at all, which is the one thing still genuinely per source.
+                --
+                -- `supplyHead` is the pressure it actually pushes at, pumps included. Without it the
+                -- column read "1.00" for every barrel on a farm with two pumps running -- true (they
+                -- are all on the same floor) and completely misleading, because it looked like the
+                -- barrels were the reason the far end had no pressure when the real answer was the
+                -- 84 L/h being drawn between here and there.
+                staticHead = containerBase + levelHead * ((descriptor.z or 0) - consumerZ),
+                supplyHead = descriptor.nodeKey and solution.supply[descriptor.nodeKey]
+                    and (solution.supply[descriptor.nodeKey] - levelHead * (descriptor.z or 0))
+                    or nil,
+            }
+        end
+    end
+    report.containerCount = #report.sources
+
+    -- Does the solve list an emitter on THIS tile as one it cannot feed? Reported separately from the
+    -- head, because the two can disagree and that disagreement is the whole story: a starved tile
+    -- reads a comfortable head, since the field it is reading excludes its own draw.
+    report.starvedHere = Hydraulics.isStarvedAt(solution, square)
+
     for _, kind in ipairs({ Constants.PRESSURE_KIND_TAP, Constants.PRESSURE_KIND_DRIP,
         Constants.PRESSURE_KIND_SPRINKLER }) do
-        local best = nil
-        for _, descriptor in ipairs(descriptors) do
-            local head = headThroughChain(descriptor.z, consumerZ, descriptor.pipeHops, kind,
-                descriptor.pressureChain)
-            if not best or head > best then
-                best = head
-            end
-        end
+        local canDraw, head = Hydraulics.canDrawAt(solution, square, kind)
+        local minimum = Pressure.minimumFor(kind)
         report.kinds[kind] = {
-            head = best,
-            minimum = Pressure.minimumFor(kind),
-            friction = Pressure.frictionFor(kind),
-            ok = best ~= nil and best >= Pressure.minimumFor(kind),
+            head = head,
+            minimum = minimum,
+            canDraw = canDraw,
+            -- Loss per tile is no longer a constant of the consumer -- it is what this tile's actual
+            -- flow costs. Reported as such.
+            friction = Hydraulics.lossPerTile(report.flow > 0 and report.flow
+                or Hydraulics.flowFor(kind)),
+            ok = canDraw,
         }
     end
 
@@ -1449,6 +1527,6 @@ if Events then
         Events.OnObjectAboutToBeRemoved.Add(NetworkAccess.invalidateTraversalCache)
     end
     if Events.OnTick then
-        Events.OnTick.Add(NetworkAccess.invalidateTraversalCache)
+        Events.OnTick.Add(dropTraversalCacheOnly)
     end
 end

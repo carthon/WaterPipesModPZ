@@ -93,6 +93,13 @@ function Pump.setEnabled(worldObject, enabled)
     if worldObject.transmitModData then
         pcall(worldObject.transmitModData, worldObject)
     end
+
+    -- A pump is half the head in most zones, so flipping it invalidates the solved field. Resolved off
+    -- the WaterPipes table rather than required at the top: Hydraulics already requires this module.
+    local Hydraulics = WaterPipes.Hydraulics
+    if Hydraulics and Hydraulics.invalidate then
+        Hydraulics.invalidate()
+    end
 end
 
 function Pump.isPowered(worldObject)

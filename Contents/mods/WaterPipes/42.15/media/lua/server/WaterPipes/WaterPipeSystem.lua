@@ -19,6 +19,7 @@ require "WaterPipes/Mains"
 require "WaterPipes/Pump"
 require "WaterPipes/Hydrant"
 require "WaterPipes/Stagnation"
+require "WaterPipes/Hydraulics"
 require "WaterPipes/Irrigation"
 require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
@@ -41,6 +42,7 @@ local Mains = WaterPipes.Mains
 local Pump = WaterPipes.Pump
 local Hydrant = WaterPipes.Hydrant
 local Stagnation = WaterPipes.Stagnation
+local Hydraulics = WaterPipes.Hydraulics
 local Irrigation = WaterPipes.Irrigation
 local State = WaterPipes.State
 local System = WaterPipes.System
@@ -721,27 +723,44 @@ function System.processRainTaint()
     end)
 end
 
-function System.refreshPlumbedEndpoints()
-    local state = State.ensure()
+-- Every pipe tile and its six neighbours, DEDUPLICATED.
+--
+-- This runs once per in-game minute, which at the default day length is roughly every two and a half
+-- seconds of real time -- and it was the single most expensive thing the mod did on that cadence.
+-- The reason was arithmetic, not design: a pipe contributes itself plus six neighbours, and on a
+-- dense grid almost every one of those neighbours is another pipe, or the neighbour of one. A
+-- 192-tile farm therefore produced 1 344 positions covering barely 250 distinct tiles, and each of
+-- the two passes below turned every one of them into a getGridSquare and a full object scan --
+-- five duplicates of the same tile, five times the work, five times per minute.
+--
+-- Deduplicating first is the whole fix. The passes still visit their own `visited` set, but that set
+-- only spares the ENDPOINT work; the square lookup and the object scan had already been paid by the
+-- time it was consulted.
+local function collectPipeNeighbourhood(state)
+    local seen = {}
     local coordinates = {}
 
-    for _, pipeData in pairs(state.pipes) do
-        local pipeCoordinates = {
-            { x = pipeData.x, y = pipeData.y, z = pipeData.z },
-        }
-
-        for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-            pipeCoordinates[#pipeCoordinates + 1] = {
-                x = pipeData.x + offset.x,
-                y = pipeData.y + offset.y,
-                z = pipeData.z + offset.z,
-            }
+    local function add(x, y, z)
+        local key = tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)
+        if seen[key] then
+            return
         end
-        for _, position in ipairs(pipeCoordinates) do
-            coordinates[#coordinates + 1] = position
+        seen[key] = true
+        coordinates[#coordinates + 1] = { x = x, y = y, z = z }
+    end
+
+    for _, pipeData in pairs(state.pipes) do
+        add(pipeData.x, pipeData.y, pipeData.z)
+        for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
+            add(pipeData.x + offset.x, pipeData.y + offset.y, pipeData.z + offset.z)
         end
     end
 
+    return coordinates
+end
+
+function System.refreshPlumbedEndpoints()
+    local coordinates = collectPipeNeighbourhood(State.ensure())
     refreshPlumbedEndpointsNearCoordinates(coordinates)
     refreshPlumbedGeneratorsNearCoordinates(coordinates)
 end
@@ -986,6 +1005,15 @@ local function onEveryTenMinutes()
 end
 
 local function onEveryOneMinute()
+    -- The head field is no longer dropped per frame (see NetworkAccess.invalidateTraversalCache), so
+    -- this is what bounds how stale it can get. A minute is the cadence the water itself moves on --
+    -- everything below either fills or drains something -- so re-solving here means the field is never
+    -- reasoning about a supply that has since run dry, while costing one solve a minute instead of one
+    -- a frame.
+    if Hydraulics and Hydraulics.invalidate then
+        Hydraulics.invalidate()
+    end
+
     -- Routers process once per in-game minute (rates are per-minute; dt defaults to 1.0). This is the
     -- cheap cadence -- no per-frame OnTick work -- at the cost of the readout updating once a minute.
     local okRouters, errRouters = pcall(System.processRouters)

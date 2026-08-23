@@ -549,31 +549,44 @@ local function describePressureReport(report, square)
     add("Hydrants: %d pressurising, supply floor %.1f",
         report.hydrantCount or 0, report.supplyHead or 0)
 
+    add("Load: %d emitter(s), %d starved, %.2f of %.2f L/h served",
+        report.emitterCount or 0, report.starvedCount or 0,
+        report.servedDemand or 0, report.totalDemand or 0)
+    add("Flow through this tile: %.2f L/h   (demand scale %.0f%%)",
+        report.flow or 0, (report.demandScale or 1) * 100)
+
     add(" ")
-    add("Head by consumer (best source, after ceiling):")
+    add("Head by consumer (at this tile, under the current load):")
     for _, kind in ipairs({ Constants.PRESSURE_KIND_TAP, Constants.PRESSURE_KIND_DRIP,
         Constants.PRESSURE_KIND_SPRINKLER }) do
         local entry = report.kinds[kind]
         if entry then
+            -- "SHARED OUT" rather than "NOT ENOUGH": the head on this tile is fine, and saying
+            -- otherwise next to a comfortable number would read as a bug. What is missing is room on
+            -- the line, which the load figures above spell out.
+            local verdict = "OK"
+            if not entry.ok then
+                verdict = report.starvedHere and "SHARED OUT" or "NOT ENOUGH"
+            end
             add("  %-9s %6.2f  (needs %.1f, friction %.3f/tile)  %s",
-                kind, entry.head or 0, entry.minimum, entry.friction,
-                entry.ok and "OK" or "NOT ENOUGH")
+                kind, entry.head or 0, entry.minimum, entry.friction, verdict)
         end
     end
 
     add(" ")
-    add("Sources (head delivered here at tap flow):")
+    -- Head is a property of the TILE now, not of each (source, consumer) pair -- the line above is the
+    -- answer, and it is the same answer whichever vessel the water comes out of. What is still worth
+    -- listing per source is what it holds and whether it sits high enough to help at all.
+    add("Sources (gravity only -> pressurised, pumps included):")
     if #report.sources == 0 then
         add("  none")
     end
     for _, source in ipairs(report.sources) do
-        -- A source reached through a regulator shows the ceiling that capped it, so a surprising
-        -- head can be traced to the router responsible.
-        add("  z=%d hops=%d  %.1f/%.1f %s  %s->  %6.2f",
-            source.z or 0, source.hops or 0, source.amount or 0, source.capacity or 0,
-            tostring(source.fluidType),
-            source.ceiling and string.format("[cap %.1f] ", source.ceiling) or "",
-            source.head or 0)
+        add("  z=%d hops=%s  %.1f/%.1f %s  ->  %6.2f -> %6.2f",
+            source.z or 0, source.hops and tostring(source.hops) or "-",
+            source.amount or 0, source.capacity or 0,
+            tostring(source.fluidType), source.staticHead or 0,
+            source.supplyHead or source.staticHead or 0)
     end
 
     return lines
