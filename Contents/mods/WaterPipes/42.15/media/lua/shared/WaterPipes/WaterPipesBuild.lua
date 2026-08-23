@@ -112,26 +112,116 @@ function Build.riserOnIsValid(params)
     return not squareHasRiserEdge(params and params.square, edgeFromFacing(params))
 end
 
--- Did this build consume a fired clay pipe segment instead of a metal pipe? The recipe records its
--- consumed inputs (kept tools and DontRecordInput items excluded), which is the same mechanism
--- vanilla barricades use to know which plank went in. Guarded throughout: an engine build that does
--- not expose craftRecipeData simply reads as metal, the default.
-local function consumedClay(params)
-    local data = params and params.craftRecipeData
-    if not data or not data.getAllRecordedConsumedItems then
-        return false
+-- Did this build consume a fired clay pipe segment instead of a metal pipe?
+--
+-- CraftRecipeData exposes the build's items through several lists that do not all populate in every
+-- situation, so we ask each in turn rather than trusting one. getAllRecordedConsumedItems is the
+-- narrowest (vanilla's barricade code checks it for emptiness before using it, so it is known to come
+-- back blank); getAllInputItems is what vanilla's own lamp-on-pillar OnCreate uses to identify which
+-- item went into a build, which is exactly our question. First list that names the clay segment wins.
+--
+-- Getting this wrong is not loud: the pipe silently reads as metal and hands a metal pipe back when
+-- dismantled, which is precisely how it shipped broken once. Hence the warning at the bottom -- if no
+-- accessor yields a single item, something about the build path has changed and we want to know.
+local CRAFT_ITEM_ACCESSORS = {
+    "getAllRecordedConsumedItems",
+    "getAllConsumedItems",
+    "getAllInputItems",
+}
+
+local function listNamesClay(items)
+    if not items or not items.size then
+        return false, 0
     end
-    local ok, items = pcall(data.getAllRecordedConsumedItems, data)
-    if not ok or not items or not items.size then
-        return false
+    local ok, count = pcall(items.size, items)
+    if not ok or not count or count <= 0 then
+        return false, 0
     end
-    for index = 0, items:size() - 1 do
-        local item = items:get(index)
-        local okType, fullType = item and pcall(item.getFullType, item)
-        if okType and fullType == Constants.PIPE_CLAY_ITEM_TYPE then
-            return true
+    for index = 0, count - 1 do
+        local okGet, item = pcall(items.get, items, index)
+        if okGet and item then
+            local okType, fullType = pcall(item.getFullType, item)
+            if okType and fullType == Constants.PIPE_CLAY_ITEM_TYPE then
+                return true, count
+            end
         end
     end
+    return false, count
+end
+
+-- What each accessor actually returned, as one line for console.txt. Logged once per session on the
+-- first pipe built, because which of these lists populates is a property of the running build of the
+-- game and cannot be settled by reading our own code -- and when it changes, the symptom is a silent
+-- wrong material rather than an error.
+local function describeCraftInputs(data)
+    local parts = {}
+    for _, accessor in ipairs(CRAFT_ITEM_ACCESSORS) do
+        if not data[accessor] then
+            parts[#parts + 1] = accessor .. "=absent"
+        else
+            local ok, items = pcall(data[accessor], data)
+            if not ok or not items or not items.size then
+                parts[#parts + 1] = accessor .. "=nil"
+            else
+                local okCount, count = pcall(items.size, items)
+                count = (okCount and count) or 0
+                local types = {}
+                for index = 0, count - 1 do
+                    local okGet, item = pcall(items.get, items, index)
+                    local okType, fullType = okGet and item and pcall(item.getFullType, item)
+                    types[#types + 1] = (okType and tostring(fullType)) or "?"
+                end
+                parts[#parts + 1] = accessor .. "=[" .. table.concat(types, " ") .. "]"
+            end
+        end
+    end
+    return table.concat(parts, "  ")
+end
+
+local warnedNoInputs = false
+local describedInputs = false
+
+local function consumedClay(params)
+    local data = params and params.craftRecipeData
+    if not data then
+        return false
+    end
+
+    if not describedInputs then
+        describedInputs = true
+        if WaterPipes.Logger and WaterPipes.Logger.log then
+            WaterPipes.Logger.log("build inputs (first build this session): " .. describeCraftInputs(data))
+        end
+    end
+
+    local sawAnyItem = false
+    for _, accessor in ipairs(CRAFT_ITEM_ACCESSORS) do
+        if data[accessor] then
+            local ok, items = pcall(data[accessor], data)
+            if ok then
+                local isClay, count = listNamesClay(items)
+                if count > 0 then
+                    sawAnyItem = true
+                end
+                if isClay then
+                    return true
+                end
+            end
+        end
+    end
+
+    -- Every accessor came back empty. That is not "a metal pipe was used" -- it is "we could not
+    -- tell", and the two are indistinguishable downstream, so say so once.
+    if not sawAnyItem and not warnedNoInputs then
+        warnedNoInputs = true
+        if WaterPipes.Logger and WaterPipes.Logger.warn then
+            WaterPipes.Logger.warn(
+                "build: craftRecipeData listed no input items -- pipe build material cannot be read, "
+                .. "every pipe will read as metal. Accessors tried: "
+                .. table.concat(CRAFT_ITEM_ACCESSORS, ", "))
+        end
+    end
+
     return false
 end
 
