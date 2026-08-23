@@ -19,6 +19,8 @@
     "Sandbox_WaterPipes_PressureContainerBase_tooltip": "水桶或收集器在自身楼层凭借自身水的重量提供的压力，单位为十分之一米水柱。10 = 1.0，可让水龙头在平地上从约 20 格外取水。如果基地里的水龙头离水桶很远，就调高此值。",
     "Sandbox_WaterPipes_PressureFrictionScale": "管道摩擦（%）",
     "Sandbox_WaterPipes_PressureFrictionScale_tooltip": "每格水管消耗多少压力，以默认值的百分比表示。100 = 默认。200 = 管道损失压力的速度翻倍，水能到达的距离减半。设为 0 则距离永不消耗压力，只有高度和水泵起作用。",
+    "Sandbox_WaterPipes_HydraulicDemandScale": "共享管道需求（%）",
+    "Sandbox_WaterPipes_HydraulicDemandScale_tooltip": "一根管道要为其相邻用水设备抽走的水付出多少代价。100 = 完全真实：同一条管线上的三十个洒水器会互相抢水，只有最靠近水泵的那些能运行。0 = 4.x 之前的行为，每个用水设备都按自己独占整个管网来计算，因此一个水泵可以带动任意数量的洒水器。如果你原有的农场因此停摆而又不想改建成分区供水，就把它调低。",
     "Sandbox_WaterPipes_PumpHead": "单台水泵增加的压力（十分之一）",
     "Sandbox_WaterPipes_PumpHead_tooltip": "一台通电水泵为其所在网络增加的压力，单位为十分之一米水柱。250 = 25.0，与家用增压泵相当。多台水泵串联可叠加。喷洒器需要 20.0，所以一台水泵可驱动约 30 格外的喷洒器。",
     "Sandbox_WaterPipes_PumpSuctionLimit": "水泵吸程上限（十分之一）",

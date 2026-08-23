@@ -78,6 +78,16 @@ option WaterPipes.PressureFrictionScale
     translation = WaterPipes_PressureFrictionScale,
 }
 
+option WaterPipes.HydraulicDemandScale
+{
+    type = integer,
+    min = 0,
+    max = 100,
+    default = 100,
+    page = WaterPipes,
+    translation = WaterPipes_HydraulicDemandScale,
+}
+
 option WaterPipes.PumpHead
 {
     type = integer,
