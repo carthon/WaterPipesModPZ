@@ -138,9 +138,18 @@ ZONE_OF_NODE = {}
 
 
 def frame_reset():
-    PIPE_SCAN_MEMO.clear()
+    # NOT the pipe-object scan. Which pipe objects sit on a tile changes only when
+    # one joins or leaves it, or when streaming rebuilds the square -- all three have
+    # events, none of them is a frame boundary. Third cache in this mod to have had a
+    # per-frame clear quietly undoing its own event invalidation.
     TRAVERSAL_CACHE.clear()
-    VESSEL_MEMO.clear()
+    ZONE_VESSEL_MEMO.clear()
+    # NOT the vessel classification. Which objects on a tile are containers changes
+    # only when one joins or leaves it, or when streaming rebuilds the square --
+    # all three have events, and none of them is a frame boundary. Dropping it here
+    # meant reclassifying every tile of a zone on every spray-FX rebuild, three
+    # times a second, which measured at 77% of that rebuild.
+    # NOT the head field either -- see the note on invalidateTraversalCache.
     # NOT the head field. It is dropped by the per-minute pass and by layout /
     # pump / valve changes, never by a frame boundary -- see the note on
     # NetworkAccess.invalidateTraversalCache. Clearing it here is what the Lua
@@ -481,10 +490,49 @@ def collectPipeSquaresFromSquare(origin, conduct=False):
     return pipe_squares, hops
 
 
-def collectStorageDescriptors(pipe_squares):
+# Zone id -> the tiles of that zone that hold a vessel. Frame-scoped, like the
+# traversal cache: see NetworkAccess.vesselSquaresOfZone.
+ZONE_VESSEL_MEMO = {}
+
+
+def vesselSquaresOfZone(solution):
+    """Where a zone keeps its water, found once per zone per frame.
+
+    The saving here is invisible to bc(): every square this skips had no vessel on
+    it, so it was already costing zero bridge calls. What it cost was the ITERATION
+    -- a key string built and a dedup set probed, per square, per consumer -- and
+    on 47 emitters over 180 tiles that is the single biggest pure-Lua term in the
+    mod. Counting it is the only reason this change is measurable at all.
+    """
+    zid = solution["id"]
+    cached = ZONE_VESSEL_MEMO.get(zid)
+    if cached is not None:
+        CALLS["zoneVesselHit"] += 1
+        return cached
+    out = []
+    for sq in solution["order"]:
+        lua("descriptors/discover", 3)          # key build + seen probe + insert
+        if classifySquareVesselsCached(sq):
+            out.append(sq)
+    ZONE_VESSEL_MEMO[zid] = out
+    return out
+
+
+def collectStorageDescriptors(pipe_squares, solution=None):
+    # DRAW: the tile set belongs to the zone, so the discovery is shared and only
+    # the vessel-bearing tiles are visited per consumer.
+    if solution is not None:
+        desc = {}
+        for sq in vesselSquaresOfZone(solution):
+            lua("descriptors/price", 3)         # hop lookup + chain lookup + write
+            desc.update(collectSquareContainers(sq))
+        return desc
+
+    # FILL / visualization: no solve to key a zone off, so the full walk stands.
     scanned = set()
     desc = {}
     for sq in pipe_squares:
+        lua("descriptors/walk", 3)              # key build + dedup probe
         k = (sq.x, sq.y, sq.z)
         if k in scanned:
             continue
@@ -597,7 +645,7 @@ def hydraulics_solveAt(origin):
     sweeps = 3
     lua("hydraulic/solve", probes * len(order) * (1 + sweeps * 5))
 
-    solution = {"order": order}
+    solution = {"order": order, "id": k}
     HYDRAULIC_CACHE[k] = solution
     for sq in order:
         ZONE_OF_NODE[(sq.x, sq.y, sq.z)] = k
@@ -631,7 +679,8 @@ def buildSummaryFromSquare(origin, kind=None, fill=False):
         return None
     # Deliberately NOT cached: the fluid amounts have to be read fresh every time,
     # or a draw and the fill after it would disagree about how much is in the pipes.
-    desc = collectStorageDescriptors(pipe_squares)
+    desc = collectStorageDescriptors(
+        pipe_squares, solution if (kind and not fill) else None)
     if not desc:
         return None
     return {"descriptors": desc, "pipeSquares": pipe_squares}
@@ -702,6 +751,20 @@ class Scenario:
         global WORLD, MAINS_PROBE_CACHE
         WORLD = World(filler_objects=filler)
         MAINS_PROBE_CACHE = {}
+
+        # Every cache derived from the world, dropped because the world is being
+        # replaced. In the game this never happens -- there is one world and these
+        # live until their events fire -- but the bench builds a fresh scenario per
+        # size, on the same coordinates. While they were frame-scoped, frame_reset
+        # hid this; once they legitimately started outliving a frame, a scenario
+        # inherited the previous one's answers and the numbers became fiction.
+        PIPE_SCAN_MEMO.clear()
+        VESSEL_MEMO.clear()
+        ZONE_VESSEL_MEMO.clear()
+        TRAVERSAL_CACHE.clear()
+        HYDRAULIC_CACHE.clear()
+        ZONE_OF_NODE.clear()
+        RESOLVED.clear()
         self.pipe_coords = []
         self.z = z
 
@@ -856,7 +919,14 @@ def pass_processRouters(sc):
 
 
 def pass_processPumps(sc):
+    known_pumps = set(sc.pumps)
     for (x, y, z) in sc.pipe_coords:
+        # state.pipes records what each pipe IS, so a pass that wants pumps skips the
+        # rest without touching the world. This is why processRouters, which could
+        # already filter on its metadata, measured at 0.00 ms while this measured 56.
+        lua("pumps/filter", 2)
+        if (x, y, z) not in known_pumps:
+            continue
         sq = getGridSquare(x, y, z)
         pump = Pump_findOnSquare(sq)
         if not pump:
@@ -927,7 +997,11 @@ def pass_irrigation(sc):
     this total is spread over IRRIGATION_EMITTERS_PER_TICK-sized slices rather than
     landing in one. The work is the same; only the frame it lands in moves.
     """
+    known_emitters = set(sc.emitters)
     for (x, y, z) in sc.pipe_coords:
+        lua("irrigation/filter", 2)
+        if (x, y, z) not in known_emitters:
+            continue
         sq = getGridSquare(x, y, z)
         d = Irrigation_findDripOnSquare(sq)
         if d:
@@ -957,6 +1031,7 @@ _FINDERS = {
 
 
 def registry_reset():
+    RESOLVED.clear()
     REGISTRY["emitters"] = set()
     REGISTRY["hydrants"] = set()
     REGISTRY["purifiers"] = set()
@@ -994,17 +1069,36 @@ def pass_registry_sweep(sc, radius=20, px=10, py=10, pz=0):
             Purifier_findOnSquare(sq)
 
 
+# (kind, coord) -> the square and object that tile resolved to. Kept until the
+# tile changes, not per frame: see Registry.entryFor / Registry.forgetResolved.
+RESOLVED = {}
+
+
 def registry_near(kind, px, py, pz, radius):
-    """Registry.near: iterate the remembered tiles, re-validate each."""
+    """Registry.near: iterate the remembered tiles, using what each resolved to.
+
+    Re-validating every tile on every read is what this used to do, and five
+    client modules call it several times a second -- a getGridSquare plus a full
+    object scan per remembered tile, per caller. The references are now held on
+    the entry and dropped by the events that can invalidate them.
+    """
     finder = _FINDERS[kind]
     out = []
     for (x, y, z) in REGISTRY[kind]:
+        lua("registry/near", 4)                  # z test + two range tests + branch
         if z != pz or abs(x - px) > radius or abs(y - py) > radius:
             continue
-        sq = getGridSquare(x, y, z)
-        if sq is None:
-            continue
-        obj = finder(sq)
+        hit = RESOLVED.get((kind, (x, y, z)))
+        if hit is None:
+            sq = getGridSquare(x, y, z)
+            if sq is None:
+                continue
+            obj = finder(sq)
+            RESOLVED[(kind, (x, y, z))] = (sq, obj)
+            hit = (sq, obj)
+        else:
+            CALLS["registryResolvedHit"] += 1
+        sq, obj = hit
         if obj:
             out.append((sq, obj))
     return out
