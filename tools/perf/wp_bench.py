@@ -51,6 +51,7 @@ SERVER_PASSES = [
     ("1min/pumps",     M.pass_processPumps),
     ("1min/mains",     M.pass_processAllMains),
     ("1min/endpoints", M.pass_refreshPlumbedEndpoints),
+    ("10min/reindex",  M.pass_reindexEndpoints),
     ("10min/scan",     M.pass_scanContainersAroundPipes),
     ("10min/graph",    M.pass_rebuildGraph),
     ("10min/redist",   M.pass_redistributeWater),
@@ -135,10 +136,31 @@ def run_suite():
         # per-frame caches. Summing the individually-measured passes would charge each
         # of them a cold cache and understate the real behaviour.
         sc = build(spec)
-        n, _, calls = M.measure_frame([fn for l, fn in SERVER_PASSES
-                                       if l.startswith("1min/")], sc)
+        minute = [fn for l, fn in SERVER_PASSES if l.startswith("1min/")]
+        n, _, calls = M.measure_frame(minute, sc)
         row["TOTAL 1min"] = n
         row["TOTAL 1min :walks"] = calls.get("BFS", 0)
+
+        # ...and what five consecutive minutes cost, which is a different question and
+        # the one the fill path's cache lifetime actually answers.
+        #
+        # Every per-pass number above is measured cold on purpose: it is a worst case,
+        # and worst cases stay comparable. But no minute after the first is cold in a
+        # real game. Only a run of them shows what an event lifetime buys, because the
+        # whole benefit is that minute two does not re-walk what minute one walked --
+        # and a bench made only of cold single passes is structurally blind to it.
+        #
+        # frame_reset between minutes, and nothing else: that is exactly the OnTick
+        # boundary. What survives it is what the mod says survives it.
+        sc = build(spec)
+        M.reset()
+        M.cold()
+        for _ in range(5):
+            M.frame_reset()
+            for fn in minute:
+                fn(sc)
+        row["server/5min steady"] = M.total_bc()
+        row["server/5min steady :walks"] = M.CALLS.get("BFS", 0)
 
         out[name] = row
     return out
@@ -150,7 +172,8 @@ def report(results):
     print("WaterPipes -- bridge calls per pass")
     print("=" * 84)
     labels = ([l for l, _ in SERVER_PASSES] + [l for l, _ in CLIENT_PASSES]
-              + ["client/sweep", "client/15s steady", "TOTAL 1min"])
+              + ["client/sweep", "client/15s steady", "TOTAL 1min",
+                 "server/5min steady"])
 
     head = "%-22s" % "pass"
     for spec in SCENARIOS:

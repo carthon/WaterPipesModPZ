@@ -86,6 +86,10 @@ local function refreshPlumbedEndpointsNearCoordinates(coordinates)
                 local key = tostring(square:getX()) .. ":" .. tostring(square:getY()) .. ":" .. tostring(square:getZ()) .. ":" .. tostring(endpointObject:getObjectIndex())
                 if not visited[key] and EndpointPlumbing.isPlumbed(endpointObject) then
                     visited[key] = true
+                    -- Every path that finds a plumbed fixture feeds the index, not just the moment it
+                    -- was plumbed. A save made before the index existed gets picked up the first time
+                    -- anything is built near one of its sinks.
+                    State.registerEndpoint(position.x, position.y, position.z)
                     EndpointPlumbing.refreshEndpointSource(endpointObject)
                 end
             end
@@ -106,6 +110,7 @@ local function refreshPlumbedGeneratorsNearCoordinates(coordinates)
                     local key = tostring(square:getX()) .. ":" .. tostring(square:getY()) .. ":" .. tostring(square:getZ()) .. ":" .. tostring(worldObject:getObjectIndex())
                     if not visited[key] then
                         visited[key] = true
+                        State.registerEndpoint(position.x, position.y, position.z)
                         GeneratorFuel.refresh(worldObject)
                     end
                 end
@@ -875,18 +880,141 @@ local function collectPipeNeighbourhood(state)
     return coordinates
 end
 
-function System.refreshPlumbedEndpoints()
+-- Rebuild the endpoint index from the world, and say what it found that nobody had recorded.
+--
+-- This is the old per-minute behaviour -- sweep the pipe neighbourhood, ~700 tiles on a 200-pipe
+-- farm, two object scans each -- kept as a ten-minute BACKSTOP rather than the working path, and made
+-- to report. A tile it discovers that the registry did not already claim means a fixture became
+-- plumbed without EndpointPlumbing.plumb hearing about it, which is the same question
+-- docs/removal-events.md asks about removals: is the event enough on its own? A silent backstop can
+-- never answer that. This one can, and if it stays quiet across enough sessions it can be deleted.
+function System.reindexEndpoints()
     local coordinates = collectPipeNeighbourhood(State.ensure())
-    refreshPlumbedEndpointsNearCoordinates(coordinates)
-    refreshPlumbedGeneratorsNearCoordinates(coordinates)
+    local known = State.getEndpoints()
+    local discovered = 0
+
+    -- The FIRST index of a save is a migration, not a finding. A save made before the registry
+    -- existed has every one of its plumbed fixtures unrecorded, and reporting each as an escape would
+    -- bury the one case this is here to catch under a wall of noise the very first time it ran.
+    local migrating = not State.endpointsIndexed()
+
+    for _, position in ipairs(coordinates) do
+        local square = getSquare(position.x, position.y, position.z)
+        if square then
+            local plumbed = false
+            for _, endpointObject in ipairs(EndpointObjects.collectOnSquare(square)) do
+                if EndpointPlumbing.isPlumbed(endpointObject) then
+                    plumbed = true
+                    break
+                end
+            end
+            if not plumbed and square.getObjects then
+                local objects = square:getObjects()
+                for i = 0, objects:size() - 1 do
+                    local worldObject = objects:get(i)
+                    if GeneratorFuel.isGenerator(worldObject)
+                        and GeneratorFuel.isPlumbed(worldObject) then
+                        plumbed = true
+                        break
+                    end
+                end
+            end
+            if plumbed and not known[State.squareKey(position.x, position.y, position.z)] then
+                discovered = discovered + 1
+                if not migrating then
+                    Logger.warn(string.format(
+                        "ENDPOINT NOT INDEXED: a plumbed fixture at %d:%d:%d was found by the sweep, "
+                        .. "not by an event. The per-minute refresh would have missed it.",
+                        position.x, position.y, position.z))
+                end
+                State.registerEndpoint(position.x, position.y, position.z)
+            end
+        end
+    end
+
+    if migrating then
+        Logger.log(string.format(
+            "Endpoint index built for this save: %d plumbed tile(s) recorded. From here they are "
+            .. "recorded as they are plumbed, and this sweep is only a backstop.", discovered))
+    end
+
+    State.markEndpointsIndexed()
+    return discovered
 end
 
-function System.rebuild()
-    -- The pipe layout is about to be re-read, so anything cached off the OLD layout is now a lie.
-    -- Both caches self-clear once per frame, but a build and the rebuild it triggers happen inside
-    -- the same frame -- so without this the refresh that follows would still see the pre-build shape.
-    PipeObjectUtils.invalidateScanCache()
-    NetworkAccess.invalidateTraversalCache()
+-- The per-minute refresh, reading the index instead of searching for its work.
+--
+-- Each entry is a CLAIM, not a fact, and the loop is where it is settled: a tile whose square is
+-- loaded and holds nothing plumbed is dropped. A tile whose square is NOT loaded is left alone --
+-- walking away from your base must not erase its plumbing, which is the same rule Registry.near
+-- follows for the same reason.
+function System.refreshPlumbedEndpoints()
+    -- A save made before the index existed has plumbed fixtures and no record of them. Find them
+    -- once, on the first pass after loading, and never again.
+    if not State.endpointsIndexed() then
+        System.reindexEndpoints()
+    end
+
+    local stale = nil
+
+    for key, position in pairs(State.getEndpoints()) do
+        local square = getSquare(position.x, position.y, position.z)
+        if square then
+            local found = 0
+
+            for _, endpointObject in ipairs(EndpointObjects.collectOnSquare(square)) do
+                if EndpointPlumbing.isPlumbed(endpointObject) then
+                    found = found + 1
+                    EndpointPlumbing.refreshEndpointSource(endpointObject)
+                end
+            end
+
+            if square.getObjects then
+                local objects = square:getObjects()
+                for i = 0, objects:size() - 1 do
+                    local worldObject = objects:get(i)
+                    if GeneratorFuel.isGenerator(worldObject)
+                        and GeneratorFuel.isPlumbed(worldObject) then
+                        found = found + 1
+                        GeneratorFuel.refresh(worldObject)
+                    end
+                end
+            end
+
+            if found == 0 then
+                stale = stale or {}
+                stale[#stale + 1] = key
+            end
+        end
+    end
+
+    for _, key in ipairs(stale or {}) do
+        State.getEndpoints()[key] = nil
+    end
+end
+
+-- `afterLayoutChange` defaults to true: a build or a removal really has changed the shape, and
+-- anything cached off the old one is now a lie.
+--
+-- The ten-minute pass passes FALSE, and that is the point. It calls this to re-read containers and
+-- rebuild the graph, not because anything changed -- and dropping the head field on that timer meant
+-- paying a full cold solve every ten minutes for a shape that was almost always identical. At x3 speed
+-- a ten-minute pass arrives every seven real seconds, and a cold solve was measured at 141 ms: three
+-- of the three global drops in one window came from here, and each one was a freeze.
+--
+-- Nothing is lost by not dropping. Every way the layout can actually change fires an object event that
+-- drops by tile, and the one path established to fire NO event -- fire, see docs/removal-events.md --
+-- is caught by verifyCachesAgainstTheWorld, which reports the drift AND falls back to the wholesale
+-- drop when it finds any. That is the difference between dropping because something is wrong and
+-- dropping in case something might be.
+function System.rebuild(afterLayoutChange)
+    if afterLayoutChange ~= false then
+        -- Both caches are invalidated by tile on object events, but a build and the rebuild it
+        -- triggers happen inside the same frame -- so without this the refresh that follows would
+        -- still see the pre-build shape.
+        PipeObjectUtils.invalidateScanCache()
+        NetworkAccess.invalidateTraversalCache()
+    end
 
     System.scanContainersAroundPipes()
     State.rebuildGraph()
@@ -894,9 +1022,12 @@ end
 
 function System.tick()
     local ok, err = pcall(function()
-        System.rebuild()
-        System.redistributeWater()
-        System.refreshPlumbedEndpoints()
+        -- Broken out because system/10min measured 26 ms a pass and nothing said which third of it
+        -- that was. A rebuild drops the traversal cache and the head field, so it is also what makes
+        -- the NEXT cold solve happen -- worth knowing before deciding it is cheap.
+        Profiler.time("10min/rebuild", System.rebuild, false)
+        Profiler.time("10min/redist", System.redistributeWater)
+        Profiler.time("10min/endpoints", System.refreshPlumbedEndpoints)
     end)
 
     if not ok then
@@ -1170,6 +1301,44 @@ local function onEveryTenMinutes()
     if not okRain then
         Logger.error("Rain contamination pass failed: " .. tostring(errRain))
     end
+
+end
+
+-- The endpoint index's backstop, deliberately NOT on the same frame as the pass above.
+--
+-- It costs 13.5 ms and System.tick costs 26, and landing both together made a 40 ms frame out of two
+-- pieces of work with no reason to share one. It is a backstop for a case that has never fired --
+-- every plumbed fixture is recorded by plumb() -- so it runs every third ten-minute pass, half an
+-- in-game hour, on a frame of its own. If it ever does report something, that is the moment to make
+-- it more frequent, not before.
+local REINDEX_EVERY = 3
+local reindexCountdown = 1
+local reindexDue = false
+
+-- Asked for on the ten-minute boundary, RUN on a later frame. The countdown is decided here so the
+-- cadence stays tied to game time rather than to how many frames happen to pass.
+local function requestEndpointReindex()
+    reindexCountdown = reindexCountdown - 1
+    if reindexCountdown > 0 then
+        return
+    end
+    reindexCountdown = REINDEX_EVERY
+    reindexDue = true
+end
+
+-- One flag, checked per frame: the cost on a frame with nothing due is a nil test, which is all but
+-- every frame. Same shape as drainIrrigationPass, and for the same reason -- work that has a deadline
+-- measured in minutes has no business insisting on a particular frame.
+local function drainEndpointReindex()
+    if not reindexDue then
+        return
+    end
+    reindexDue = false
+
+    local okIndex, errIndex = pcall(Profiler.time, "10min/reindex", System.reindexEndpoints)
+    if not okIndex then
+        Logger.error("Endpoint re-index failed: " .. tostring(errIndex))
+    end
 end
 
 -- The last input to the head field with no event behind it: whether a pump has power. That is
@@ -1189,6 +1358,7 @@ local function checkPumpPower()
     local state = State.ensure()
     local changed = false
 
+
     for key, pipeData in pairs(state.pipes) do
         local metadata = pipeData.metadata
         if not (metadata and metadata.kinds and not metadata.pump) then
@@ -1206,8 +1376,29 @@ local function checkPumpPower()
         end
     end
 
-    if changed and Hydraulics and Hydraulics.invalidate then
-        Hydraulics.invalidate()
+    return changed
+end
+
+-- The two watchers, and ONE drop between them.
+--
+-- Both used to invalidate on their own, and both invalidate on their first look of a session -- so
+-- loading a game cost two full re-solves back to back where one was needed. That was invisible while a
+-- solve was one cost among many; with the field now caching at 99.9% a cold solve is 161 ms landing in
+-- a single frame, and the second one was pure waste.
+--
+-- They still want DIFFERENT drops, which is why this is not simply an `or`. Pump power feeds the head
+-- field and nothing else -- the fill walks read isPowered live, so they are still correct. The mains
+-- shutoff is baked into a cached walk's supply floor, so that one has to take the walks with it.
+local function checkWatchedInputs()
+    -- Both, before either drop: a watcher that does not run because an earlier one already decided to
+    -- invalidate would never record its own state, and would then report a change every single minute.
+    local pumpChanged = checkPumpPower()
+    local supplyChanged = NetworkAccess.supplyClockChanged()
+
+    if supplyChanged then
+        NetworkAccess.invalidateTraversalCache()      -- the walks, and the field with them
+    elseif pumpChanged and Hydraulics and Hydraulics.invalidate then
+        Hydraulics.invalidate()                       -- the field only
     end
 end
 
@@ -1217,7 +1408,12 @@ local function onEveryOneMinute()
     -- everything below either fills or drains something -- so re-solving here means the field is never
     -- reasoning about a supply that has since run dry, while costing one solve a minute instead of one
     -- a frame.
-    Profiler.time("1min/invalidate", checkPumpPower)
+    -- Both un-evented inputs, watched together and dropped once. The other one is the day the town
+    -- water is cut: it is read live inside Mains.isLiveAt, so a cached walk would keep counting a dead
+    -- main as a supply floor and keep letting water climb on pressure that is no longer there.
+    -- Watching it is one boolean compare a minute against a clock that flips once in the life of a
+    -- save, where expiring the walks for it would be a full re-walk every minute forever.
+    Profiler.time("1min/invalidate", checkWatchedInputs)
 
     -- The vessel classification and the pipe-object scan used to be dropped here too, wholesale, once
     -- a minute. Measured: that drop forced ~190 ms of client work in the frame that followed it, and
@@ -1281,7 +1477,13 @@ local function drainIrrigationPass()
         return
     end
 
-    local ok, err = pcall(Irrigation.stepPass, Constants.IRRIGATION_EMITTERS_PER_TICK)
+    -- Timed, because it was not and that hid a quarter of everything the mod does. The bucket table
+    -- adds up only its TOP-LEVEL rows, and in one window those came to 1104 ms against a total of
+    -- 2108: the difference was solve/search happening underneath an untimed pass. A hydraulic solve is
+    -- the most expensive thing in this mod and this is one of the places that asks for one, so it
+    -- needs a row of its own rather than being visible only as an unexplained gap.
+    local ok, err = pcall(Profiler.time, "1h/irrigation-step",
+        Irrigation.stepPass, Constants.IRRIGATION_EMITTERS_PER_TICK)
     if not ok then
         Logger.error("Irrigation step failed: " .. tostring(err))
         -- Drop the pass rather than retry the same failing emitter every frame from here to eternity.
@@ -1523,6 +1725,7 @@ if Events then
         Events.EveryTenMinutes.Add(function()
             WaterPipes.Profiler.time("system/10min", onEveryTenMinutes)
             WaterPipes.Profiler.time("10min/verify", verifyCachesAgainstTheWorld)
+            requestEndpointReindex()
         end)
     end
 
@@ -1540,6 +1743,7 @@ if Events then
 
     if Events.OnTick then
         Events.OnTick.Add(drainIrrigationPass)
+        Events.OnTick.Add(drainEndpointReindex)
     end
 
     if Events.OnDestroyIsoThumpable then

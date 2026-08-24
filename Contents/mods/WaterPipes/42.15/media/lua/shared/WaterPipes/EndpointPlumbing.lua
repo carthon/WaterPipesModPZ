@@ -285,6 +285,46 @@ local function desiredCanBeWaterPiped(worldObject)
     return true
 end
 
+-- The tile a fixture stands on, for the endpoint registry. Nil when it cannot be established, which
+-- is treated as "do not record" rather than "record nothing": a claim we cannot place is worse than
+-- no claim, because the periodic re-index would then never be able to correct it.
+local function registrySquare(worldObject)
+    if not worldObject or not worldObject.getSquare then
+        return nil
+    end
+    local ok, square = pcall(worldObject.getSquare, worldObject)
+    if not ok or not square or not square.getX then
+        return nil
+    end
+    return square
+end
+
+local function noteEndpointTile(worldObject)
+    local State = WaterPipes.State
+    local square = State and State.registerEndpoint and registrySquare(worldObject)
+    if square then
+        pcall(State.registerEndpoint, square:getX(), square:getY(), square:getZ())
+    end
+end
+
+-- Plumbing or unplumbing a fixture changes WHAT STANDS on that tile in the only sense the hydraulic
+-- field cares about: a plumbed fixture with live town water behind it is an inlet, and the field
+-- remembers where its inlets are rather than searching for them on every solve (see classifySites).
+--
+-- Nothing else announces this. It is a modData change, so no object event fires -- and the periodic
+-- passes stopped dropping the field on a timer, which is exactly the trade that makes this call
+-- necessary rather than merely tidy.
+local function noteHydraulicChange(worldObject)
+    local Hydraulics = WaterPipes.Hydraulics
+    if not Hydraulics or not Hydraulics.invalidateAroundSquare then
+        return
+    end
+    local square = registrySquare(worldObject)
+    if square then
+        pcall(Hydraulics.invalidateAroundSquare, square)
+    end
+end
+
 function EndpointPlumbing.isPlumbed(worldObject)
     local modData = getModData(worldObject)
     return modData and modData[Constants.PLUMBED_ENDPOINT_MODDATA_KEY] == true or false
@@ -368,6 +408,11 @@ function EndpointPlumbing.plumb(worldObject)
         modData[EXTERNAL_FIXTURE_KEY] = (not endpointHasOwnFluidContainer(worldObject)) or nil
     end
 
+    -- Recorded here because this is the moment it becomes true. The per-minute refresh then reads the
+    -- registry instead of sweeping every pipe tile's neighbourhood looking for fixtures.
+    noteEndpointTile(worldObject)
+    noteHydraulicChange(worldObject)
+
     Logger.log("Plumbing endpoint to pipe network: " .. describeObject(worldObject))
     Logger.log("Plumbing diagnostics: " .. describePlumbingDiagnostics(worldObject))
     -- Snapshot the fixture's own fluid state + water-source flags before we take it over.
@@ -409,6 +454,12 @@ function EndpointPlumbing.unplumb(worldObject)
     -- to infinite water if the water service is still on, instead of staying dry.
     FluidSource.restoreOriginalState(worldObject)
     AdapterSource.removeForEndpoint(worldObject, "unplumb")
+    noteHydraulicChange(worldObject)
+
+    -- Deliberately NOT unregistering the tile here. A tile can carry more than one fixture, and this
+    -- object cannot see the others -- so removing the claim would silently strand a sink standing
+    -- beside the one just unplumbed. The registry is a claim, not a fact: the refresh visits the tile,
+    -- finds nothing plumbed on it, and drops it there, where the whole tile is in view.
     Logger.log("Unplumbed endpoint from pipe network: " .. describeObject(worldObject))
 
     if buildUtil and buildUtil.setHaveConstruction and worldObject.getSquare then

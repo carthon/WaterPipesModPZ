@@ -61,8 +61,12 @@ local function getCellSquare(x, y, z)
     return cell:getGridSquare(x, y, z)
 end
 
+local function keyOf(x, y, z)
+    return tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)
+end
+
 local function squareKey(square)
-    return tostring(square:getX()) .. ":" .. tostring(square:getY()) .. ":" .. tostring(square:getZ())
+    return keyOf(square:getX(), square:getY(), square:getZ())
 end
 
 local function describeEndpointObject(endpointObject)
@@ -438,8 +442,19 @@ end
 -- answers and cannot share a walk. Sharing across origins needs the adjacency itself cached, which is
 -- a larger change.
 --
--- Dropped once per frame, plus explicitly whenever the pipe layout changes.
+-- Dropped when the layout it describes changes, and not otherwise. See the lifetime note below.
 local traversalCache = {}
+
+-- How many origins may keep a walk cached before invalidation stops being worth scoping. Every fill
+-- origin in a real base is a fixed thing -- a pump, a router's two sides, a plumbed inlet -- so the
+-- real count is single digits; this only exists so that a caller nobody anticipated (a UI that walks
+-- per hovered tile, say) degrades to the old wholesale drop instead of turning every streamed object
+-- into a linear scan.
+local TRAVERSAL_CACHE_LIMIT = 64
+
+-- Counters, the same shape and for the same reason as Hydraulics.counters: the only way to tell a
+-- cache that is working from one being dropped faster than it is built. Free while nothing reads them.
+NetworkAccess.counters = { walks = 0, hits = 0, scoped = 0, global = 0, untouched = 0, overflow = 0 }
 
 -- Zone id -> the tiles of that zone that actually hold a vessel. Same lifetime as the traversal cache
 -- above: one frame, plus an explicit drop when the layout changes. See vesselSquaresOfZone.
@@ -456,41 +471,172 @@ local function traversalKey(square, verticalMode, conduct)
     return squareKey(square) .. "|" .. tostring(verticalMode) .. "|" .. tostring(conduct)
 end
 
--- Two caches with two different lifetimes, and conflating them cost real frames.
+-- ---- Lifetimes ---------------------------------------------------------------------------------
 --
--- The traversal cache is a WITHIN-FRAME memo: it exists so a router asking availableToPull and then
--- drawFluidAtSquare in the same instant walks once instead of twice. Dropping it every frame is
--- exactly right and costs nothing.
+-- Three caches sit above, and they do NOT share a lifetime. Deciding that once, out loud, is what
+-- this block is for -- the same mistake has now been made four times in this codebase, each time by
+-- attaching an expensive answer to a frame boundary that has nothing to do with when the answer
+-- changes.
 --
--- The head field is not that. Solving one costs a servable-set search over the whole network, and it
--- only changes when the layout, a pump, a valve or a vessel's emptiness changes -- none of which a
--- frame boundary implies. Wiring it to the same OnTick meant rebuilding it sixty times a second to
--- get the same answer, which is what made the pressure work feel slower than the walk it replaced.
-local function dropTraversalCacheOnly()
-    traversalCache = {}
+-- statusSummaryMemo holds FLUID. It is a within-frame memo by necessity: water moves, and a summary
+-- that outlived the frame would price a draw against litres somebody else already took. Frame drop,
+-- correctly.
+--
+-- zoneVesselMemo holds which tiles of a zone carry a vessel. Topology, but keyed by solve id, so it
+-- follows the frame with the summary above rather than growing a lifetime of its own.
+--
+-- traversalCache holds the FILL topology: which squares water entering at an origin can reach, how
+-- far each sits, and which pumps and inlets stand in the run. Since the draw path moved onto the
+-- hydraulic solve, this cache serves fills and the visualization overlay and nothing else -- and a
+-- fill runs once a minute per pump, so a frame-scoped entry was never once read warm. Every call
+-- walked the whole network cold, and pump/headroom was measured at 20.4 ms a call for it, 19 of the
+-- 21 slowest frames in the window.
+--
+-- What it depends on is a short list, and none of it is a frame:
+--
+--   pipe layout ............ OnObjectAdded / OnObjectAboutToBeRemoved / LoadGridsquare, by tile
+--   router direction, ceiling  Router.setPressureCeiling -> the global drop
+--   a vessel or purifier on a router tile (which seals it)  object add/remove, by tile
+--   hydrant open ........... Hydrant.setOpen -> the global drop
+--   pump POWER ............. not cached at all: the walk stores the pump objects and
+--                            Pump.headForPumps asks isPowered live, every query
+--   the mains shutoff clock  the one genuinely un-evented input; watched by change detection on
+--                            the per-minute pass rather than expired for (see supplyClockChanged)
+--
+-- So the drop is by tile, exactly as the head field's is.
+local function dropFrameMemos()
     zoneVesselMemo = {}
     statusSummaryMemo = {}
 end
 
--- An object appeared or vanished somewhere. The traversal cache is frame-scoped and rebuilt on demand,
--- so dropping all of it costs nothing and needs no reasoning about where the object was. The head
--- field is the opposite -- expensive to rebuild, and only wrong near the tile that changed -- so it is
--- invalidated by tile, from its own handler in Hydraulics.lua. This one does NOT call the global drop:
--- these events fire for every object the map streams in, and doing so meant the field never survived
--- long enough to be a cache at all.
-local function onWorldObjectChanged()
-    traversalCache = {}
+-- Forget one cached walk.
+local function forgetTraversal(key)
+    if traversalCache[key] == nil then
+        return false
+    end
+    traversalCache[key] = nil
+    return true
 end
 
--- The layout changed: drop both. This is what a build, a removal, a valve setting or a hydrant toggle
--- wants -- the shape the field was solved against no longer exists.
+-- An object appeared or vanished at a tile. Only the walks that pass THROUGH that tile, or through
+-- one of its neighbours, can be wrong because of it.
+--
+-- There is deliberately NO test of what the object was -- the same reasoning as
+-- Hydraulics.invalidateAroundSquare, which see. A predicate would have to enumerate every type that
+-- can matter and a missing type would fail silently; asking "does any cached walk touch this tile"
+-- needs no such list.
+--
+-- The neighbours are checked because a NEW pipe belongs to no walk yet: what it changes is the walks
+-- of the tiles it connects to. A tile two steps away across a router is the one case this misses --
+-- the router tile is not a network square, so a pipe appearing on its far side is neither in a walk
+-- nor beside one. That is not a hole in practice: a pipe only appears there by being built, and a
+-- build calls System.rebuild, which drops everything. What is left for this handler is the object
+-- stream, and streaming cannot move a pipe.
+function NetworkAccess.invalidateAroundSquare(square)
+    if not square or not square.getX then
+        NetworkAccess.invalidateTraversalCache()
+        return
+    end
+
+    local okX, x = pcall(square.getX, square)
+    local okY, y = pcall(square.getY, square)
+    local okZ, z = pcall(square.getZ, square)
+    if not okX or not okY or not okZ or x == nil or y == nil or z == nil then
+        NetworkAccess.invalidateTraversalCache()
+        return
+    end
+
+    local counters = NetworkAccess.counters
+
+    -- ONE key, and one lookup per cached walk.
+    --
+    -- The obvious way round is to build the seven tiles a change here could matter to -- this one, its
+    -- four cardinal neighbours, the two vertical ones -- and test each against every entry. That is
+    -- what this did first, and it was the wrong end to compute it at: this handler fires for every
+    -- object the map streams in and for every square it rebuilds, measured at ~230 times a second,
+    -- while a walk is cached twice in a session. Seven key strings per event, 14 500 events.
+    --
+    -- So the neighbourhood is precomputed once per WALK instead (see the halo below). "Tile T is
+    -- adjacent to some tile of this walk" and "T is in the walk's halo" are the same statement --
+    -- adjacency is symmetric -- so nothing is lost, and the per-event cost becomes one key.
+    local touched = keyOf(x, y, z)
+
+    local dropped = false
+    for key, entry in pairs(traversalCache) do
+        if entry.halo[touched] then
+            if forgetTraversal(key) then
+                dropped = true
+            end
+        end
+    end
+
+    if dropped then
+        counters.scoped = counters.scoped + 1
+    else
+        counters.untouched = counters.untouched + 1
+    end
+end
+
+function NetworkAccess.invalidateAroundObject(worldObject)
+    if not worldObject or not worldObject.getSquare then
+        NetworkAccess.invalidateTraversalCache()
+        return
+    end
+
+    local ok, square = pcall(worldObject.getSquare, worldObject)
+    if not ok or not square then
+        NetworkAccess.invalidateTraversalCache()
+        return
+    end
+
+    NetworkAccess.invalidateAroundSquare(square)
+end
+
+-- The layout changed wholesale: drop everything. This is what a build, a removal, a valve setting or
+-- a hydrant toggle wants -- the shape the field was solved against no longer exists.
 function NetworkAccess.invalidateTraversalCache()
     traversalCache = {}
     zoneVesselMemo = {}
     statusSummaryMemo = {}
+    NetworkAccess.counters.global = NetworkAccess.counters.global + 1
     if Hydraulics and Hydraulics.invalidate then
         Hydraulics.invalidate()
     end
+end
+
+-- The mains shutoff is the one input to a cached walk that no event announces. It is also a CLOCK --
+-- it flips once in the life of a save and never flips back -- so watching it is a boolean compare
+-- per minute, where expiring the cache for it would be a full re-walk per minute forever.
+--
+-- This is the same shape as checkPumpPower in WaterPipeSystem, and for the same reason: watch the
+-- handful of inputs nothing reports, rather than throwing away everything on a timer in case one of
+-- them moved.
+local lastServiceLive = nil
+
+-- REPORTS, and does not act. The caller decides what to drop, because it is also asking the pump-power
+-- watcher the same kind of question and the two answers want different drops -- and a cold solve was
+-- measured at 161 ms in a single frame, so paying for two where one would do is a visible stutter the
+-- player gets for nothing.
+function NetworkAccess.supplyClockChanged()
+    local live = true
+    if Mains and Mains.serviceLive then
+        local ok, answer = pcall(Mains.serviceLive)
+        live = (not ok) or (answer and true or false)
+    end
+
+    if lastServiceLive == nil then
+        -- First look of the session: nothing was known when the caches were built, so they are
+        -- suspect exactly once.
+        lastServiceLive = live
+        return true
+    end
+
+    if lastServiceLive ~= live then
+        lastServiceLive = live
+        return true
+    end
+
+    return false
 end
 
 local function collectPipeSquaresCached(originSquare, verticalMode, conduct)
@@ -501,13 +647,60 @@ local function collectPipeSquaresCached(originSquare, verticalMode, conduct)
     local key = traversalKey(originSquare, verticalMode, conduct)
     local hit = traversalCache[key]
     if hit then
-        return hit[1], hit[2], hit[3], hit[4]
+        NetworkAccess.counters.hits = NetworkAccess.counters.hits + 1
+        return hit.pipeSquares, hit.hops, hit.zone, hit.chains, hit
     end
 
+    NetworkAccess.counters.walks = NetworkAccess.counters.walks + 1
     local pipeSquares, hops, zone, chains =
         collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
-    traversalCache[key] = { pipeSquares, hops, zone, chains }
-    return pipeSquares, hops, zone, chains
+
+    -- The tiles this walk cares about, PLUS their neighbours, as one lookup table -- the "halo".
+    -- The only thing that ever reads it is "could a change at this tile matter to this walk", and
+    -- precomputing the answer here rather than per event is what makes the invalidation one lookup.
+    --
+    -- The origin goes in too: it is often a fixture with no pipe of its own, so it is not in
+    -- pipeSquares, and an object appearing on it is exactly the case that must drop this entry.
+    -- The neighbours matter because a NEW pipe belongs to no walk yet -- what it changes is the walks
+    -- of the tiles it connects to.
+    local halo = {}
+    local function haloAround(hx, hy, hz)
+        halo[keyOf(hx, hy, hz)] = true
+        for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
+            halo[keyOf(hx + offset.x, hy + offset.y, hz)] = true
+        end
+        -- Plain z+/-1 rather than a riser lookup, for the reason Hydraulics gives: a world read here
+        -- would be paid per tile of every walk to catch a geometry the per-minute pass already bounds.
+        halo[keyOf(hx, hy, hz - 1)] = true
+        halo[keyOf(hx, hy, hz + 1)] = true
+    end
+
+    haloAround(originSquare:getX(), originSquare:getY(), originSquare:getZ())
+    for _, pipeSquare in ipairs(pipeSquares) do
+        haloAround(pipeSquare:getX(), pipeSquare:getY(), pipeSquare:getZ())
+    end
+
+    local count = 0
+    for _ in pairs(traversalCache) do
+        count = count + 1
+    end
+    if count >= TRAVERSAL_CACHE_LIMIT then
+        -- More origins than any real base has. Scoped invalidation is linear in the number of
+        -- entries, so past this point keeping them all would cost more per streamed object than the
+        -- walks are worth. Start over rather than degrade quietly.
+        traversalCache = {}
+        NetworkAccess.counters.overflow = NetworkAccess.counters.overflow + 1
+    end
+
+    local entry = {
+        pipeSquares = pipeSquares, hops = hops, zone = zone, chains = chains, halo = halo,
+        -- vessels: filled in on first use by vesselSquaresOfWalk, never here. A visualization query
+        -- asks for the tile set and nothing else, and it should not pay to classify every tile of the
+        -- network for containers it will not look at.
+        vessels = nil,
+    }
+    traversalCache[key] = entry
+    return pipeSquares, hops, zone, chains, entry
 end
 
 local function collectConnectedPipeSquares(endpointObject)
@@ -517,26 +710,62 @@ local function collectConnectedPipeSquares(endpointObject)
     return collectPipeSquaresCached(endpointObject:getSquare())
 end
 
--- The original walk, kept for fills and visualization: they have no solve to key a zone off, ask a
--- different question (where can water GO from here) and are not on the hot path.
-local function collectStorageDescriptorsByWalk(pipeSquares, hops, chains)
-    local scannedSquares = {}
+-- Which tiles of a cached walk hold a vessel, found once per walk.
+--
+-- The fill path's descriptor build iterated EVERY tile of the network on every query -- 200 tiles to
+-- rediscover the same twenty barrels, measured at 1.65 ms a call and paid on every headroom question.
+-- This is the same collapse the draw side got when vesselSquaresOfZone landed; the fill side was left
+-- behind because it had no zone id to key on.
+--
+-- Now it has something better: the walk itself is cached with an event lifetime, so the discovery can
+-- live ON the walk. Which tiles carry a vessel changes only when an object joins or leaves one of
+-- them -- and an object joining or leaving any tile of the walk already drops the whole entry, halo
+-- and all. Nothing extra to invalidate.
+--
+-- What is deliberately NOT shared is the descriptors, the same discipline the draw side keeps: those
+-- carry pipeHops and pressureChain measured from the ASKING tile, and handing two callers the same
+-- table would have the second silently overwrite the first's. Only the discovery is pooled.
+local function vesselSquaresOfWalk(entry, pipeSquares)
+    if entry and entry.vessels then
+        return entry.vessels
+    end
+
+    local list = {}
+    local seen = {}
+    for _, pipeSquare in ipairs(pipeSquares) do
+        local key = squareKey(pipeSquare)
+        if not seen[key] then
+            seen[key] = true
+            -- Cheap: the adapter memoises its per-square classification, and this asks only whether
+            -- anything is there, never what is inside it.
+            if Adapter.hasSquareContainers(pipeSquare) then
+                list[#list + 1] = { square = pipeSquare, key = key }
+            end
+        end
+    end
+
+    if entry then
+        entry.vessels = list
+    end
+    return list
+end
+
+-- The original walk, kept for fills and visualization: they have no solve to key a zone off, and ask
+-- a different question (where can water GO from here).
+local function collectStorageDescriptorsByWalk(pipeSquares, hops, chains, entry)
     local descriptors = {}
 
     -- A container counts only when it shares its tile with a pipe (same square), not by adjacency.
-    for _, pipeSquare in ipairs(pipeSquares) do
-        if addSquare(scannedSquares, pipeSquare) then
-            local key = squareKey(pipeSquare)
-            -- How far this container sits from the origin, so the pressure gate can price the run,
-            -- and the regulators standing between the two (nil when nothing regulates it).
-            local distance = hops and hops[key] or 0
-            local chain = chains and chains[key] or nil
-            local squareDescriptors = Adapter.collectSquareContainers(pipeSquare)
-            for descriptorKey, descriptor in pairs(squareDescriptors) do
-                descriptor.pipeHops = distance
-                descriptor.pressureChain = chain
-                descriptors[descriptorKey] = descriptor
-            end
+    for _, vessel in ipairs(vesselSquaresOfWalk(entry, pipeSquares)) do
+        local key = vessel.key
+        -- How far this container sits from the origin, so the pressure gate can price the run,
+        -- and the regulators standing between the two (nil when nothing regulates it).
+        local distance = hops and hops[key] or 0
+        local chain = chains and chains[key] or nil
+        for descriptorKey, descriptor in pairs(Adapter.collectSquareContainers(vessel.square)) do
+            descriptor.pipeHops = distance
+            descriptor.pressureChain = chain
+            descriptors[descriptorKey] = descriptor
         end
     end
 
@@ -588,7 +817,7 @@ local function vesselSquaresOfZone(solution)
     return list
 end
 
-local function collectStorageDescriptors(pipeSquares, hops, chains, solution)
+local function collectStorageDescriptors(pipeSquares, hops, chains, solution, entry)
     local pooled = solution and vesselSquaresOfZone(solution) or nil
     if pooled then
         local descriptors = {}
@@ -604,7 +833,7 @@ local function collectStorageDescriptors(pipeSquares, hops, chains, solution)
         return descriptors
     end
 
-    return collectStorageDescriptorsByWalk(pipeSquares, hops, chains)
+    return collectStorageDescriptorsByWalk(pipeSquares, hops, chains, entry)
 end
 
 
@@ -777,6 +1006,26 @@ local function squaresFromSolution(solution, originSquare)
     }
 end
 
+-- Bracket a stretch of work for the profiler, if it is loaded and on. Resolved off the global table
+-- rather than required, so this module keeps no dependency on a debug tool.
+--
+-- mark/since rather than Profiler.time because the walk below returns FOUR values and Profiler.time
+-- forwards two: wrapping it would have dropped the zone and the regulator chains without a word.
+local function markPhase()
+    local Profiler = WaterPipes.Profiler
+    return Profiler and Profiler.mark and Profiler.mark() or nil
+end
+
+local function sincePhase(name, mark)
+    if not mark then
+        return
+    end
+    local Profiler = WaterPipes.Profiler
+    if Profiler and Profiler.since then
+        Profiler.since(name, mark)
+    end
+end
+
 local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, statusOnly)
     if not originSquare then
         return nil
@@ -798,7 +1047,7 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, st
     -- pass -- and the client walked it again, per emitter, every three seconds for the spray FX. Fills
     -- and visualization keep the old per-origin walk: they ask a different question (where can water
     -- GO from here), cross routers the other way, and are not on the hot path.
-    local pipeSquares, hops, zone, chains
+    local pipeSquares, hops, zone, chains, walkEntry
     local solution = nil
     if kind and not fill then
         solution = Hydraulics.solveAt(originSquare)
@@ -807,14 +1056,23 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, st
         end
         pipeSquares, hops, zone = squaresFromSolution(solution, originSquare)
     else
-        pipeSquares, hops, zone, chains =
+        local mark = fill and markPhase() or nil
+        pipeSquares, hops, zone, chains, walkEntry =
             collectPipeSquaresCached(originSquare, verticalMode, conduct)
+        sincePhase("fill/walk", mark)
     end
     if #pipeSquares == 0 then
         return nil
     end
 
-    local descriptorMap = collectStorageDescriptors(pipeSquares, hops, chains, solution)
+    -- The fill path is split three ways under the profiler, and only the fill path, because that is
+    -- the question the next round has to answer: pump/headroom costs 20 ms and this says whether it
+    -- is the walk, the descriptors or the gate. Three wrong guesses were spent locating the spray-FX
+    -- cost by reasoning instead of measuring; this is the cheaper version of that lesson.
+    -- Profiler.time is a straight passthrough while the profiler is off, so these cost nothing.
+    local descriptorMark = fill and markPhase() or nil
+    local descriptorMap = collectStorageDescriptors(pipeSquares, hops, chains, solution, walkEntry)
+    sincePhase("fill/descriptors", descriptorMark)
     addPurifierOutletDescriptors(descriptorMap, zone)
     local descriptors = normalizeDescriptorList(descriptorMap)
     if #descriptors == 0 then
@@ -830,7 +1088,9 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, st
         -- do not have to find. zone.supplyHead already carries the highest such floor.
         local liftHead = math.max(Pump.headForPumps(zone.pumps), zone.supplyHead or 0)
         if fill then
+            local gateMark = markPhase()
             descriptors = applyFillGate(descriptors, originSquare, liftHead)
+            sincePhase("fill/gate", gateMark)
         else
             descriptors, pressure = applyPressureGate(descriptors, originSquare, kind,
                 solution, liftHead, statusOnly)
@@ -1225,6 +1485,21 @@ function NetworkAccess.getPressureReport(square)
     -- head, because the two can disagree and that disagreement is the whole story: a starved tile
     -- reads a comfortable head, since the field it is reading excludes its own draw.
     report.starvedHere = Hydraulics.isStarvedAt(solution, square)
+
+    -- ...and, if it is starved, whether it COULD be served: everything already watering plus this
+    -- one, does every one of them still clear its own minimum?
+    --
+    -- The two are not the same claim. The servable set is found by a binary search over a PREFIX of
+    -- the consumers, so the moment one of them cannot be served, every consumer after it in the
+    -- ordering is dropped as well -- including ones that would have been fine. This is the only way to
+    -- tell "the line genuinely cannot carry it" from "the search gave up before reaching it", and the
+    -- second would be a fault in the search rather than a fact about the plumbing.
+    if report.starvedHere and Hydraulics.couldServeAlso then
+        local kindHere = solution.kinds and solution.kinds[Hydraulics.nodeKeyOf(square)] or nil
+        local servable, blocker = Hydraulics.couldServeAlso(solution, square, kindHere)
+        report.couldServeHere = servable
+        report.serveBlockedBy = blocker
+    end
 
     for _, kind in ipairs({ Constants.PRESSURE_KIND_TAP, Constants.PRESSURE_KIND_DRIP,
         Constants.PRESSURE_KIND_SPRINKLER }) do
@@ -1666,19 +1941,28 @@ function NetworkAccess.moveFluidToTemporaryContainer(endpointObject, amount)
     return temporaryContainer
 end
 
--- The traversal cache's invalidation. Anything that changes what the walk would FIND has to drop it:
--- a pipe appearing or disappearing changes the shape of the network, and a router's direction or its
--- ceiling changes which squares are reachable and how they are priced. The per-frame clear is the
--- backstop -- it means no mistake here can outlive a single frame -- and the explicit calls exist
--- because a build and the network rebuild it triggers happen inside that same frame.
+-- Anything that changes what the walk would FIND has to drop it: a pipe appearing or disappearing
+-- changes the shape of the network, and a router's direction or its ceiling changes which squares are
+-- reachable and how they are priced. The object events do it by tile; Router.setPressureCeiling and
+-- Hydrant.setOpen call the global drop directly, as does the rebuild a build triggers.
+--
+-- OnTick no longer touches the traversal cache. It drops only the two memos that hold fluid or are
+-- keyed to a solve, which is what a frame boundary genuinely means for -- see the lifetime note above
+-- dropFrameMemos.
 if Events then
     if Events.OnObjectAdded then
-        Events.OnObjectAdded.Add(onWorldObjectChanged)
+        Events.OnObjectAdded.Add(NetworkAccess.invalidateAroundObject)
     end
     if Events.OnObjectAboutToBeRemoved then
-        Events.OnObjectAboutToBeRemoved.Add(onWorldObjectChanged)
+        Events.OnObjectAboutToBeRemoved.Add(NetworkAccess.invalidateAroundObject)
+    end
+    -- A square the engine rebuilt while streaming: its objects were never announced one by one, so
+    -- the tile has to be treated as changed. Same hook, and for the same reason, as the vessel
+    -- classification and the pipe-object scan.
+    if Events.LoadGridsquare then
+        Events.LoadGridsquare.Add(NetworkAccess.invalidateAroundSquare)
     end
     if Events.OnTick then
-        Events.OnTick.Add(dropTraversalCacheOnly)
+        Events.OnTick.Add(dropFrameMemos)
     end
 end

@@ -71,6 +71,37 @@ local Router = WaterPipes.Router
 -- CARRIES LESS PER BRANCH THAN A SPUR, so ring-mains beat dead ends. The magnitudes are approximate.
 -- The ordering -- who starves first, and what building a loop buys you -- is right.
 
+-- Bracket a stretch of work for the profiler, if it is loaded and on. Resolved off the global table
+-- rather than required: this module must not depend on a debug tool, and while the profiler is off
+-- both of these are one comparison.
+--
+-- Why the solve is broken out at all: with the field now caching at 99.9%, the RARE cold solve stopped
+-- being a cost spread over a session and became a single visible spike -- one measured at 161 ms in
+-- one frame, which is ten times the threshold where a stutter is visible. "The solve is expensive" is
+-- not actionable; which PHASE of it is expensive is. Three wrong guesses were spent locating the
+-- spray-FX cost by reasoning instead of measuring, and this is the cheaper version of that lesson.
+local function markPhase()
+    local Profiler = WaterPipes.Profiler
+    return Profiler and Profiler.mark and Profiler.mark() or nil
+end
+
+local function sincePhase(name, mark)
+    if not mark then
+        return
+    end
+    local Profiler = WaterPipes.Profiler
+    if Profiler and Profiler.since then
+        Profiler.since(name, mark)
+    end
+end
+
+local function countPhase(name, amount)
+    local Profiler = WaterPipes.Profiler
+    if Profiler and Profiler.count then
+        Profiler.count(name, amount)
+    end
+end
+
 local function elevation(z)
     return Pressure.levelHead() * (z or 0)
 end
@@ -130,14 +161,35 @@ end
 -- Loss over one pipe tile carrying `flow` litres/hour, scaled by the same PressureFrictionScale the
 -- old model used -- so a save that had already dialled distance down keeps that setting meaning the
 -- same thing.
-function Hydraulics.lossPerTile(flow)
+-- The per-tile friction coefficient for this save: K scaled by the sandbox dial, or zero under the
+-- SIMPLE model (height only, exactly as before).
+--
+-- Split out because both of the lookups behind it are per-SAVE constants and lossPerTile was making
+-- them per NODE, per relaxation sweep. Twelve sweeps over 181 nodes, seven times per solve, is thirty
+-- thousand SandboxVars table walks for two numbers that cannot change while the solve runs -- and the
+-- solve was measured at 141 ms, 87% of it in exactly that loop.
+local function frictionCoefficient()
     if Pressure.model() == Constants.PRESSURE_MODEL_SIMPLE then
-        return 0   -- height only, exactly as before
+        return 0
     end
+    return Constants.HYDRAULIC_FRICTION_K * sandboxPercent("PressureFrictionScale", 1)
+end
+
+local function shapeFlow(flow)
     local q = math.max(flow or 0, 0)
     local exponent = Constants.HYDRAULIC_FRICTION_EXPONENT or 1
-    local shaped = exponent == 1 and q or math.pow(q, exponent)
-    return Constants.HYDRAULIC_FRICTION_K * shaped * sandboxPercent("PressureFrictionScale", 1)
+    if exponent == 1 then
+        return q
+    end
+    return math.pow(q, exponent)
+end
+
+function Hydraulics.lossPerTile(flow)
+    local coefficient = frictionCoefficient()
+    if coefficient == 0 then
+        return 0
+    end
+    return coefficient * shapeFlow(flow)
 end
 
 -- ===== Consumer demand =====
@@ -311,7 +363,65 @@ end
 
 -- ===== Phase 2: what supplies the zone, and what loads it =====
 
-local function collectSupplyAndDemand(nodes, order)
+-- WHERE the interesting things stand, as opposed to what they are doing.
+--
+-- collectSupplyAndDemand used to SEARCH for its inputs: for every node of the zone it asked the world
+-- five separate questions -- is there a vessel here, a mains fixture, a hydrant, a pump, an emitter --
+-- and on 181 nodes that is 905 probes, several of them a getObjects plus a getModData per object on
+-- the tile. It ran on every supply change: 276 of them in a 40 s window, at 6.9 ms each.
+--
+-- Where a thing STANDS changes only when an object joins or leaves a tile, which is an event and
+-- already drops the whole topology. What it is DOING -- how full the barrel is, whether the pump has
+-- power, whether the drip has burst -- changes constantly and is still read live, every solve, from
+-- the world. So the search is cached and the reading is not.
+--
+-- The lists are built in `order` so everything downstream stays deterministic, and they hold node
+-- KEYS rather than squares because that is what the field is indexed by.
+local function classifySites(nodes, order)
+    local sites = { vessels = {}, mains = {}, hydrants = {}, pumps = {}, emitters = {} }
+    local Irrigation = WaterPipes.Irrigation
+
+    for _, key in ipairs(order) do
+        local square = nodes[key].square
+
+        if Adapter.hasSquareContainers(square) then
+            sites.vessels[#sites.vessels + 1] = key
+        end
+
+        -- A live inlet is a plumbed fixture AND a town supply that is still running. Only the fixture
+        -- is structural, but asking the whole question here is safe and simpler: the day the water is
+        -- cut, NetworkAccess.supplyClockChanged drops the field globally and this is rebuilt. A
+        -- fixture plumbed later is an event too (see EndpointPlumbing.plumb).
+        if Mains.findOnSquare(square) then
+            sites.mains[#sites.mains + 1] = key
+        end
+
+        if Hydrant.findOnSquare(square) then
+            sites.hydrants[#sites.hydrants + 1] = key
+        end
+
+        if Pump.findOnSquare(square) then
+            sites.pumps[#sites.pumps + 1] = key
+        end
+
+        -- A BURST drip belongs here too. It draws nothing today and will draw again when repaired,
+        -- and repairing it changes no object on the tile -- so the site is what is remembered and the
+        -- burst flag is read fresh in ownDemandAt.
+        if Irrigation then
+            for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+                if (Irrigation.isSprinkler and Irrigation.isSprinkler(worldObject))
+                    or (Irrigation.isDrip and Irrigation.isDrip(worldObject)) then
+                    sites.emitters[#sites.emitters + 1] = key
+                    break
+                end
+            end
+        end
+    end
+
+    return sites
+end
+
+local function collectSupplyAndDemand(nodes, order, sites)
     local supply = {}        -- key -> head at that node (m.c.a., absolute)
     local boostable = {}     -- key -> true when a pump may lift this supply (see the end of the pass)
     local demand = {}        -- key -> litres/hour drawn there
@@ -332,53 +442,60 @@ local function collectSupplyAndDemand(nodes, order)
 
     local containerBase = Pressure.containerBase()
 
-    for _, key in ipairs(order) do
-        local node = nodes[key]
-        local square = node.square
-
-        local function raise(head, pumpsMayLift)
-            if not supply[key] or head > supply[key] then
-                supply[key] = head
-            end
-            if pumpsMayLift then
-                boostable[key] = true
-            end
+    local function raise(key, head, pumpsMayLift)
+        if not supply[key] or head > supply[key] then
+            supply[key] = head
         end
+        if pumpsMayLift then
+            boostable[key] = true
+        end
+    end
 
-        -- Stored water. A vessel only supplies head while it actually holds something.
-        local descriptors = Adapter.collectSquareContainers(square)
-        for descriptorKey, descriptor in pairs(descriptors) do
+    -- Stored water. A vessel only supplies head while it actually holds something -- so the AMOUNT is
+    -- read fresh here on every solve, and only where a vessel is known to stand.
+    for _, key in ipairs(sites.vessels) do
+        local node = nodes[key]
+        for _, descriptor in pairs(Adapter.collectSquareContainers(node.square)) do
             descriptor.nodeKey = key
             sources[#sources + 1] = descriptor
             if (descriptor.waterAmount or 0) > 0 then
-                raise(elevation(node.z) + containerBase, true)
+                raise(key, elevation(node.z) + containerBase, true)
             end
         end
+    end
 
-        -- A municipal supply holds the whole run at its pressure -- a FLOOR, not head added on top,
-        -- and two of them do not stack because they are the same town water. Same rule the chain
-        -- arithmetic used; it is just a max over the zone now instead of a walk back up a chain.
-        local mains = Mains.findOnSquare(square)
-        if mains then
+    -- A municipal supply holds the whole run at its pressure -- a FLOOR, not head added on top, and
+    -- two of them do not stack because they are the same town water. Same rule the chain arithmetic
+    -- used; it is just a max over the zone now instead of a walk back up a chain.
+    for _, key in ipairs(sites.mains) do
+        local node = nodes[key]
+        if Mains.findOnSquare(node.square) then
             local head = elevation(node.z) + Mains.head()
-            raise(head)
+            raise(key, head)
             if head > supplyFloor then supplyFloor = head end
             if Mains.head() > stats.supplyHead then stats.supplyHead = Mains.head() end
             stats.mainsCount = stats.mainsCount + 1
         end
+    end
 
-        local hydrant = Hydrant.findOnSquare(square)
+    for _, key in ipairs(sites.hydrants) do
+        local node = nodes[key]
+        local hydrant = Hydrant.findOnSquare(node.square)
         if hydrant and Hydrant.pressureActive(hydrant) then
             local head = elevation(node.z) + Hydrant.head()
-            raise(head)
+            raise(key, head)
             if head > supplyFloor then supplyFloor = head end
             if Hydrant.head() > stats.supplyHead then stats.supplyHead = Hydrant.head() end
             stats.hydrantCount = stats.hydrantCount + 1
         end
+    end
 
-        -- A pump is a booster wherever it stands, and ALSO a source when it has a well or open water
-        -- beside it: that is where the water physically enters the network.
-        local pump = Pump.findOnSquare(square)
+    -- A pump is a booster wherever it stands, and ALSO a source when it has a well or open water
+    -- beside it: that is where the water physically enters the network. Power is read live -- a
+    -- generator starting or stopping announces nothing.
+    for _, key in ipairs(sites.pumps) do
+        local node = nodes[key]
+        local pump = Pump.findOnSquare(node.square)
         if pump then
             stats.pumpCount = stats.pumpCount + 1
             if Pump.isPowered(pump) then
@@ -387,12 +504,16 @@ local function collectSupplyAndDemand(nodes, order)
                 pumps[key][#pumps[key] + 1] = pump
                 stats.pumpHead = stats.pumpHead + Pump.headForPumps({ pump })
                 if Pump.findSource and Pump.findSource(pump) then
-                    raise(elevation(node.z) + containerBase, true)
+                    raise(key, elevation(node.z) + containerBase, true)
                 end
             end
         end
+    end
 
-        local own, kind = ownDemandAt(square)
+    -- Demand, read live too: a drip that has burst still stands there and still conducts, but it has
+    -- stopped being a load until somebody repairs it.
+    for _, key in ipairs(sites.emitters) do
+        local own, kind = ownDemandAt(nodes[key].square)
         if own > 0 then
             demand[key] = own
             kinds[key] = kind
@@ -446,11 +567,23 @@ local function orderBySupply(nodes, adjacency, routers, supply)
         viaRouter[router.outKey][router.inKey] = router
     end
 
+    -- Sorted, and that is not tidiness. The BFS seeded from here decides each node's `parents`, and
+    -- `parents` decides how a shared flow is split between parallel branches -- so an unordered seed
+    -- makes the field differ in its last digits between one run and the next. Lua randomises string
+    -- hashing per process, so `pairs` over a table of tile keys is genuinely unstable, and a network
+    -- with two supplies solved to a slightly different answer every session.
+    --
+    -- Nothing visible depended on it, but a simulation that cannot reproduce its own result cannot be
+    -- compared against itself either -- which is exactly what a golden-field diff needs to do. There
+    -- are a handful of supplies in a zone; sorting them costs nothing.
     for key in pairs(supply) do
         if nodes[key] then
-            depth[key] = 0
             queue[#queue + 1] = key
         end
+    end
+    table.sort(queue)
+    for _, key in ipairs(queue) do
+        depth[key] = 0
     end
 
     if #queue == 0 then
@@ -589,10 +722,9 @@ end
 -- Bounded alternating sweeps rather than a priority queue: Kahlua has no heap, and sweeping the BFS
 -- order forwards and then backwards converges on grid-shaped networks in two or three rounds where
 -- naive Bellman-Ford would need one per tile of diameter. The loop exits as soon as nothing moves.
-local emptyList = {}
 
 local function propagate(nodes, sequence, parents, feeders, supply, flow, peak, viaRouter)
-    local head = {}
+    local count = #sequence
     local scale = Hydraulics.demandScale()
 
     -- What ONE of the edges feeding `key` actually carries.
@@ -615,23 +747,127 @@ local function propagate(nodes, sequence, parents, feeders, supply, flow, peak, 
         return effective / divisor
     end
 
-    local function relax(key)
-        local base = supply[key]
-        local loss = Hydraulics.lossPerTile(edgeFlow(key))
+    -- ===== Everything the sweeps need, laid out by POSITION instead of by node key =====
+    --
+    -- This is the single change that made a cold solve affordable, and it is not an algorithmic one:
+    -- the relaxation does the same arithmetic in the same order and produces the same field. What
+    -- changed is what each step of it COSTS.
+    --
+    -- The sweeps were doing, per node per pass: four hash lookups on interned strings (supply, loss,
+    -- feeders, viaRouter), an ipairs iterator, a closure call, and -- on any edge carrying a regulator
+    -- -- an elevation() that reads a sandbox value. Measured in game: 1 260 to 1 800 of those per
+    -- solve, and a solve at 141 ms with 87% of it here. PZ's Kahlua hashes a string on every one of
+    -- those lookups.
+    --
+    -- None of it varies between passes. So it is resolved ONCE into integer-indexed arrays, and the
+    -- inner loop becomes array reads and arithmetic with no strings in it at all.
+    local position = {}
+    for index = 1, count do
+        position[sequence[index]] = index
+    end
 
-        for _, feederKey in ipairs(feeders[key] or emptyList) do
-            local feederHead = head[feederKey]
-            if feederHead then
-                local arriving = feederHead - loss
-                -- A regulator on this edge fixes the head at ITS OUTLET. Past it the water keeps
-                -- paying friction and keeps gaining or losing height like any other run, which falls
-                -- out for free: we cap here and the rest of the relaxation carries on.
-                local router = viaRouter[key] and viaRouter[key][feederKey]
-                if router and router.ceiling then
-                    local ceiling = elevation(router.z) + router.ceiling
-                    if arriving > ceiling then
-                        arriving = ceiling
+    local coefficient = frictionCoefficient()
+    local supplyAt = {}
+    local lossAt = {}
+    local feedersAt = {}
+    local ceilingAt = {}
+
+    for index = 1, count do
+        local key = sequence[index]
+        supplyAt[index] = supply[key]
+        lossAt[index] = coefficient == 0 and 0 or (coefficient * shapeFlow(edgeFlow(key)))
+
+        -- A feeder outside the sequence is never relaxed, so it never has a head and the old code
+        -- skipped it every pass. Dropping it here is the same answer, found once.
+        local list = feeders[key]
+        local mapped = {}
+        local caps = nil
+        if list then
+            local routersHere = viaRouter[key]
+            for order = 1, #list do
+                local feederPosition = position[list[order]]
+                if feederPosition then
+                    mapped[#mapped + 1] = feederPosition
+                    -- A regulator on this edge fixes the head at ITS OUTLET. Past it the water keeps
+                    -- paying friction and keeps gaining or losing height like any other run, which
+                    -- falls out for free: we cap here and the relaxation carries on. The cap itself is
+                    -- a constant of the edge, so the elevation() behind it is computed once, not per
+                    -- pass -- it reads a sandbox value.
+                    local router = routersHere and routersHere[list[order]]
+                    if router and router.ceiling then
+                        caps = caps or {}
+                        caps[#mapped] = elevation(router.z) + router.ceiling
                     end
+                end
+            end
+        end
+        feedersAt[index] = mapped
+        ceilingAt[index] = caps
+    end
+
+    -- Which nodes a given node can feed. The reverse of feedersAt, built once, and the thing that
+    -- turns a sweep into a worklist: when a node's head improves, only these can improve because of
+    -- it.
+    local consumersAt = {}
+    for index = 1, count do
+        consumersAt[index] = {}
+    end
+    for index = 1, count do
+        local list = feedersAt[index]
+        for order = 1, #list do
+            local feeder = list[order]
+            consumersAt[feeder][#consumersAt[feeder] + 1] = index
+        end
+    end
+
+    -- A worklist, not alternating full sweeps.
+    --
+    -- The sweeps were the honest first version: Kahlua has no heap, so a Dijkstra order was out, and
+    -- sweeping the BFS order forwards and back converges in a few rounds. But "a few" turned out to be
+    -- TEN on a real farm where the bench needed five, and every one of those rounds re-examined all
+    -- 181 nodes -- 5 430 relaxations per solve to move a handful of heads.
+    --
+    -- Relaxing to a fixed point does not care what order the nodes are visited in; it cares that no
+    -- node is left improvable. So the queue holds exactly the nodes that could have changed: seeded
+    -- with everything, and re-seeded with a node's consumers whenever its head actually moves. The
+    -- fixed point is identical -- same predicate, same epsilon -- and the nodes that settle early are
+    -- simply not looked at again.
+    --
+    -- The cap survives as a bound on total relaxations rather than on rounds, so a pathological
+    -- network still terminates and still says so.
+    local headAt = {}
+    local passes = math.max(Constants.HYDRAULIC_RELAX_PASSES or 1, 1)
+    local limit = passes * count
+    local counters = Hydraulics.counters
+
+    local queue = {}
+    local queued = {}
+    for index = 1, count do
+        queue[index] = index
+        queued[index] = true
+    end
+
+    local cursor = 1
+    local processed = 0
+
+    while cursor <= #queue and processed < limit do
+        local index = queue[cursor]
+        cursor = cursor + 1
+        queued[index] = false
+        processed = processed + 1
+
+        local base = supplyAt[index]
+        local edgeLoss = lossAt[index]
+        local list = feedersAt[index]
+        local caps = ceilingAt[index]
+
+        for order = 1, #list do
+            local feederHead = headAt[list[order]]
+            if feederHead then
+                local arriving = feederHead - edgeLoss
+                local ceiling = caps and caps[order]
+                if ceiling and arriving > ceiling then
+                    arriving = ceiling
                 end
                 if not base or arriving > base then
                     base = arriving
@@ -639,60 +875,125 @@ local function propagate(nodes, sequence, parents, feeders, supply, flow, peak, 
             end
         end
 
-        if not base then
-            return false
-        end
-
-        -- No pump term here, deliberately: see the end of collectSupplyAndDemand. A booster raises the
-        -- supply, not the tile it happens to sit on -- doing it here is what made the field diverge.
-
-        local previous = head[key]
-        if previous and base <= previous + 0.0001 then
-            return false
-        end
-        head[key] = base
-        return true
-    end
-
-    local passes = math.max(Constants.HYDRAULIC_RELAX_PASSES or 1, 1)
-    for pass = 1, passes do
-        local changed = false
-        if pass % 2 == 1 then
-            for index = 1, #sequence do
-                if relax(sequence[index]) then changed = true end
+        if base then
+            local previous = headAt[index]
+            if not previous or base > previous + 0.0001 then
+                headAt[index] = base
+                local consumers = consumersAt[index]
+                for order = 1, #consumers do
+                    local consumer = consumers[order]
+                    if not queued[consumer] then
+                        queued[consumer] = true
+                        queue[#queue + 1] = consumer
+                    end
+                end
             end
-        else
-            for index = #sequence, 1, -1 do
-                if relax(sequence[index]) then changed = true end
-            end
-        end
-        if not changed then
-            break
         end
     end
 
+    counters.relaxCalls = counters.relaxCalls + processed
+    counters.relaxPasses = counters.relaxPasses + math.ceil(processed / math.max(count, 1))
+    if processed >= limit then
+        -- Ran out of relaxations with the queue still holding work. Counted, because it means two
+        -- different things at once and neither is visible otherwise: the relaxation is doing its
+        -- maximum work every time (the cost), and the field it returns is not fully converged (the
+        -- answer).
+        counters.relaxCapped = counters.relaxCapped + 1
+    end
+
+    -- Back to node keys, which is what every reader of the field expects.
+    local head = {}
+    for index = 1, count do
+        local value = headAt[index]
+        if value then
+            head[sequence[index]] = value
+        end
+    end
     return head
 end
 
 -- ===== The solve =====
 
-local function solveZone(seedSquare)
+-- How many consumers this zone could serve the LAST time it was solved.
+--
+-- Kept across scoped invalidations on purpose. What actually invalidates the field, minute to minute,
+-- is a barrel crossing empty -- 47 of the 50 solves in one measured window -- and the answer barely
+-- moves when it does: a farm serving 31 of 47 sprinklers still serves about 31 a moment later. The
+-- binary search below starts there and walks outward, so the usual case costs two or three
+-- re-pricings instead of the seven a search over the whole range needs, and it still finds exactly
+-- the same answer because the predicate is monotone and the bracket is proved before it narrows.
+--
+-- Cleared only by the global drop, which also bounds it: keys are seed tiles, and a save has as many
+-- as it has networks.
+local servableHint = {}
+
+-- ===== Topology, which outlives a supply change =====
+--
+-- What the zone IS -- its nodes, how they connect, which routers sit on the edges -- changes only when
+-- the pipe layout does, and every way that can happen fires an object event. What SUPPLIES it changes
+-- constantly: a barrel crossing empty is 211 of the 215 field invalidations in a measured window.
+--
+-- Those were the same drop, so every barrel emptying re-walked the world. discover() is the only phase
+-- that touches it -- a getGridSquare and a pipe/router probe per neighbour of every node -- and it was
+-- measured at 12.9 ms of a 40 ms re-solve. Splitting them means a supply change re-prices the field it
+-- already has, and only an object event goes back to the world.
+local function discoverTopology(seedSquare)
+    local mark = markPhase()
     local nodes, order, adjacency, routers, purifierOutlets = discover(seedSquare)
+    sincePhase("solve/discover", mark)
     if #order == 0 then
         return nil
     end
 
-    local supply, demand, kinds, pumps, sources, supplyFloor, stats =
-        collectSupplyAndDemand(nodes, order)
+    -- Every node that can hand head to another. Derived purely from the adjacency and the routers, so
+    -- it belongs to the topology and not to the solve that reads it.
+    return {
+        nodes = nodes,
+        order = order,
+        adjacency = adjacency,
+        routers = routers,
+        purifierOutlets = purifierOutlets,
+        feeders = buildFeeders(nodes, adjacency, routers),
+        -- Where the vessels, inlets, pumps and emitters stand. Structural, so it belongs here rather
+        -- than being rediscovered by every re-pricing. See classifySites.
+        sites = classifySites(nodes, order),
+    }
+end
 
-    local feeders = buildFeeders(nodes, adjacency, routers)
+local function solveWithTopology(topology, zoneKey)
+    local nodes = topology.nodes
+    local order = topology.order
+    local adjacency = topology.adjacency
+    local routers = topology.routers
+    local purifierOutlets = topology.purifierOutlets
+    local feeders = topology.feeders
+
+    countPhase("solve: nodes", #order)
+
+    local mark = markPhase()
+    local supply, demand, kinds, pumps, sources, supplyFloor, stats =
+        collectSupplyAndDemand(nodes, order, topology.sites)
+    sincePhase("solve/supply", mark)
+
+    mark = markPhase()
     local depth, parents, sequence, viaRouter = orderBySupply(nodes, adjacency, routers, supply)
+    sincePhase("solve/order", mark)
     if not sequence then
         -- Nothing supplies this zone: no water, no mains, no pump with a source. Every node is dry,
         -- which is a real answer and not a failure -- return the shape with an empty field.
+        --
+        -- THE SHAPE, not most of it. `feeders` was missing here, and Hydraulics.floodFrom indexes it
+        -- without a guard -- so asking a dry zone for anything measured from a tile (a tap's summary,
+        -- an emitter's status: both go through distancesFrom) threw instead of answering "nothing".
+        -- A dry network is the ordinary state of a farm the player has not filled yet, so this was
+        -- not an edge case. Two return statements describing the same table is the trap; the fix is
+        -- to keep them describing the same table.
         return {
+            topology = topology,
             nodes = nodes, order = order, adjacency = adjacency, routers = routers,
-            purifierOutlets = purifierOutlets,
+            feeders = feeders, purifierOutlets = purifierOutlets,
+            parents = parents, viaRouter = viaRouter,
+            supply = supply, sequence = nil,
             sources = sources, demand = demand, kinds = kinds,
             head = {}, flow = {}, depth = {}, supplyFloor = supplyFloor, pumps = pumps, stats = stats,
             starved = {}, iterations = 0,
@@ -724,6 +1025,7 @@ local function solveZone(seedSquare)
     for key in pairs(demand) do
         ordered[#ordered + 1] = key
     end
+
     table.sort(ordered, function(left, right)
         local minLeft = Pressure.minimumFor(kinds[left])
         local minRight = Pressure.minimumFor(kinds[right])
@@ -738,14 +1040,29 @@ local function solveZone(seedSquare)
         return left < right
     end)
 
+    countPhase("solve: consumers", #ordered)
+
     local head, flow, peak
     local solves = 0
+
+    -- The field left behind by the last probe that SUCCEEDED, and the size it was for.
+    --
+    -- The search ends by re-pricing at the chosen size, because its last probe is usually a failed one
+    -- and the head/flow left behind would otherwise describe a state the mod reports as not happening.
+    -- But in the common path -- hint succeeds, hint+1 fails -- the answer IS the hint, and its field
+    -- was computed two probes ago and thrown away. Keeping it turns three re-pricings into two, and a
+    -- re-pricing is a whole relaxation of the zone.
+    --
+    -- Safe to keep by reference: accumulate and propagate each build fresh tables and nothing mutates
+    -- them afterwards.
+    local bestCount, bestHead, bestFlow, bestPeak = nil, nil, nil, nil
 
     -- Price the network with exactly the first `count` consumers drawing, and report whether every one
     -- of them clears its own minimum. Leaves head/flow/peak describing that state, which is what makes
     -- the final call below the thing that decides what the readouts say.
     local function trySet(count)
         solves = solves + 1
+        Hydraulics.counters.repricings = Hydraulics.counters.repricings + 1
         local active = {}
         for index = 1, count do
             active[ordered[index]] = true
@@ -759,10 +1076,78 @@ local function solveZone(seedSquare)
                 return false
             end
         end
+
+        bestCount, bestHead, bestFlow, bestPeak = count, head, flow, peak
         return true
     end
 
-    local low, high = 0, #ordered
+    -- The servable-set binary search: about log2(N)+1 full re-pricings of the field, each an
+    -- accumulate plus a propagate over every node. Pure Lua, no world access -- which is exactly why
+    -- the bridge-call model could never see it, and why it is timed here instead.
+    local searchMark = markPhase()
+
+    -- Two searches, because a hint and no hint want different ones -- and measured, not assumed:
+    -- walking outward from the TOP of the range with no hint made a starved farm slower than the plain
+    -- binary search it replaced, on two of three benched networks. A bracket walk is only a good search
+    -- when you already have reason to believe the answer is close.
+    --
+    -- trySet(0) is vacuously true -- no consumer drawing, nothing to fail -- so a downward walk always
+    -- terminates with a workable `low`. Every probe is the same monotone predicate the plain search
+    -- used, so the answer is identical whichever branch runs; only the order the range is explored in
+    -- differs. tools/conservation/test_hydraulics.lua check 15 asserts exactly that, for every hint in
+    -- the range.
+    local count = #ordered
+    local hinted = servableHint[zoneKey or ""]
+    if hinted and (hinted > count or hinted < 0) then
+        hinted = nil
+    end
+
+    local low, high
+
+    if hinted then
+        -- The usual case in play: the field is re-solved because a barrel crossed empty, and the
+        -- answer barely moves. Walk outward from where it was.
+        if trySet(hinted) then
+            low, high = hinted, count
+            local step = 1
+            while low < high do
+                local probe = low + step
+                if probe > count then probe = count end
+                if trySet(probe) then
+                    low = probe
+                    if probe == count then break end
+                    step = step * 2
+                else
+                    high = probe - 1
+                    break
+                end
+            end
+        else
+            low, high = 0, hinted - 1
+            local step = 1
+            while true do
+                local probe = hinted - step
+                if probe <= 0 then break end
+                if trySet(probe) then
+                    low = probe
+                    break
+                end
+                high = probe - 1
+                step = step * 2
+            end
+        end
+    else
+        -- No hint: the first solve of a zone, or the first after a global drop. Probe the WHOLE set
+        -- once, because a farm with head to spare serves every emitter and that is one probe instead
+        -- of six -- and if it fails, fall back to the plain binary search over what is left rather
+        -- than groping downward from the top.
+        if trySet(count) then
+            low, high = count, count
+        else
+            low, high = 0, count - 1
+        end
+    end
+
     while low < high do
         local middle = math.floor((low + high + 1) / 2)
         if trySet(middle) then
@@ -772,10 +1157,21 @@ local function solveZone(seedSquare)
         end
     end
 
-    -- Re-price at the chosen size, unconditionally. The binary search's last probe is usually a
-    -- FAILED one, so without this the head and flow left behind would describe a state the mod then
-    -- reports as not happening -- which is exactly the contradiction this replaced.
-    trySet(low)
+    if zoneKey then
+        servableHint[zoneKey] = low
+    end
+
+    -- Re-price at the chosen size -- unless the field for exactly that size is already in hand from
+    -- the probe that proved it. The point stands either way: what the mod reports and what it priced
+    -- must be the same state, which is the contradiction this replaced.
+    if bestCount == low and bestHead then
+        head, flow, peak = bestHead, bestFlow, bestPeak
+    else
+        trySet(low)
+    end
+
+    sincePhase("solve/search", searchMark)
+    countPhase("solve: repricings", solves)
 
     local starved = {}
     for index = low + 1, #ordered do
@@ -783,11 +1179,17 @@ local function solveZone(seedSquare)
     end
 
     return {
+        -- Carried on the solution so the next supply change can re-price without going to the world.
+        topology = topology,
         nodes = nodes,
         order = order,
         adjacency = adjacency,
         routers = routers,
         feeders = feeders,
+        -- Carried so the field can be re-priced with ONE extra consumer switched on, which is what
+        -- Hydraulics.headIfDrawing needs. Nothing else reads them.
+        parents = parents,
+        viaRouter = viaRouter,
         purifierOutlets = purifierOutlets,
         supply = supply,
         sequence = sequence,
@@ -803,6 +1205,14 @@ local function solveZone(seedSquare)
         starved = starved,
         iterations = solves,
     }
+end
+
+local function solveZone(seedSquare, zoneKey)
+    local topology = discoverTopology(seedSquare)
+    if not topology then
+        return nil
+    end
+    return solveWithTopology(topology, zoneKey)
 end
 
 -- ===== Per-frame cache, shared across every consumer on the network =====
@@ -821,13 +1231,18 @@ local zoneOfNode = {}
 
 -- Counters. Free while nothing reads them, and the only way to tell a cache that is working from one
 -- being dropped faster than it is built -- which is the failure this file already shipped with once.
-Hydraulics.counters = { solves = 0, hits = 0, scoped = 0, global = 0, untouched = 0 }
+Hydraulics.counters = { solves = 0, hits = 0, scoped = 0, global = 0, untouched = 0,
+                        relaxPasses = 0, relaxCalls = 0, repricings = 0, relaxCapped = 0,
+                        supplyOnly = 0 }
 
 -- Every field on the map. For the per-minute pass and for the changes not tied to a tile: a pump
 -- switched, a sandbox value, a full network rebuild.
 function Hydraulics.invalidate()
     solutionCache = {}
     zoneOfNode = {}
+    -- The servable hint survives a SCOPED drop, which is the common one, but not this: a global drop
+    -- means the shape itself is in question, and this is also what bounds the table.
+    servableHint = {}
     Hydraulics.counters.global = Hydraulics.counters.global + 1
 end
 
@@ -851,6 +1266,20 @@ local function forgetZone(zoneId)
         end
     end
     zoneOfNode[zoneId] = nil
+    return true
+end
+
+-- The zone's SUPPLY changed -- a vessel crossed between empty and not -- but its shape did not.
+--
+-- Marking rather than dropping is the whole point: the solution keeps its topology, so the re-solve
+-- that follows skips discover() entirely and never touches the world. A barrel emptying is 211 of
+-- every 215 field invalidations in a real save, so this is the common path, not the exception.
+local function staleSupplyInZone(zoneId)
+    local solution = zoneId and solutionCache[zoneId]
+    if not solution or not solution.topology then
+        return false
+    end
+    solution.supplyStale = true
     return true
 end
 
@@ -899,6 +1328,43 @@ function Hydraulics.invalidateAroundSquare(square)
     end
 end
 
+-- The same tile scoping, but for a change that cannot have moved a pipe: a vessel crossing between
+-- empty and not. The zone keeps its shape and re-prices from it.
+--
+-- Callers must be sure of that premise. It holds for OnWaterAmountChange and for nothing else in this
+-- mod -- an object appearing or leaving goes to invalidateAroundSquare above, which drops the topology
+-- with everything else, because an object CAN be a pipe.
+function Hydraulics.invalidateSupplyAroundSquare(square)
+    if not square or not square.getX then
+        Hydraulics.invalidate()
+        return
+    end
+
+    local okX, x = pcall(square.getX, square)
+    local okY, y = pcall(square.getY, square)
+    local okZ, z = pcall(square.getZ, square)
+    if not okX or not okY or not okZ or x == nil or y == nil or z == nil then
+        Hydraulics.invalidate()
+        return
+    end
+
+    local marked = staleSupplyInZone(zoneOfNode[keyOf(x, y, z)])
+    for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
+        if staleSupplyInZone(zoneOfNode[keyOf(x + offset.x, y + offset.y, z)]) then
+            marked = true
+        end
+    end
+    if staleSupplyInZone(zoneOfNode[keyOf(x, y, z - 1)]) then marked = true end
+    if staleSupplyInZone(zoneOfNode[keyOf(x, y, z + 1)]) then marked = true end
+
+    local counters = Hydraulics.counters
+    if marked then
+        counters.supplyOnly = counters.supplyOnly + 1
+    else
+        counters.untouched = counters.untouched + 1
+    end
+end
+
 function Hydraulics.invalidateAroundObject(worldObject)
     if not worldObject or not worldObject.getSquare then
         Hydraulics.invalidate()
@@ -921,9 +1387,25 @@ function Hydraulics.solveAt(square)
 
     local key = squareKey(square)
     local zoneId = zoneOfNode[key]
-    if zoneId and solutionCache[zoneId] then
+    local cached = zoneId and solutionCache[zoneId] or nil
+    if cached and not cached.supplyStale then
         Hydraulics.counters.hits = Hydraulics.counters.hits + 1
-        return solutionCache[zoneId]
+        return cached
+    end
+
+    -- Marked stale by a vessel crossing empty, but the shape is still good: re-price it without going
+    -- back to the world. The node set is identical, so every zoneOfNode entry pointing here stays
+    -- correct and no other tile has to be told.
+    if cached and cached.topology then
+        local repriced = solveWithTopology(cached.topology, zoneId)
+        if repriced then
+            repriced.id = zoneId
+            solutionCache[zoneId] = repriced
+            Hydraulics.counters.solves = Hydraulics.counters.solves + 1
+            return repriced
+        end
+        -- The zone no longer solves at all against its own topology. Fall through and rediscover.
+        solutionCache[zoneId] = nil
     end
 
     -- The seed must be a pipe tile: a fixture (sink, generator) has no pipe of its own, so the zone it
@@ -958,13 +1440,14 @@ function Hydraulics.solveAt(square)
 
     local seedKey = squareKey(seed)
     zoneId = zoneOfNode[seedKey]
-    if zoneId and solutionCache[zoneId] then
+    local seeded = zoneId and solutionCache[zoneId] or nil
+    if seeded and not seeded.supplyStale then
         zoneOfNode[key] = zoneId
         Hydraulics.counters.hits = Hydraulics.counters.hits + 1
-        return solutionCache[zoneId]
+        return seeded
     end
 
-    local solution = solveZone(seed)
+    local solution = solveZone(seed, seedKey)
     if not solution then
         return nil
     end
@@ -1172,6 +1655,148 @@ function Hydraulics.canDrawAt(solution, square, kind)
     end
 
     return head >= Pressure.minimumFor(kind), head
+end
+
+-- The head this tile would ACTUALLY have with this consumer drawing.
+--
+-- Hydraulics.pressureAt reports the field as solved, and the field is solved with only the servable
+-- consumers drawing -- so a consumer the search excluded reads a high number precisely because it is
+-- switched off. Showing that to a player produced a sprinkler reporting 37 next to "needs 20" and
+-- refusing to run, which reads as a bug and is not one.
+--
+-- This answers the question the player is really asking: switch this one on as well, and what does it
+-- get? For a consumer that is already served the answer is simply the solved field, so this costs
+-- nothing. For an excluded one it re-prices the zone once with that consumer added.
+--
+-- That is a whole relaxation, so it is NOT for the hot path: the spray FX asks about every emitter
+-- near the player several times a second and must keep using the cached field. This is for the
+-- tooltip, which a player opens deliberately, one emitter at a time.
+--
+-- Returns (head, shortfall) where shortfall is how much more head it would need, or nil when the
+-- question cannot be answered.
+function Hydraulics.headIfDrawing(solution, square, kind)
+    if not solution or not square or not kind then
+        return nil, nil
+    end
+
+    local key = squareKey(square)
+    local minimum = Pressure.minimumFor(kind)
+
+    -- Already served, or not a consumer the solve knows about: the solved field is the answer.
+    if not solution.starved or not solution.starved[key] or not solution.sequence then
+        local head = Hydraulics.pressureAt(solution, square, kind)
+        if not head then
+            return nil, nil
+        end
+        return head, math.max(minimum - head, 0)
+    end
+
+    -- Everything currently being served, plus this one.
+    local active = {}
+    for demandKey in pairs(solution.demand or {}) do
+        if not solution.starved[demandKey] then
+            active[demandKey] = true
+        end
+    end
+    active[key] = true
+
+    local flow, peak = accumulate(solution.sequence, solution.parents, solution.demand, active)
+    local head = propagate(solution.nodes, solution.sequence, solution.parents, solution.feeders,
+        solution.supply, flow, peak, solution.viaRouter)
+
+    local node = solution.nodes[key]
+    local absolute = head[key]
+    if not node or not absolute then
+        return nil, nil
+    end
+
+    local available = absolute - elevation(node.z)
+    return available, math.max(minimum - available, 0)
+end
+
+-- The key a square is indexed by in a solution, for callers outside this module that need to look
+-- one up. squareKey is a local, and reproducing "x:y:z" at the call site is how two indexes drift.
+function Hydraulics.nodeKeyOf(square)
+    if not square then
+        return nil
+    end
+    return squareKey(square)
+end
+
+-- How much MORE head this zone needs before this consumer can run.
+--
+-- Not the same as how far this tile is below its own minimum, and that distinction is the whole
+-- reason this exists. A sprinkler reporting 30 m against a minimum of 20 is not short of anything
+-- itself: it is switched off because turning it on would push a DIFFERENT emitter below ITS minimum.
+-- Asking "what do you need" of the tile you are standing on answers the wrong question and returns
+-- zero, which is why the readout could only say "the line cannot supply it" and nothing more.
+--
+-- So the question is asked of the whole set: serve everything already watering plus this one, and how
+-- far below its minimum does the worst-off consumer fall? That number is what the line is missing.
+--
+-- It is EXACT for the set it prices. Pump head enters the field as a supply term, so adding X raises
+-- every head by X and the worst-off consumer lands exactly on its minimum -- which is why "add a
+-- pump" is such a reliable fix and why the number is worth showing. It is a LOWER BOUND for this
+-- emitter overall: the search serves a prefix, so if other starved emitters sit between this one and
+-- the ones already running, they have to clear their own minimums too.
+--
+-- Returns (extraHeadNeeded, blockingKey). Zero means it could already be served. Nil means the
+-- question could not be answered.
+--
+-- One re-price. For the tooltip and the debug report, not for the hot path.
+function Hydraulics.headNeededToServe(solution, square, kind)
+    if not solution or not square or not solution.sequence or not solution.starved then
+        return nil, nil
+    end
+
+    local key = squareKey(square)
+
+    local active = {}
+    for demandKey in pairs(solution.demand or {}) do
+        if not solution.starved[demandKey] then
+            active[demandKey] = true
+        end
+    end
+    active[key] = true
+
+    local flow, peak = accumulate(solution.sequence, solution.parents, solution.demand, active)
+    local head = propagate(solution.nodes, solution.sequence, solution.parents, solution.feeders,
+        solution.supply, flow, peak, solution.viaRouter)
+
+    local worst, blocker = 0, nil
+    for activeKey in pairs(active) do
+        local node = solution.nodes[activeKey]
+        local absolute = head[activeKey]
+        local available = (node and absolute) and (absolute - elevation(node.z)) or nil
+        -- This consumer's own kind, except for the tile being asked about: it is not in the solve's
+        -- kinds table as a drawing consumer while it is switched off.
+        local ownKind = solution.kinds[activeKey]
+        if activeKey == key then
+            ownKind = kind or ownKind
+        end
+        local needed = Pressure.minimumFor(ownKind)
+
+        local missing
+        if not available then
+            missing = needed          -- nothing reaches it at all
+        else
+            missing = needed - available
+        end
+        if missing > worst then
+            worst, blocker = missing, activeKey
+        end
+    end
+
+    return worst, blocker
+end
+
+-- Would the line break if this one were switched on as well? The same question, as a yes or no.
+function Hydraulics.couldServeAlso(solution, square, kind)
+    local needed, blocker = Hydraulics.headNeededToServe(solution, square, kind)
+    if needed == nil then
+        return nil, nil
+    end
+    return needed <= 0, blocker
 end
 
 function Hydraulics.isStarvedAt(solution, square)

@@ -55,7 +55,11 @@ local STATUS_TTL_MS = 3000
 -- The sweep that actually populates the registry. Radius covers the widest reader (the spray FX at
 -- 18) with margin; the interval is what keeps it cheap -- the sweeps this replaced ran at 0.75 s,
 -- 1 s and 0.25 s, three of them, every second of play.
-local SWEEP_INTERVAL_TICKS = 300   -- ~5 s at 60 fps
+-- Milliseconds, not ticks, for the reason spelled out over RESCAN_MS in WaterPipesSprayFX: a tick
+-- count measures how fast the machine is, not how much time has passed. "300 ticks, ~5 s at 60 fps"
+-- is 2.4 s at 127, so this swept twice as often on a better PC -- and it was 18% of everything the
+-- mod did in the window that showed it.
+local SWEEP_INTERVAL_MS = 5000
 local SWEEP_RADIUS = 20
 -- Rows of the sweep done per tick. Spreading it stops the rebuild from landing as one visible spike
 -- in a single frame -- it is the same total work, just not all at once.
@@ -208,6 +212,10 @@ end
 -- at a registry that is missing things.
 local sweep = nil            -- in-progress sweep, nil when idle
 local sweepCountdown = 0
+-- Declared HERE, beside the state it belongs to, and not down by the tick handler that reads it:
+-- Registry.requestSweep below writes it, and a write to a name whose `local` comes later in the file
+-- is a write to a GLOBAL. It compiles, it runs, and the local it was meant for never changes.
+local nextSweepAtMs = nil
 
 local function beginSweep()
     local player = getPlayer and getPlayer() or nil
@@ -263,6 +271,7 @@ end
 -- bug (the player just placed or removed something that changes what is on a tile).
 function Registry.requestSweep()
     sweepCountdown = 0
+    nextSweepAtMs = nil
 end
 
 -- ===== Reads =====
@@ -275,7 +284,15 @@ local FINDERS = {
     purifiers = function(square) return Purifier.findOnSquare(square) end,
 }
 
--- Every remembered tile of `kind` within `radius` of (px, py, pz), as { square, object } pairs.
+-- Every remembered tile of `kind` within `radius` of (px, py, pz).
+--
+-- Each result carries `x`, `y`, `z` and `key` as well as the square and the object, and that is not
+-- convenience -- it is the point. The registry already knows the coordinates; it stored them. Handing
+-- back only the square made every caller ask the engine for them again: the spray FX made NINE bridge
+-- calls per emitter per rebuild (three for the hydrant-claim key, three for the list entry, three
+-- inside emitterStatus) plus two string builds, for numbers that were sitting in the entry all along.
+-- At 43 emitters and 2.7 rebuilds a second that was 66 000 bridge calls in a sixty-second window to
+-- re-derive what was never lost.
 --
 -- Each candidate is re-checked here rather than trusted. That is what lets the registry survive the
 -- cases PZ gives us no event for -- a chunk unloading, a save loaded with tiles already streamed in --
@@ -306,7 +323,10 @@ function Registry.near(kind, px, py, pz, radius)
                 entry.object = object
             end
             if object then
-                results[#results + 1] = { square = square, object = object }
+                results[#results + 1] = {
+                    square = square, object = object,
+                    x = entry.x, y = entry.y, z = entry.z, key = key,
+                }
             elseif square then
                 -- The square is loaded and the thing is gone: forget it. A square that is merely
                 -- unloaded (nil) is left alone, so walking out of range does not erase the registry.
@@ -349,14 +369,25 @@ end
 -- Backdating the first stamp by a per-tile amount breaks the convoy. It is the same total work over
 -- the same three seconds; it just stops being a spike. Note this cannot show up in tools/perf, which
 -- counts calls made and not when they land -- the profiler is the instrument for it.
-function Registry.emitterStatus(emitter, square)
+-- One clock read for a whole pass.
+--
+-- The cached path through statusOf below is otherwise nothing but a table lookup and a subtraction --
+-- and it was spending a pcall and a bridge call per emitter to ask what time it was. Same answer for
+-- every emitter in the same rebuild, 7 386 times in a sixty-second window. A caller that is about to
+-- ask about several tiles takes one stamp and passes it down.
+function Registry.stamp()
+    return nowMs()
+end
+
+-- The core. `entry` is a Registry.near result: object, square, x, y, z, key, all in hand.
+local function statusOf(entry, stampMs)
+    local emitter, square = entry.object, entry.square
     if not emitter or not square then
         return nil
     end
 
-    local x, y, z = square:getX(), square:getY(), square:getZ()
-    local key = keyOf(x, y, z)
-    local stamp = nowMs()
+    local x, y, z, key = entry.x, entry.y, entry.z, entry.key
+    local stamp = stampMs or nowMs()
     local cached = statusCache[key]
     if cached and stamp and (stamp - cached.stamp) < STATUS_TTL_MS then
         return cached.status
@@ -380,6 +411,20 @@ function Registry.emitterStatus(emitter, square)
     return status
 end
 
+-- The fast form: hand it a Registry.near entry and the pass's stamp.
+function Registry.statusFor(entry, stampMs)
+    if not entry then
+        return nil
+    end
+    return statusOf(entry, stampMs)
+end
+
+-- There is deliberately NO square-only form. Every reader of this module gets its tiles from
+-- Registry.near, so every one of them has an entry; a convenience wrapper for a caller that does not
+-- exist would be a public function with no caller, which is an untested function however green the
+-- suite looks. That is precisely how Adapter.verifySquareVessels shipped bound to a nil global. If a
+-- caller ever genuinely holds only a square, add it back WITH a test that calls it.
+
 -- Drop a tile's cached status so the next read recomputes it. For the moments the player expects an
 -- immediate answer (opening the pump switch, toggling a hydrant) rather than up to a TTL of lag.
 function Registry.invalidate(x, y, z)
@@ -395,14 +440,28 @@ end
 -- Note what is NOT here: LoadGridsquare. It fires too early to classify anything (see the header),
 -- and hooking it would only pay for a scan of every streamed tile to learn nothing.
 
+-- Rows per tick stays frame-based on purpose: that one is about not spiking a single frame, and a
+-- frame is exactly what it is spreading the work across. Only the INTERVAL is a duration.
 local function onTick()
     if sweep then
         Profiler.time("registry/sweep", stepSweep)
         return
     end
+
+    local stamp = nowMs()
+    if stamp then
+        if nextSweepAtMs and stamp < nextSweepAtMs then
+            return
+        end
+        nextSweepAtMs = stamp + SWEEP_INTERVAL_MS
+        beginSweep()
+        return
+    end
+
+    -- No clock in this build: fall back to the frame counter rather than sweeping every tick.
     sweepCountdown = sweepCountdown - 1
     if sweepCountdown <= 0 then
-        sweepCountdown = SWEEP_INTERVAL_TICKS
+        sweepCountdown = 300
         beginSweep()
     end
 end

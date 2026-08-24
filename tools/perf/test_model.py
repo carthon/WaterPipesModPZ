@@ -129,8 +129,14 @@ M.RESOLVED.clear()
 uncached = M.registry_near("emitters", 10, 10, 0, 18)
 cached = M.registry_near("emitters", 10, 10, 0, 18)
 check_equal("the registry returns the same tiles cached or not",
-            sorted((s.x, s.y, s.z) for s, _o in uncached),
-            sorted((s.x, s.y, s.z) for s, _o in cached))
+            sorted((e["x"], e["y"], e["z"]) for e in uncached),
+            sorted((e["x"], e["y"], e["z"]) for e in cached))
+# The entry carries the coordinates itself now. Assert they AGREE with the square,
+# because the whole saving rests on the caller trusting them instead of asking the
+# engine -- a registry that remembers the wrong tile would be worse than the cost.
+check("the entry's coordinates match its square",
+      all(e["x"] == e["square"].x and e["y"] == e["square"].y and e["z"] == e["square"].z
+          for e in cached))
 
 
 # ---------------------------------------------------------------------------
@@ -201,6 +207,76 @@ M.measure(M.pass_sprayfx_rescan, sc)
 M.measure(M.pass_refreshPlumbedEndpoints, sc)
 check_equal("the square count is unchanged", len(M.WORLD.squares), before)
 
+
+# ---------------------------------------------------------------------------
+# 7. Isolation again, at the granularity the first check missed.
+# ---------------------------------------------------------------------------
+# Check 1 rebuilds the SCENARIO between measurements, and Scenario.__init__ empties
+# every world-derived cache -- so it proves isolation across scenarios and says
+# nothing about isolation across passes within one. That gap was real: three of the
+# four caches had already been given event lifetimes, so measuring 10min/scan right
+# after 1min/routers charged it a warm memo and recorded a seventieth of its true
+# cost. The recorded baseline was a worst case for the first pass of each group and
+# fiction for every pass after it.
+#
+# So: every server pass, measured alone, must cost exactly what it costs after every
+# other server pass has already run. That is what measure()'s cold() is for, and this
+# is the assertion that keeps it there.
+print("")
+print("-- 7. a pass costs the same whatever ran before it --")
+
+sc = B.build(MEDIUM)
+alone = {}
+for label, fn in B.SERVER_PASSES:
+    sc = B.build(MEDIUM)
+    n, _, _ = M.measure(fn, sc)
+    alone[label] = n
+
+# Now the same passes back to back on ONE scenario, in order, the way run_suite does.
+sc = B.build(MEDIUM)
+for label, fn in B.SERVER_PASSES:
+    n, _, _ = M.measure(fn, sc)
+    check_equal("%s: same measured after its predecessors" % label, n, alone[label])
+
+# And in the reverse order, since a leak that happens to be order-independent would
+# slip past the check above.
+sc = B.build(MEDIUM)
+for label, fn in reversed(B.SERVER_PASSES):
+    n, _, _ = M.measure(fn, sc)
+    check_equal("%s: and in reverse order too" % label, n, alone[label])
+
+
+# ---------------------------------------------------------------------------
+# 8. A run of minutes costs less per minute than the first one.
+# ---------------------------------------------------------------------------
+# The point of giving the fill topology an event lifetime: minute two must not
+# re-walk what minute one walked. If five minutes ever cost five times one minute,
+# the cache is being dropped by something and the whole change has been undone --
+# which is the failure this codebase has now had four times, always silently.
+print("")
+print("-- 8. an event-scoped cache actually survives to the next minute --")
+
+minute = [fn for l, fn in B.SERVER_PASSES if l.startswith("1min/")]
+
+sc = B.build(MEDIUM)
+one, _, _ = M.measure_frame(minute, sc)
+
+sc = B.build(MEDIUM)
+M.reset()
+M.cold()
+for _ in range(5):
+    M.frame_reset()
+    for fn in minute:
+        fn(sc)
+five = M.total_bc()
+
+check("five minutes cost less than five cold ones", five < one * 5,
+      "%s vs %s" % (five, one * 5))
+check("...and at least as much as one", five >= one, "%s vs %s" % (five, one))
+# A frame boundary must not be what keeps them cheap: dropping the frame memos
+# between minutes is already what the loop above does, so this is the real cadence.
+check("the saving is worth having (under 4x one minute)", five < one * 4,
+      "%s vs %s" % (five, one * 4))
 
 print("")
 if FAILURES:

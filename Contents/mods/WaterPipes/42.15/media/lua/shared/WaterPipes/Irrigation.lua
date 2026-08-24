@@ -227,6 +227,20 @@ function Irrigation.getEmitterStatus(worldObject, square)
         local canDraw, head = Hydraulics.canDrawAt(solution, square, kind)
         status.pressure = head
         status.canDraw = canDraw and true or false
+
+        -- WHY it cannot draw, which is not the same question and has two very different answers.
+        --
+        -- `starved` means the servable-set search excluded this emitter: the line cannot carry it on
+        -- top of what it is already serving. The head reported above is then the pressure this tile
+        -- has WITH THIS EMITTER OFF, and it can look perfectly healthy -- 37 against a minimum of 20 --
+        -- because it is high precisely because the emitter is not drawing. Telling the player "not
+        -- enough pressure, needs 20" under a reading of 37 is not a hint, it is a contradiction, and
+        -- the fix it suggests (shorten the run) is not the fix that works (add a pump, or fewer
+        -- emitters on the line).
+        --
+        -- Anything else that fails the gate really is below the minimum, and the old message is right.
+        status.starved = Hydraulics.isStarvedAt
+            and Hydraulics.isStarvedAt(solution, square) and true or false
     end
 
     -- Is there actually water to draw here? (A dry network makes an emitter idle even at full pressure.)
@@ -489,17 +503,41 @@ function Irrigation.beginPass(dtHours)
 end
 
 -- Run up to `budget` emitters. Returns true once the pass is done.
-function Irrigation.stepPass(budget)
+-- Wall clock, or nil on a build that does not expose one -- in which case the emitter count below is
+-- the only limit, exactly as it was before.
+local function nowMs()
+    if not getTimestampMs then
+        return nil
+    end
+    local ok, ms = pcall(getTimestampMs)
+    return (ok and type(ms) == "number") and ms or nil
+end
+
+function Irrigation.stepPass(budget, budgetMs)
     if not pendingPass then
         return true
     end
 
     local emitters = pendingPass.emitters
     local dtHours = pendingPass.dtHours
-    local last = math.min(pendingPass.index + math.max(budget or 1, 1) - 1, #emitters)
+    local ceiling = math.min(pendingPass.index + math.max(budget or 1, 1) - 1, #emitters)
 
-    for index = pendingPass.index, last do
+    -- The count is a ceiling; the clock is the limit. One emitter always runs, so the pass advances
+    -- however expensive that emitter turns out to be -- and an emitter IS expensive: its draw empties
+    -- a barrel, which invalidates the head field, which the next emitter re-solves.
+    local limitMs = budgetMs or Constants.IRRIGATION_MS_PER_TICK
+    local startedAt = limitMs and nowMs() or nil
+
+    local last = pendingPass.index
+    for index = pendingPass.index, ceiling do
         pendingPass.spent = (pendingPass.spent or 0) + processEmitter(emitters[index], dtHours)
+        last = index
+        if startedAt then
+            local stamp = nowMs()
+            if stamp and (stamp - startedAt) >= limitMs then
+                break
+            end
+        end
     end
 
     pendingPass.index = last + 1

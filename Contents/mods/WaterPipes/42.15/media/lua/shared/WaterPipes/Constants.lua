@@ -508,10 +508,25 @@ Constants.IRRIGATION_MAX_WATER_LEVEL = 100
 -- (see rebalanceSummary), so conservation is exact whatever this is set to.
 Constants.FLUID_WRITE_EPSILON = 0.01
 
--- Emitters processed per frame while an irrigation pass drains (see Irrigation.beginPass). Low
--- enough that no single frame carries a visible share of the pass, high enough that even a very
--- large field is finished inside a second or two of real time -- long before the next hourly tick.
+-- The most emitters one frame may process while an irrigation pass drains (see Irrigation.beginPass).
+-- A CEILING, not a target: the real limit is the millisecond budget below.
 Constants.IRRIGATION_EMITTERS_PER_TICK = 4
+
+-- ...and how long that frame may actually spend on them.
+--
+-- A count is a proxy for cost, and this one drifted: four emitters was cheap when the head field was
+-- cheap, and measured at 37 ms a frame once the field became the expensive part -- every one of the
+-- twelve frames of a pass over the visible-stutter line. The count could be lowered, and would drift
+-- again the next time anything under it changes.
+--
+-- So the budget is stated in the units the problem is actually in. At least one emitter is always
+-- processed, so a pass always advances however expensive a single one turns out to be; after that the
+-- clock decides. Eight milliseconds leaves room under the ~16 ms where a stutter becomes visible for
+-- everything the game itself does in the same frame.
+--
+-- Same correction as the tick-based pacing in the spray FX and the tile registry: measuring frames
+-- when you mean time gets you a cost that depends on the machine instead of on the work.
+Constants.IRRIGATION_MS_PER_TICK = 8
 
 -- ===== Pressure gauge =====
 -- Pressure is otherwise an invisible number; this is the only way the player can see it.

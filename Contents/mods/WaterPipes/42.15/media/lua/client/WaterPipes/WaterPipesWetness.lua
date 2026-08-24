@@ -66,9 +66,10 @@ local function playerIsInSpray(player)
 
     -- Only the sprinkler: a drip emitter waters the soil of its own tile and would not wet a person
     -- standing on it.
+    local stamp = Registry.stamp()
     for _, found in ipairs(Registry.near("emitters", px, py, pz, r)) do
         if Irrigation.isSprinkler(found.object) then
-            local status = Registry.emitterStatus(found.object, found.square)
+            local status = Registry.statusFor(found, stamp)
             if status and status.active then
                 return true
             end

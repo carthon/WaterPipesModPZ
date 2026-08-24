@@ -33,11 +33,30 @@ local Profiler = WaterPipes.Profiler
 local enabled = false
 local buckets = {}          -- name -> { calls, totalMs, worstMs }
 local counters = {}         -- name -> integer
-local frameMs = 0           -- our work in the frame being accumulated
+local frameMs = 0           -- our work in the frame being accumulated, TOP LEVEL ONLY
 local frames = 0
 local worstFrameMs = 0
 local over5, over10, over20 = 0, 0, 0
 local startedAtMs = nil
+local totalMs = 0           -- our work over the window, top level only
+local depth = 0             -- how many timings are open right now
+
+-- Timings nest, and for a long time nothing here knew that.
+--
+-- `sprayfx: status` runs inside `sprayfx/rescan`; `pump/headroom` runs inside `1min/pumps` inside
+-- `system/1min`. Every one of those was added to the same running total, so the same millisecond was
+-- counted two and three times. The report said "share of wall clock 7.11%" where the truth was 4.11%,
+-- and "worst frame 338 ms" where the truth was one 169 ms frame counted twice.
+--
+-- Worse than being wrong, it was wrong by a factor that CHANGED: adding three nested buckets to
+-- measure the fill path made the headline number rise while the mod got faster, which reads as a
+-- regression and is not one. A measurement that moves when you measure it differently is not a
+-- measurement.
+--
+-- So: a bucket still records its own elapsed time, children included -- that is what a breakdown is
+-- for. But the WINDOW and FRAME totals take only depth-0 timings, which are each counted exactly
+-- once. Buckets entered while another timing was open are marked `nested` and reported as such, so
+-- the table says plainly which rows are already inside a row above them.
 
 local function nowMs()
     if not getTimestampMs then
@@ -53,7 +72,8 @@ end
 local function bucketFor(name)
     local bucket = buckets[name]
     if not bucket then
-        bucket = { calls = 0, totalMs = 0, worstMs = 0, over1 = 0, over5 = 0, over20 = 0 }
+        bucket = { calls = 0, totalMs = 0, worstMs = 0, over1 = 0, over5 = 0, over20 = 0,
+                   nested = false }
         buckets[name] = bucket
     end
     return bucket
@@ -72,6 +92,8 @@ function Profiler.reset()
     frames = 0
     worstFrameMs = 0
     over5, over10, over20 = 0, 0, 0
+    totalMs = 0
+    depth = 0
     startedAtMs = nowMs()
 
     -- The hydraulic counters live in Hydraulics so that module needs no dependency on this one. They
@@ -81,6 +103,13 @@ function Profiler.reset()
     if Hydraulics and Hydraulics.counters then
         for key in pairs(Hydraulics.counters) do
             Hydraulics.counters[key] = 0
+        end
+    end
+
+    local NetworkAccess = WaterPipes.NetworkAccess
+    if NetworkAccess and NetworkAccess.counters then
+        for key in pairs(NetworkAccess.counters) do
+            NetworkAccess.counters[key] = 0
         end
     end
 end
@@ -99,41 +128,111 @@ end
 
 -- ===== Recording =====
 
+-- Book `elapsed` milliseconds against `name`, at nesting depth `openDepth` (0 = top level).
+-- The primitive the two forms below are built on.
+function Profiler.record(name, elapsed, openDepth)
+    if not enabled or not elapsed then
+        return
+    end
+
+    local bucket = bucketFor(name)
+    if (openDepth or 0) > 0 then
+        bucket.nested = true
+    end
+    bucket.calls = bucket.calls + 1
+    bucket.totalMs = bucket.totalMs + elapsed
+    if elapsed > bucket.worstMs then
+        bucket.worstMs = elapsed
+    end
+    -- An average is only a description when the calls resemble each other. These stopped doing that:
+    -- a spray-FX rebuild averaged 16 ms with a worst of 180, and the frame histogram showed nothing at
+    -- all between 5 and 20 -- most rebuilds nearly free, a few enormous. Dividing the total by the
+    -- count in that situation invents a call that never happened, and one round of this was spent
+    -- optimising the number rather than the cost.
+    if elapsed >= 20 then
+        bucket.over20 = bucket.over20 + 1
+    elseif elapsed >= 5 then
+        bucket.over5 = bucket.over5 + 1
+    elseif elapsed >= 1 then
+        bucket.over1 = bucket.over1 + 1
+    end
+    -- Only depth 0 reaches the window and frame totals. A nested timing is already inside the
+    -- parent's elapsed time; adding it again is what made every headline number in this report
+    -- larger than the work it described.
+    if (openDepth or 0) == 0 then
+        frameMs = frameMs + elapsed
+        totalMs = totalMs + elapsed
+    end
+end
+
+-- Open a timing. Returns a mark to hand to Profiler.since, or nil when the profiler is off -- so the
+-- disabled path is one comparison and no clock read.
+function Profiler.mark()
+    if not enabled then
+        return nil
+    end
+    local started = nowMs()
+    if not started then
+        return nil
+    end
+    -- The depth AT WHICH THIS OPENED travels with the mark, so an unbalanced pair cannot make a
+    -- sibling look nested. Depth is also reset every frame (see endFrame), so a mark abandoned by an
+    -- error costs one frame of accounting rather than the rest of the session.
+    depth = depth + 1
+    return { at = started, depth = depth - 1 }
+end
+
+-- Close a timing opened by Profiler.mark.
+--
+-- This pair exists because Profiler.time cannot wrap everything: it forwards only the first two
+-- return values, and a call site that returns more would lose the rest SILENTLY -- which is a bug
+-- introduced by adding instrumentation, the worst kind. Where the arity does not fit, bracket the
+-- call instead of wrapping it.
+function Profiler.since(name, mark)
+    if not enabled or not mark then
+        return
+    end
+    if depth > 0 then
+        depth = depth - 1
+    end
+    local finished = nowMs()
+    if finished then
+        Profiler.record(name, finished - mark.at, mark.depth)
+    end
+end
+
 -- Time one call. Returns whatever the call returned, so a wrapped call site reads the same as the
 -- unwrapped one and can be left in place permanently.
 --
--- Only the first two return values are forwarded. Nothing wrapped here returns more, and carrying an
--- arbitrary number would cost a table allocation per call in the path this module exists to measure.
+-- ONLY THE FIRST TWO RETURN VALUES ARE FORWARDED. Carrying an arbitrary number would cost a table
+-- allocation per call in the path this module exists to measure. If what you are timing returns more
+-- than two things, use Profiler.mark / Profiler.since -- do not wrap it here and hope.
 function Profiler.time(name, fn, ...)
     if not enabled then
         return fn(...)
     end
 
+    local openedAt = depth
     local started = nowMs()
-    local first, second = fn(...)
+    depth = depth + 1
+
+    -- pcall, and then re-raise. Not defensiveness: without it a throw skips the line that restores
+    -- the depth, and every timing for the rest of the frame would be booked as nested -- i.e. dropped
+    -- from the totals. A measuring instrument that goes quiet after the first error is the worst
+    -- possible failure mode, because the reading still looks like a reading.
+    --
+    -- The error is re-raised at level 0 so the message is passed through exactly as thrown; callers
+    -- that already wrap this in their own pcall see no difference at all.
+    local ok, first, second = pcall(fn, ...)
+    depth = openedAt
     local finished = nowMs()
 
     if started and finished then
-        local elapsed = finished - started
-        local bucket = bucketFor(name)
-        bucket.calls = bucket.calls + 1
-        bucket.totalMs = bucket.totalMs + elapsed
-        if elapsed > bucket.worstMs then
-            bucket.worstMs = elapsed
-        end
-        -- An average is only a description when the calls resemble each other. These stopped doing
-        -- that: a spray-FX rebuild averaged 16 ms with a worst of 180, and the frame histogram showed
-        -- nothing at all between 5 and 20 -- most rebuilds nearly free, a few enormous. Dividing the
-        -- total by the count in that situation invents a call that never happened, and one round of
-        -- this was spent optimising the number rather than the cost.
-        if elapsed >= 20 then
-            bucket.over20 = bucket.over20 + 1
-        elseif elapsed >= 5 then
-            bucket.over5 = bucket.over5 + 1
-        elseif elapsed >= 1 then
-            bucket.over1 = bucket.over1 + 1
-        end
-        frameMs = frameMs + elapsed
+        Profiler.record(name, finished - started, openedAt)
+    end
+
+    if not ok then
+        error(first, 0)
     end
 
     return first, second
@@ -147,10 +246,18 @@ function Profiler.count(name, amount)
 end
 
 -- Close the frame. Registered on OnTick; see the header on why this is approximate.
-local function endFrame()
+-- Public so the frame boundary can be exercised without an engine: it is where the nesting depth is
+-- recovered after a throw, which is behaviour worth a test rather than a hope.
+function Profiler.endFrame()
     if not enabled then
         return
     end
+
+    -- Depth is reset here, not merely decremented, because an error thrown inside a timed call skips
+    -- its close. Without this a single failure would leave everything after it looking nested and the
+    -- totals would silently fall to zero -- a measuring instrument that breaks quietly is worse than
+    -- none. A frame is the natural place: nothing legitimately holds a timing across one.
+    depth = 0
 
     frames = frames + 1
     if frameMs > worstFrameMs then
@@ -206,20 +313,29 @@ function Profiler.report()
     end
 
     add("")
-    add(string.format("%-22s %8s %10s %9s %9s %19s",
-        "bucket", "calls", "total ms", "avg ms", "worst ms", "calls 1+/5+/20+ ms"))
-    local totalMs = 0
+    add(string.format("%-24s %8s %10s %9s %9s %18s",
+        "bucket", "calls", "total ms", "avg ms", "worst ms", "calls 1-5/5-20/20+"))
+    local summed = 0
     for _, name in ipairs(sortedBucketNames()) do
         local bucket = buckets[name]
-        totalMs = totalMs + bucket.totalMs
-        add(string.format("%-22s %8d %10.1f %9.3f %9.1f %6d /%5d /%5d",
-            name, bucket.calls, bucket.totalMs,
+        summed = summed + bucket.totalMs
+        -- A leading dot means this row ran inside another row, so its milliseconds are already
+        -- counted in that one. Only the undotted rows add up to the total below.
+        local label = (bucket.nested and "." or "") .. name
+        add(string.format("%-24s %8d %10.1f %9.3f %9.1f %6d /%6d /%5d",
+            label, bucket.calls, bucket.totalMs,
             bucket.calls > 0 and (bucket.totalMs / bucket.calls) or 0,
             bucket.worstMs, bucket.over1, bucket.over5, bucket.over20))
     end
-    add(string.format("%-22s %8s %10.1f", "TOTAL", "", totalMs))
-    add("The last three columns are how many calls cost at least 1, 5 and 20 ms. Read those before")
-    add("the average: a bucket whose calls do not resemble each other has no meaningful average.")
+    add(string.format("%-24s %8s %10.1f    <- top-level only; nested rows are inside these",
+        "TOTAL", "", totalMs))
+    if summed > totalMs then
+        add(string.format("%-24s %8s %10.1f    <- every row added up, so nested work counted twice",
+            "(sum of all rows)", "", summed))
+    end
+    add("The last three columns are BANDS, not thresholds: how many calls landed in [1,5), [5,20)")
+    add("and [20+) ms. Read them before the average -- a bucket whose calls do not resemble each")
+    add("other has no meaningful average, and these have never resembled each other.")
 
     if elapsedMs and elapsedMs > 0 then
         add(string.format("share of wall clock spent in WaterPipes: %.2f%%",
@@ -228,7 +344,7 @@ function Profiler.report()
 
     add("")
     add(string.format("worst frame: %.1f ms of our work", worstFrameMs))
-    add(string.format("frames over 5 ms: %d    over 10 ms: %d    over 20 ms: %d",
+    add(string.format("frames costing 5-10 ms: %d    10-20 ms: %d    20+ ms: %d",
         over5, over10, over20))
     add("A stutter you can see is roughly 16 ms of total frame time, ours plus the game's. If the")
     add("three counts above are zero and you still feel it, it is not this mod.")
@@ -244,10 +360,51 @@ function Profiler.report()
         add(string.format("  solves %d   cache hits %d   hit rate %s",
             c.solves, c.hits,
             lookups > 0 and string.format("%.1f%%", (c.hits / lookups) * 100) or "n/a"))
-        add(string.format("  invalidations: %d scoped, %d global, %d ignored (nothing cached there)",
-            c.scoped, c.global, c.untouched))
+        add(string.format(
+            "  invalidations: %d supply-only, %d scoped, %d global, %d ignored (nothing cached there)",
+            c.supplyOnly or 0, c.scoped, c.global, c.untouched))
+        add("  'supply-only' is a vessel crossing empty: the zone keeps its shape and is re-priced")
+        add("  without walking the world. It should be most of them on a farm that is watering.")
+        if c.solves and c.solves > 0 then
+            -- What a cold solve actually DOES, which is the number to optimise against: a re-pricing
+            -- is one accumulate plus one relaxation of the whole zone, and a relax call is one node of
+            -- one sweep. Times move between machines; these do not.
+            add(string.format("  per solve: %.1f re-pricings, %.1f relax passes, %.0f relax calls",
+                (c.repricings or 0) / c.solves,
+                (c.relaxPasses or 0) / c.solves,
+                (c.relaxCalls or 0) / c.solves))
+            local capped = c.relaxCapped or 0
+            if capped > 0 then
+                add(string.format(
+                    "  %d relaxation(s) ran out of passes with the field still moving (of %d)",
+                    capped, c.repricings or 0))
+                add("  That is the cap deciding the answer, not convergence. A bench network of the")
+                add("  same size settles in three passes; if this is most of them, the real layouts")
+                add("  are not like the bench and HYDRAULIC_RELAX_PASSES is doing the deciding.")
+            end
+        end
         add("  'ignored' is the win: world objects that touched no cached network. Before the scoped")
         add("  invalidation every one of those was a global drop.")
+    end
+
+    -- The fill topology, which is the same story one layer up: every network walk that is not a draw
+    -- goes through this cache. It used to be dropped every frame, so a per-minute fill query never
+    -- once read it warm and pump/headroom walked the whole network cold, 20 ms a call.
+    local NetworkAccess = WaterPipes.NetworkAccess
+    if NetworkAccess and NetworkAccess.counters then
+        local c = NetworkAccess.counters
+        local lookups = c.hits + c.walks
+        add("")
+        add("fill topology:")
+        add(string.format("  walks %d   cache hits %d   hit rate %s",
+            c.walks, c.hits,
+            lookups > 0 and string.format("%.1f%%", (c.hits / lookups) * 100) or "n/a"))
+        add(string.format("  invalidations: %d scoped, %d global, %d ignored%s",
+            c.scoped, c.global, c.untouched,
+            c.overflow > 0 and string.format(", %d overflow", c.overflow) or ""))
+        add("  A walk count near the number of pumps per minute is right. A walk count that tracks")
+        add("  'global' is the cache being dropped faster than it is built -- look at what is calling")
+        add("  invalidateTraversalCache. 'overflow' should be 0: above it, scoping is given up on.")
     end
 
     -- The header is written by the first counter rather than tested for up front: next() is not
@@ -290,7 +447,7 @@ function Profiler.dump()
 end
 
 if Events and Events.OnTick then
-    Events.OnTick.Add(endFrame)
+    Events.OnTick.Add(Profiler.endFrame)
 end
 
 return Profiler

@@ -45,6 +45,10 @@ local function ensureStateShape(state)
     -- the whole network for them, which is what the per-minute pass used to do once a minute to find
     -- out there were none.
     state.purifiers = state.purifiers or {}
+    -- Tiles known to carry a plumbed fixture or a plumbed generator. See State.registerEndpoint.
+    -- Deliberately NOT defaulted to {} for the indexed flag: an existing save has no index, and
+    -- telling the two apart is what triggers the one-off re-index (see System.reindexEndpoints).
+    state.endpoints = state.endpoints or {}
     state.graph = state.graph or Graph.new()
     state.lastRebuild = state.lastRebuild or 0
     return state
@@ -109,6 +113,46 @@ end
 -- the registry safe against the ways a purifier can leave the world without telling us.
 function State.getPurifiers()
     return State.ensure().purifiers
+end
+
+-- ===== Plumbed endpoints =====
+--
+-- The per-minute refresh used to FIND its work: sweep every pipe tile and its neighbours -- about 700
+-- tiles on a 200-pipe farm -- lift each square and scan its object list twice, looking for fixtures
+-- and generators that are plumbed. Measured at 15.3 ms a minute, 63% of the whole per-minute pass,
+-- to rediscover a handful of sinks that have not moved since the player plumbed them.
+--
+-- A fixture becomes plumbed exactly one way: somebody calls EndpointPlumbing.plumb or
+-- GeneratorFuel.plumb. That is an event. So it is recorded when it happens, and the refresh iterates
+-- what it was told instead of searching for it.
+--
+-- Treat an entry as a CLAIM, not a fact -- the same contract as the purifier registry above. The
+-- reader validates it and drops it if the world disagrees, which is what makes this safe against the
+-- ways a fixture can leave the world without telling us.
+function State.registerEndpoint(x, y, z)
+    local state = State.ensure()
+    local key = State.squareKey(x, y, z)
+    if not state.endpoints[key] then
+        state.endpoints[key] = { x = x, y = y, z = z }
+    end
+end
+
+function State.unregisterEndpoint(x, y, z)
+    State.ensure().endpoints[State.squareKey(x, y, z)] = nil
+end
+
+function State.getEndpoints()
+    return State.ensure().endpoints
+end
+
+-- Has this save's endpoint index ever been built? A save made before the index existed has plumbed
+-- fixtures and no record of them, so the first pass after loading has to go and find them once.
+function State.endpointsIndexed()
+    return State.ensure().endpointsIndexed == true
+end
+
+function State.markEndpointsIndexed()
+    State.ensure().endpointsIndexed = true
 end
 
 function State.unregisterPipe(x, y, z)

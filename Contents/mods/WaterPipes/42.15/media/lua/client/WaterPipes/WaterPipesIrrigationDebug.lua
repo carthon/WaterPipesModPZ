@@ -85,10 +85,10 @@ local function cropWaterLevel(worldObject)
     return tonumber(modData.waterLvl) or 0
 end
 
-local function colorForEmitter(emitter, square)
+local function colorForEmitter(found, stamp)
     -- Through the registry's cache: the overlay refreshes four times a second and the status is
     -- derived from a full network walk, which only changes when the server's minute pass runs.
-    local status = Registry.emitterStatus(emitter, square)
+    local status = Registry.statusFor(found, stamp)
     if not status then
         return nil
     end
@@ -124,9 +124,10 @@ local function refresh()
 
     -- Emitters first: they are the thing being tested. Taken from the registry, so the overlay no
     -- longer asks every pipe object on 961 tiles whether it happens to be an emitter.
+    local stamp = Registry.stamp()
     for _, found in ipairs(Registry.near("emitters", math.floor(px), math.floor(py),
                                          math.floor(pz), SCAN_RADIUS)) do
-        local color = colorForEmitter(found.object, found.square)
+        local color = colorForEmitter(found, stamp)
         if color then
             tint(found.object, color)
         end

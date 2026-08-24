@@ -569,6 +569,14 @@ local function describePressureReport(report, square)
             local verdict = "OK"
             if not entry.ok then
                 verdict = report.starvedHere and "SHARED OUT" or "NOT ENOUGH"
+                -- "SHARED OUT" says the search dropped it. Whether it HAD to is a different
+                -- question, and the one that decides whether this is a fact about the plumbing or a
+                -- fault in the search -- so it is spelled out rather than left to be inferred.
+                if report.couldServeHere == true then
+                    verdict = verdict .. "  <-- but it COULD be served; the search gave up early"
+                elseif report.couldServeHere == false and report.serveBlockedBy then
+                    verdict = verdict .. "  (adding it would starve " .. tostring(report.serveBlockedBy) .. ")"
+                end
             end
             add("  %-9s %6.2f  (needs %.1f, friction %.3f/tile)  %s",
                 kind, entry.head or 0, entry.minimum, entry.friction, verdict)
@@ -1233,22 +1241,66 @@ local function buildEmitterTooltip(emitterObject)
         -- A burst emitter is a plumbing fault, not a pressure reading: say so and stop.
         lines[#lines + 1] = getText("IGUI_WaterPipesEmitterBurst")
     else
-        lines[#lines + 1] = status.pressure
-            and getText("IGUI_WaterPipesEmitterPressure", formatHead(status.pressure))
-            or getText("IGUI_WaterPipesEmitterNoSupply")
+        -- The head shown is the one this emitter would have WHILE RUNNING, which is not the same as
+        -- the solved field when the emitter is one the line cannot carry: the field excludes its draw,
+        -- so it reads high precisely because the emitter is off. Reporting that produced a sprinkler
+        -- showing 37 above the line "needs 20" and refusing to water, which reads as a bug.
+        --
+        -- Re-pricing the zone costs a relaxation, so it happens HERE and nowhere else: a tooltip is
+        -- something the player opens on purpose, one emitter at a time, while the spray FX asks about
+        -- every emitter in sight several times a second and keeps using the cached field.
+        -- WHY it is not watering, and the order of these two questions is not arbitrary.
+        --
+        -- WATER FIRST. With nothing in the pipes there is no supply, so the head field has no source
+        -- to propagate from and the pressure gate fails -- for want of water. Asking about pressure
+        -- first therefore blamed the pressure on a dry network and printed "not enough to water
+        -- (needs 20.0)" when the honest answer was "there is no water in it". Pressure without water
+        -- is not a meaningful reading, so it is not offered as one.
+        local head, needed = status.pressure, nil
+        if status.hasWater and not status.reaches and WaterPipes.Hydraulics then
+            local square = emitterObject:getSquare()
+            local solution = WaterPipes.Hydraulics.solveAt(square)
 
-        if not status.reaches then
-            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterLow", formatHead(status.minimum))
-        elseif not status.hasWater then
-            -- Pressure is fine, the pipes are simply empty. Different problem, different fix.
+            local running = WaterPipes.Hydraulics.headIfDrawing(solution, square, status.kind)
+            if running then
+                head = running
+            end
+
+            -- How much more head the LINE needs, which is not how far this tile is below its own
+            -- minimum. A sprinkler reading 30 against a minimum of 20 is short of nothing itself; it
+            -- is off because switching it on would push a different emitter under. Asking the tile
+            -- returned zero, and the readout could then only say "the line cannot supply it" -- true,
+            -- and not the number that was wanted.
+            needed = WaterPipes.Hydraulics.headNeededToServe(solution, square, status.kind)
+        end
+
+        if head then
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterPressure", formatHead(head))
+        elseif status.hasWater then
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterNoSupply")
+        end
+
+        if not status.hasWater then
+            -- The pipes are empty. Nothing about pressure is worth saying until they are not.
             lines[#lines + 1] = getText("IGUI_WaterPipesEmitterDry")
+        elseif not status.reaches and needed and needed > 0 then
+            -- One sentence, one number, and it is the number that was asked for: how much more
+            -- pressure the line needs before this emitter runs. It covers both reasons an emitter is
+            -- off for pressure -- its own head being too low, or its draw pushing another emitter
+            -- under -- because in both cases the answer is the same figure: the worst shortfall in
+            -- the set.
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterShort", formatHead(needed))
+        elseif not status.reaches then
+            -- There is water, and the figure could not be worked out. Nothing to say beyond the
+            -- requirement itself.
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterLow", formatHead(status.minimum))
         else
             lines[#lines + 1] = getText("IGUI_WaterPipesEmitterWatering")
         end
 
         -- Only worth mentioning on a drip, and only while the line is genuinely over the limit.
         local burst = Irrigation.burstPressure()
-        if Irrigation.isDrip(emitterObject) and burst and (status.pressure or 0) > burst then
+        if Irrigation.isDrip(emitterObject) and burst and (head or 0) > burst then
             lines[#lines + 1] = getText("IGUI_WaterPipesEmitterBurstRisk", formatHead(burst))
         end
     end

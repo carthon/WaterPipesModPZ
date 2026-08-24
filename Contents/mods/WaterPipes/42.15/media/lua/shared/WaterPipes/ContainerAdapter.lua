@@ -407,13 +407,21 @@ local function noteEmptinessCrossing(worldObject, prevAmount, newAmount)
     end
 
     local Hydraulics = WaterPipes.Hydraulics
-    if not Hydraulics or not Hydraulics.invalidateAroundSquare then
+    if not Hydraulics then
+        return
+    end
+
+    -- The SUPPLY form, not the general one. Water moving cannot have moved a pipe, so the zone keeps
+    -- its shape and only has to be re-priced -- which skips the world walk entirely. That matters
+    -- because this is the common invalidation by a wide margin: 211 of 215 in a measured window.
+    local invalidate = Hydraulics.invalidateSupplyAroundSquare or Hydraulics.invalidateAroundSquare
+    if not invalidate then
         return
     end
 
     local ok, square = pcall(worldObject.getSquare, worldObject)
     if ok and square then
-        pcall(Hydraulics.invalidateAroundSquare, square)
+        pcall(invalidate, square)
     end
 end
 

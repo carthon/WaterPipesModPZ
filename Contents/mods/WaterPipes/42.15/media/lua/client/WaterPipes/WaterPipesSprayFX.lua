@@ -29,7 +29,12 @@ local FX = WaterPipes.SprayFX
 local FRAMES = 16            -- loop length (frame canvas size is per-effect, see KIND.cell)
 local HOLD = 2               -- UI draws per animation frame (advance every HOLD draws)
 local DRAW_RADIUS = 18       -- tiles from the player we scan/draw within (matches the sound modules)
-local RESCAN_TICKS = 45      -- ~0.75s between active-list rebuilds
+-- Milliseconds, not ticks. The animation was moved off a frame counter for exactly this reason (see
+-- the note above the draw loop) and the rebuild was left behind: a frame count is a measure of how
+-- FAST THE MACHINE IS, not of how much time has passed. At 127 fps -- an ordinary number on a decent
+-- PC -- 45 ticks is 0.35 s, so a better machine paid for this rebuild twice as often as intended, and
+-- so did the registry sweep below it. The cost of a mod should not scale with the framerate.
+local RESCAN_MS = 750
 local BASE_ALPHA = 0.40      -- floor alpha (night); daylight adds up to +0.5
 local MAX_ALPHA = 0.92
 
@@ -102,14 +107,16 @@ local function rescanInner()
 
     -- Tiles already claimed by a hydrant. A pipe (and so an emitter) can legally share a hydrant's
     -- tile, and the hydrant's gush is the bigger effect, so it wins the tile.
+    -- Coordinates come off the registry entry, not off the square. The registry stored them; asking
+    -- the engine for them again was nine bridge calls per emitter per rebuild for numbers already in
+    -- hand. Same for the tile key -- `found.key` is the string the registry is indexed by.
     local claimed = {}
     for _, found in ipairs(WaterPipes.Profiler.time("sprayfx: near",
         Registry.near, "hydrants", px, py, pz, DRAW_RADIUS)) do
-        local sq = found.square
-        claimed[sq:getX() .. ":" .. sq:getY() .. ":" .. sq:getZ()] = true
+        claimed[found.key] = true
         if Hydrant.isFlowing(found.object) then
-            list[#list + 1] = { x = sq:getX(), y = sq:getY(), z = sq:getZ(),
-                                kind = "hydrant", phase = phaseFor(sq:getX(), sq:getY()) }
+            list[#list + 1] = { x = found.x, y = found.y, z = found.z,
+                                kind = "hydrant", phase = phaseFor(found.x, found.y) }
         end
     end
 
@@ -117,18 +124,22 @@ local function rescanInner()
     -- pressure + water + not burst) gets its spray this pass. The status is cached per tile by the
     -- registry -- it is derived from the network, which only moves on the server's minute pass, so
     -- recomputing it on every rescan was asking a question whose answer could not have changed.
+    -- One clock read for the whole rebuild. The cached status path is a table lookup and a
+    -- subtraction; it was spending a pcall and a bridge call per emitter to ask the time, and every
+    -- emitter in one rebuild gets the same answer.
+    local stamp = Registry.stamp()
+
     local considered = 0
     for _, found in ipairs(WaterPipes.Profiler.time("sprayfx: near",
         Registry.near, "emitters", px, py, pz, DRAW_RADIUS)) do
         considered = considered + 1
-        local sq, emitter = found.square, found.object
-        if not claimed[sq:getX() .. ":" .. sq:getY() .. ":" .. sq:getZ()] then
+        if not claimed[found.key] then
             local status = WaterPipes.Profiler.time("sprayfx: status",
-                Registry.emitterStatus, emitter, sq)
+                Registry.statusFor, found, stamp)
             if status and status.active then
-                local kind = Irrigation.isSprinkler(emitter) and "sprinkler" or "drip"
-                list[#list + 1] = { x = sq:getX(), y = sq:getY(), z = sq:getZ(),
-                                    kind = kind, phase = phaseFor(sq:getX(), sq:getY()) }
+                local kind = Irrigation.isSprinkler(found.object) and "sprinkler" or "drip"
+                list[#list + 1] = { x = found.x, y = found.y, z = found.z,
+                                    kind = kind, phase = phaseFor(found.x, found.y) }
             end
         end
     end
@@ -236,13 +247,31 @@ function FX.render()
 end
 
 -- ===== Wiring =====
+-- The frame counter survives as a fallback for a build with no getTimestampMs, which is the same
+-- shape the draw loop already uses.
 local tickCounter = 0
+local nextRescanAtMs = nil
+
 local function onTick()
-    tickCounter = tickCounter + 1
-    if tickCounter < RESCAN_TICKS then
-        return
+    local stamp = nil
+    if getTimestampMs then
+        local ok, ms = pcall(getTimestampMs)
+        stamp = (ok and type(ms) == "number") and ms or nil
     end
-    tickCounter = 0
+
+    if stamp then
+        if nextRescanAtMs and stamp < nextRescanAtMs then
+            return
+        end
+        nextRescanAtMs = stamp + RESCAN_MS
+    else
+        tickCounter = tickCounter + 1
+        if tickCounter < 45 then
+            return
+        end
+        tickCounter = 0
+    end
+
     pcall(WaterPipes.Profiler.time, "sprayfx/rescan", rescanInner)
 end
 
