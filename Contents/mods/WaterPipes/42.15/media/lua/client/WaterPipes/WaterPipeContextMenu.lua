@@ -29,6 +29,8 @@ require "WaterPipes/WaterPipesPumpWindow"
 require "WaterPipes/WaterPipesPurifierSound"
 require "WaterPipes/ISRepairWaterPurifier"
 require "WaterPipes/ISOpenWaterPurifier"
+require "WaterPipes/Profiler"
+require "WaterPipes/RemovalAudit"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.ContextMenu = WaterPipes.ContextMenu or {}
@@ -626,6 +628,100 @@ local function buildPressureDebugTooltip(square)
     return tooltip
 end
 
+-- Real milliseconds, on this machine, for this mod's periodic work. Turning it on resets the window,
+-- so the numbers describe what happened since you asked rather than since the save loaded.
+function ContextMenu.toggleProfiler(playerObj)
+    if not isDebugActive() then
+        return
+    end
+    WaterPipes.Profiler.toggle()
+end
+
+function ContextMenu.dumpProfile(playerObj)
+    if not isDebugActive() then
+        return
+    end
+    WaterPipes.Profiler.dump()
+end
+
+-- One log line per removal this mod would care about, naming what left and which of the mod's tables
+-- claimed its tile. Used to establish, by experiment rather than by argument, whether the periodic
+-- safety nets in ContainerAdapter and PipeObjectUtils are covering a real case or none at all.
+-- See docs/removal-events.md.
+-- ===== Destruction tools, for docs/removal-events.md =====
+--
+-- The open question there is whether the engine ever removes an object WITHOUT raising
+-- OnObjectAboutToBeRemoved, because three periodic safety nets exist solely for that doubt. Answering
+-- it needs things destroyed by means other than the player's hands, repeatedly, on tiles we control.
+--
+-- Every call below is wrapped and logged rather than trusted: these are engine entry points whose
+-- signatures move between builds, and a debug tool that crashes the session it is meant to observe is
+-- worse than none. If a name is wrong here, the log says so and the game keeps running.
+local function tryCall(label, fn, ...)
+    if type(fn) ~= "function" then
+        WaterPipes.Logger.warn("debug tool: " .. label .. " is not available in this build")
+        return false
+    end
+    local ok, err = pcall(fn, ...)
+    if not ok then
+        WaterPipes.Logger.warn("debug tool: " .. label .. " failed -- " .. tostring(err))
+        return false
+    end
+    WaterPipes.Logger.log("debug tool: " .. label .. " ok")
+    return true
+end
+
+-- A zombie next to the pipes, so it can be led into whatever is standing on them.
+function ContextMenu.spawnZombieHere(playerObj, square)
+    if not isDebugActive() or not square then
+        return
+    end
+
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    WaterPipes.Logger.log(("debug tool: spawning a zombie at %d:%d:%d"):format(x, y, z))
+
+    -- Two spellings, because which one exists depends on the build. The first that works wins.
+    if tryCall("addZombiesInOutfit", _G.addZombiesInOutfit, x, y, z, 1, nil, 0) then
+        return
+    end
+    tryCall("createHorde", _G.createHorde, x, y, x + 1, y + 1, z, 1, false)
+end
+
+-- Fire ON the tile. This is the interesting case: a barrel standing on a pipe tile is destructible,
+-- and whether its removal raises the event is exactly what is unproven.
+function ContextMenu.startFireHere(playerObj, square)
+    if not isDebugActive() or not square then
+        return
+    end
+
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    WaterPipes.Logger.log(("debug tool: starting a fire at %d:%d:%d"):format(x, y, z))
+    WaterPipes.Logger.log("debug tool: turn the Removal Audit ON first, then watch for a REMOVAL line "
+        .. "for whatever burns. No line means the event never fired -- see docs/removal-events.md.")
+
+    local manager = _G.IsoFireManager
+    if not manager then
+        WaterPipes.Logger.warn("debug tool: IsoFireManager is not available in this build")
+        return
+    end
+
+    local cell = getCell and getCell() or nil
+    -- StartFire's arity has changed across builds; try the long form first, then the short.
+    if tryCall("IsoFireManager.StartFire(cell, sq, spread, life)",
+        manager.StartFire, cell, square, true, 100) then
+        return
+    end
+    tryCall("IsoFireManager.StartFire(cell, sq, spread, life, intensity)",
+        manager.StartFire, cell, square, true, 100, 10)
+end
+
+function ContextMenu.toggleRemovalAudit(playerObj)
+    if not isDebugActive() then
+        return
+    end
+    WaterPipes.RemovalAudit.toggle()
+end
+
 function ContextMenu.toggleIrrigationOverlay(playerObj)
     if not isDebugActive() then
         return
@@ -672,6 +768,16 @@ local function addDebugMenu(context, subMenu, playerObj, endpointObject, square)
         and "Irrigation Overlay: ON" or "Irrigation Overlay: OFF"
     debugSubMenu:addOption(overlayName, playerObj, ContextMenu.toggleIrrigationOverlay)
     debugSubMenu:addOption("Run Irrigation Now (+2h)", playerObj, ContextMenu.runIrrigationNow)
+    local profilerName = WaterPipes.Profiler.isEnabled() and "Profiler: ON" or "Profiler: OFF"
+    debugSubMenu:addOption(profilerName, playerObj, ContextMenu.toggleProfiler)
+    debugSubMenu:addOption("Dump Performance Profile", playerObj, ContextMenu.dumpProfile)
+    local auditName = WaterPipes.RemovalAudit.isEnabled()
+        and "Removal Audit: ON" or "Removal Audit: OFF"
+    debugSubMenu:addOption(auditName, playerObj, ContextMenu.toggleRemovalAudit)
+    if square then
+        debugSubMenu:addOption("Spawn Zombie Here", playerObj, ContextMenu.spawnZombieHere, square)
+        debugSubMenu:addOption("Start Fire Here", playerObj, ContextMenu.startFireHere, square)
+    end
     debugSubMenu:addOption("Check Irrigation Conservation (+2h)", playerObj,
         ContextMenu.checkIrrigationConservation)
     if endpointObject then
