@@ -58,7 +58,7 @@ function WaterPipesAPI.hasNetwork(square)
     if not square then
         return false
     end
-    local pipeSquares = NetworkAccess.getNetworkFromSquare(square)
+    local pipeSquares = NetworkAccess.getNetworkSquares(square)
     return pipeSquares ~= nil and #pipeSquares > 0
 end
 

@@ -33,6 +33,7 @@ require "WaterPipes/Constants"
 require "WaterPipes/Hydrant"
 require "WaterPipes/Irrigation"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/Profiler"
 require "WaterPipes/Purifier"
 
 WaterPipes = WaterPipes or {}
@@ -41,6 +42,7 @@ WaterPipes.TileRegistry = WaterPipes.TileRegistry or {}
 local Hydrant = WaterPipes.Hydrant
 local Irrigation = WaterPipes.Irrigation
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local Profiler = WaterPipes.Profiler
 local Purifier = WaterPipes.Purifier
 local Registry = WaterPipes.TileRegistry
 
@@ -57,7 +59,13 @@ local SWEEP_INTERVAL_TICKS = 300   -- ~5 s at 60 fps
 local SWEEP_RADIUS = 20
 -- Rows of the sweep done per tick. Spreading it stops the rebuild from landing as one visible spike
 -- in a single frame -- it is the same total work, just not all at once.
-local SWEEP_ROWS_PER_TICK = 8
+--
+-- Measured on the medium bench scenario: the full sweep is ~69,500 bridge calls over 1,681 tiles,
+-- about 1,700 per row. At 8 rows that is ~13,100 landing in one frame; at 2 it is ~3,300 spread
+-- over 21 frames. The sweep then takes ~0.35 s instead of ~0.10 s, which costs nothing that
+-- matters -- the registry feeds decorative FX on a five-second cadence, so a third of a second of
+-- extra latency is invisible. The total is identical either way; only the worst frame moves.
+local SWEEP_ROWS_PER_TICK = 2
 
 Registry.emitters = Registry.emitters or {}     -- ["x:y:z"] = { x, y, z }
 Registry.hydrants = Registry.hydrants or {}
@@ -104,14 +112,54 @@ local function classify(square)
     return emitter, hydrant, purifier
 end
 
+-- The sweep in progress, if any; assigned by the sweep block below. Declared up here because both
+-- entryFor's callers and forgetResolved close over it, and a local declared after them would leave
+-- those closures bound to a nil global instead -- silently, which is the worst way to be wrong.
+local pendingSweep = nil
+
+-- A remembered tile, with the square and object already resolved.
+--
+-- Registry.near used to re-resolve BOTH on every read -- a getGridSquare and a full object scan, per
+-- remembered tile, per caller, and five modules call it several times a second. Measured in game at
+-- ~12 ms per spray-FX rebuild, on every rebuild, warm status cache or not.
+--
+-- Both references are dropped by forgetResolved when the tile changes underneath them, which is what
+-- keeps this from being a stale-object bug: see the two events it is wired to.
+local function entryFor(square, x, y, z, object)
+    return { x = x, y = y, z = z, square = square, object = object }
+end
+
+-- Drop what a tile resolved to, keeping the tile itself remembered. Forgetting the tile outright
+-- would blank the registry every time the player walks past a chunk boundary; forgetting only the
+-- references costs one lookup on the next read.
+local RESOLVED_KINDS = { "emitters", "hydrants", "purifiers" }
+
+function Registry.forgetResolved(square)
+    if not square or not square.getX then
+        return
+    end
+
+    local key = keyOf(square:getX(), square:getY(), square:getZ())
+    for _, kind in ipairs(RESOLVED_KINDS) do
+        local entry = Registry[kind][key]
+        if entry then
+            entry.square = nil
+            entry.object = nil
+        end
+        entry = pendingSweep and pendingSweep[kind][key] or nil
+        if entry then
+            entry.square = nil
+            entry.object = nil
+        end
+    end
+end
+
 -- Classify one square now and record the answer. Driven by OnObjectAdded, where modData is already
 -- attached -- unlike LoadGridsquare, where it is not (see the header).
 --
 -- Declared before the sweep block so it can be defined here, but it writes into the in-progress
 -- sweep too: a sweep swaps in a freshly built set when it finishes, and without that an emitter
 -- placed mid-sweep would be recorded and then thrown away seconds later.
-local pendingSweep = nil        -- assigned by the sweep block below
-
 function Registry.noteSquare(square)
     if not square or not square.getX then
         return
@@ -120,16 +168,17 @@ function Registry.noteSquare(square)
     local x, y, z = square:getX(), square:getY(), square:getZ()
     local key = keyOf(x, y, z)
     local emitter, hydrant, purifier = classify(square)
-    local entry = { x = x, y = y, z = z }
 
     local targets = { Registry }
     if pendingSweep then
         targets[#targets + 1] = pendingSweep
     end
     for _, t in ipairs(targets) do
-        t.emitters[key] = emitter and entry or nil
-        t.hydrants[key] = hydrant and entry or nil
-        t.purifiers[key] = purifier and entry or nil
+        -- A separate entry per kind, never one shared between them: each caches the object it stands
+        -- for, and a tile may legally carry an emitter and a hydrant at once.
+        t.emitters[key] = emitter and entryFor(square, x, y, z, emitter) or nil
+        t.hydrants[key] = hydrant and entryFor(square, x, y, z, hydrant) or nil
+        t.purifiers[key] = purifier and entryFor(square, x, y, z, purifier) or nil
     end
 
     if not emitter then
@@ -189,11 +238,11 @@ local function stepSweep()
             if square then
                 local emitter, hydrant, purifier = classify(square)
                 if emitter or hydrant or purifier then
-                    local key = keyOf(square:getX(), square:getY(), square:getZ())
-                    local entry = { x = square:getX(), y = square:getY(), z = square:getZ() }
-                    if emitter then sweep.emitters[key] = entry end
-                    if hydrant then sweep.hydrants[key] = entry end
-                    if purifier then sweep.purifiers[key] = entry end
+                    local x, y, z = square:getX(), square:getY(), square:getZ()
+                    local key = keyOf(x, y, z)
+                    if emitter then sweep.emitters[key] = entryFor(square, x, y, z, emitter) end
+                    if hydrant then sweep.hydrants[key] = entryFor(square, x, y, z, hydrant) end
+                    if purifier then sweep.purifiers[key] = entryFor(square, x, y, z, purifier) end
                 end
             end
         end
@@ -246,8 +295,16 @@ function Registry.near(kind, px, py, pz, radius)
         if entry.z == pz
             and math.abs(entry.x - px) <= radius
             and math.abs(entry.y - py) <= radius then
-            local square = getCellSquare(entry.x, entry.y, entry.z)
-            local object = square and finder(square) or nil
+            -- Resolved once and remembered. A miss here is a tile whose references were dropped
+            -- because something changed on it, so the lookup that follows is the re-check that
+            -- decides whether it still belongs in the registry at all.
+            local square, object = entry.square, entry.object
+            if not object then
+                square = getCellSquare(entry.x, entry.y, entry.z)
+                object = square and finder(square) or nil
+                entry.square = square
+                entry.object = object
+            end
             if object then
                 results[#results + 1] = { square = square, object = object }
             elseif square then
@@ -267,25 +324,58 @@ function Registry.near(kind, px, py, pz, radius)
     return results
 end
 
+-- How far into the TTL window a tile's first stamp is backdated, so that emitters do not all expire
+-- together. Deterministic from the tile: stable across sessions, and it needs no stored state.
+--
+-- The multipliers are large on purpose. A farm row is consecutive x, so a small multiplier -- the
+-- (x * 7 + y * 13) used for the animation phase, where the modulus is a frame count -- would put
+-- neighbours a few milliseconds apart and spread forty-seven emitters over a fraction of the window.
+-- These put adjacent tiles most of a second apart instead.
+local function statusPhase(x, y, z)
+    return (x * 1103 + y * 2749 + z * 4111) % STATUS_TTL_MS
+end
+
 -- Irrigation.getEmitterStatus walks the whole network (once: pressure and available fluid are two
 -- readings off one summary). The presentational callers ask it several times a second, per emitter,
 -- for an answer that only changes when the server's minute pass runs -- so it is cached per tile
 -- for STATUS_TTL_MS.
+--
+-- The first stamp is PHASED, and that is what stops the cost arriving in one frame. Every emitter
+-- near the player is first read in the same rebuild, so without this they are all stamped together,
+-- all expire together, and stay locked in step for the rest of the session. Measured in game: a
+-- rebuild averaged 13.4 ms and its worst was 186 -- a factor of fourteen -- because roughly one
+-- rebuild in nine recomputed all forty-seven emitters at once while the other eight were nearly free.
+--
+-- Backdating the first stamp by a per-tile amount breaks the convoy. It is the same total work over
+-- the same three seconds; it just stops being a spike. Note this cannot show up in tools/perf, which
+-- counts calls made and not when they land -- the profiler is the instrument for it.
 function Registry.emitterStatus(emitter, square)
     if not emitter or not square then
         return nil
     end
 
-    local key = keyOf(square:getX(), square:getY(), square:getZ())
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    local key = keyOf(x, y, z)
     local stamp = nowMs()
     local cached = statusCache[key]
     if cached and stamp and (stamp - cached.stamp) < STATUS_TTL_MS then
         return cached.status
     end
 
+    -- A miss is where the cost is: everything else in a rebuild is table reads.
+    Profiler.count("sprayfx: status recomputed", 1)
     local status = Irrigation.getEmitterStatus(emitter, square)
     if stamp then
-        statusCache[key] = { stamp = stamp, status = status }
+        -- Only the FIRST sighting is phased. Afterwards the tile re-stamps at its own expiry, which
+        -- is already offset from its neighbours', so the spread maintains itself.
+        --
+        -- Registry.invalidate clears the entry, which makes the next read a first sighting again. That
+        -- is correct for what it is for: the recompute still happens immediately on that read -- a
+        -- cleared entry is a miss -- and only the tile's next expiry is re-phased.
+        statusCache[key] = {
+            stamp = cached and stamp or (stamp - statusPhase(x, y, z)),
+            status = status,
+        }
     end
     return status
 end
@@ -307,7 +397,7 @@ end
 
 local function onTick()
     if sweep then
-        stepSweep()
+        Profiler.time("registry/sweep", stepSweep)
         return
     end
     sweepCountdown = sweepCountdown - 1
@@ -328,13 +418,22 @@ if Events then
     end
     if Events.OnObjectAboutToBeRemoved then
         -- The object is still on the square here, so re-classifying now would re-add it. The lazy
-        -- re-check in Registry.near drops it on the next read instead.
+        -- re-check in Registry.near drops it on the next read instead -- which is exactly why the
+        -- resolved references have to go with it. Leaving them would hand every later read the object
+        -- that is being removed, and that re-check would never run.
         Events.OnObjectAboutToBeRemoved.Add(function(object)
             local square = object and object.getSquare and object:getSquare() or nil
             if square then
+                Registry.forgetResolved(square)
                 Registry.invalidate(square:getX(), square:getY(), square:getZ())
             end
         end)
+    end
+    if Events.LoadGridsquare then
+        -- Streaming rebuilds a square, which leaves any reference we hold pointing at a grid square
+        -- that no longer exists. Too early to CLASSIFY here (see the header) -- but never too early to
+        -- forget, which is all this does.
+        Events.LoadGridsquare.Add(function(square) pcall(Registry.forgetResolved, square) end)
     end
     if Events.OnGameStop then
         Events.OnGameStop.Add(function()

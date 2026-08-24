@@ -39,6 +39,12 @@ local function ensureStateShape(state)
     -- drain pass cannot find open ones by scanning pipe squares (an open hydrant with no pipe on its
     -- tile is exactly the case that must still waste water). This persisted set is how it finds them.
     state.openHydrants = state.openHydrants or {}
+    -- Where the purifiers are. A purifier cannot exist without a router under it, and both are placed
+    -- and destroyed by the player -- so their positions are known at the moment they change and there
+    -- is nothing to discover. Kept for the same reason openHydrants is: the alternative is searching
+    -- the whole network for them, which is what the per-minute pass used to do once a minute to find
+    -- out there were none.
+    state.purifiers = state.purifiers or {}
     state.graph = state.graph or Graph.new()
     state.lastRebuild = state.lastRebuild or 0
     return state
@@ -87,6 +93,22 @@ end
 
 function State.getOpenHydrants()
     return State.ensure().openHydrants
+end
+
+function State.registerPurifier(x, y, z)
+    local state = State.ensure()
+    state.purifiers[State.squareKey(x, y, z)] = { x = x, y = y, z = z }
+end
+
+function State.unregisterPurifier(x, y, z)
+    State.ensure().purifiers[State.squareKey(x, y, z)] = nil
+end
+
+-- Every registered purifier. Callers must treat an entry as a claim, not a fact: validate it and drop
+-- it if the world disagrees, exactly as processHydrants does with an open hydrant. That is what makes
+-- the registry safe against the ways a purifier can leave the world without telling us.
+function State.getPurifiers()
+    return State.ensure().purifiers
 end
 
 function State.unregisterPipe(x, y, z)

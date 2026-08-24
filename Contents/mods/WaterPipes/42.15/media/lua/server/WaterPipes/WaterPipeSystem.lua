@@ -21,6 +21,7 @@ require "WaterPipes/Hydrant"
 require "WaterPipes/Stagnation"
 require "WaterPipes/Hydraulics"
 require "WaterPipes/Irrigation"
+require "WaterPipes/Profiler"
 require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
 
@@ -33,6 +34,7 @@ local EndpointObjects = WaterPipes.EndpointObjects
 local GeneratorFuel = WaterPipes.GeneratorFuel
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local Profiler = WaterPipes.Profiler
 local PipeAutotile = WaterPipes.PipeAutotile
 local Purifier = WaterPipes.Purifier
 local GravityFlow = WaterPipes.GravityFlow
@@ -138,6 +140,40 @@ function System.scanContainersAroundPipes()
         local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
         if square then
             mergeInto(found, Adapter.collectSquareContainers(square))
+
+            -- Reconcile the purifier registry while we are standing on the tile anyway. Registration
+            -- normally happens at build time, but a save made before the registry existed carries
+            -- purifiers nobody ever recorded, and this is the cheap cadence on which to notice. Only
+            -- router tiles are asked -- a purifier cannot exist away from one -- and the filter is the
+            -- same metadata test that makes processRouters cost nothing.
+            -- Fill in the kind for entries registered before it was recorded. Same reasoning as the
+            -- purifier reconciliation below and the same cadence: the tile is already in hand, the
+            -- answer is on the object, and until it is filled in every per-minute pass has to
+            -- rediscover it. One pass over ten in-game minutes and the whole base is filled.
+            local metadata = pipeData.metadata
+            if not metadata or not metadata.kinds then
+                metadata = metadata or {}
+                for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+                    if Router.isRouter(worldObject) then metadata.router = true end
+                    if Pump.isPump(worldObject) then metadata.pump = true end
+                    if Irrigation.isDrip(worldObject) then metadata.drip = true end
+                    if Irrigation.isSprinkler(worldObject) then metadata.sprinkler = true end
+                end
+                metadata.kinds = true
+                pipeData.metadata = metadata
+            end
+
+            if pipeData.metadata and pipeData.metadata.router == true then
+                local purifier = Purifier.findForRouterSquare(square)
+                if purifier then
+                    local ok, purifierSquare = pcall(purifier.getSquare, purifier)
+                    if not ok or not purifierSquare then
+                        purifierSquare = square
+                    end
+                    State.registerPurifier(purifierSquare:getX(), purifierSquare:getY(),
+                        purifierSquare:getZ())
+                end
+            end
         end
     end
 
@@ -211,9 +247,9 @@ end
 function System.checkIrrigationConservation(dtHours)
     dtHours = dtHours or 1.0
 
-    -- Read the world cold. The classification memo is keyed per frame and the traversal cache per
-    -- origin; dropping both means neither measurement can be served from something built earlier in
-    -- this same frame by whatever triggered the check.
+    -- Read the world cold. Neither measurement may be served from something built earlier by whatever
+    -- triggered the check, and since none of these caches is frame-scoped any more, dropping them
+    -- explicitly is the only thing that guarantees it.
     Adapter.invalidateVesselCache()
     NetworkAccess.invalidateTraversalCache()
     PipeObjectUtils.invalidateScanCache()
@@ -459,35 +495,107 @@ end
 -- The side matters. A router's OUT offset points at its clean side, so if the pipe we reached it
 -- from IS that square, we are downstream and pushing raw lake water in there would contaminate the
 -- clean run. Only the intake side is fair game.
+-- Which purifier, if any, this pump can feed.
+--
+-- This used to walk the pump's entire network and probe all six neighbours of every tile looking for a
+-- router with a purifier on it: about 1,260 world lookups per pump per minute, measured at 25 ms. On a
+-- base with no purifier at all it performed every one of them to return nil, once a minute, forever.
+--
+-- Searching the world for something the player placed is the wrong way round. A purifier cannot exist
+-- without a router under it, and both appear and disappear by player action -- so their positions are
+-- known at the moment they change and there is nothing to discover. The loop now runs over the
+-- REGISTRY, which is usually empty, and the network is only walked once there is something to test
+-- against it. No purifiers means no work at all, which is the common case and used to be the
+-- expensive one.
+--
+-- A registry entry is a claim, not a fact -- the same contract processHydrants works to. A purifier
+-- can leave the world without the build hook hearing about it (a fire, a save made before the registry
+-- existed), so a claim the world contradicts is dropped as it is found.
 local function findPurifierIntakeForPump(square)
+    local purifiers = State.getPurifiers()
     local cell = getCell and getCell() or nil
-    if not cell then
+    if not purifiers or not cell then
         return nil
     end
-    local pipeSquares = NetworkAccess.getNetworkFromSquare(square)
-    for _, sq in ipairs(pipeSquares or {}) do
+
+    -- Built on first use, so an empty registry never pays for it.
+    local networkKeys = nil
+    local stale = nil
+
+    local function routerFeedsNetwork(routerSquare)
+        local router = Router.findOnSquare(routerSquare)
+        local out = router and Router.getOutOffset(router)
+        if not out then
+            return false
+        end
+
+        local rx, ry, rz = routerSquare:getX(), routerSquare:getY(), routerSquare:getZ()
         for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-            local nsq = cell:getGridSquare(sq:getX() + offset.x, sq:getY() + offset.y,
-                                           sq:getZ() + offset.z)
-            local router = nsq and Router.findOnSquare(nsq)
-            if router then
-                local out = Router.getOutOffset(router)
-                local onOutSide = out and nsq:getX() + out.dx == sq:getX()
-                    and nsq:getY() + out.dy == sq:getY()
-                if not onOutSide then
-                    local purifier = Purifier.findForRouterSquare(nsq)
-                    if purifier then
-                        return purifier
+            local tx, ty, tz = rx + offset.x, ry + offset.y, rz + offset.z
+            -- The OUT tile is the clean side; feeding the intake from there would push purified water
+            -- back through the filter. Every other side is the dirty side, which is what a pump wants.
+            local isOutSide = tx == rx + out.dx and ty == ry + out.dy and tz == rz
+            if not isOutSide and networkKeys[State.squareKey(tx, ty, tz)] then
+                return true
+            end
+        end
+        return false
+    end
+
+    for _, coord in pairs(purifiers) do
+        local purifierSquare = getSquare(coord.x, coord.y, coord.z)
+        -- An unloaded square is not a contradiction: it says nothing either way, so the claim stands.
+        if purifierSquare then
+            if not Purifier.findOnSquare(purifierSquare) then
+                stale = stale or {}
+                stale[#stale + 1] = coord
+            else
+                if not networkKeys then
+                    networkKeys = {}
+                    for _, pipeSquare in ipairs(NetworkAccess.getNetworkSquares(square) or {}) do
+                        networkKeys[State.squareKey(pipeSquare:getX(), pipeSquare:getY(),
+                            pipeSquare:getZ())] = true
                     end
+                end
+
+                -- The purifier sits on its router or beside it, so both are candidates.
+                local found = nil
+                if Purifier.findForRouterSquare(purifierSquare)
+                    and routerFeedsNetwork(purifierSquare) then
+                    found = Purifier.findForRouterSquare(purifierSquare)
+                end
+                if not found then
+                    for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
+                        local routerSquare = cell:getGridSquare(coord.x + offset.x,
+                            coord.y + offset.y, coord.z + offset.z)
+                        if routerSquare and Router.hasRouterOnSquare(routerSquare) then
+                            local purifier = Purifier.findForRouterSquare(routerSquare)
+                            if purifier and routerFeedsNetwork(routerSquare) then
+                                found = purifier
+                                break
+                            end
+                        end
+                    end
+                end
+
+                if found then
+                    for _, gone in ipairs(stale or {}) do
+                        State.unregisterPurifier(gone.x, gone.y, gone.z)
+                    end
+                    return found
                 end
             end
         end
+    end
+
+    for _, gone in ipairs(stale or {}) do
+        State.unregisterPurifier(gone.x, gone.y, gone.z)
     end
     return nil
 end
 
 function System.processPump(pump, square, dt)
-    local source = Pump.findSource(pump)
+    local source = Profiler.time("pump/source", Pump.findSource, pump)
     if not source then
         return   -- booster only: nothing to draw from, but it still adds head to its zone
     end
@@ -498,8 +606,9 @@ function System.processPump(pump, square, dt)
     -- router, and a purifier sits on a router -- so a pump feeding a purifier with storage only on
     -- the clean side used to be told "no room" and drew nothing at all. Its intake tank counts too.
     local tainted = source.fluidType == "TaintedWater"
-    local headroom = NetworkAccess.availableToPush(square, source.fluidType)
-    local purifier = findPurifierIntakeForPump(square)
+    local headroom = Profiler.time("pump/headroom", NetworkAccess.availableToPush,
+        square, source.fluidType)
+    local purifier = Profiler.time("pump/purifier", findPurifierIntakeForPump, square)
     local purifierRoom = purifier and Purifier.intakeHeadroom(purifier, tainted) or 0
 
     local wanted = math.min(Pump.intakeFor(dt), headroom + purifierRoom)
@@ -507,7 +616,7 @@ function System.processPump(pump, square, dt)
         return
     end
 
-    local taken = Pump.drawFromSource(source, wanted)
+    local taken = Profiler.time("pump/draw", Pump.drawFromSource, source, wanted)
     if taken <= 0 then
         return
     end
@@ -515,7 +624,8 @@ function System.processPump(pump, square, dt)
     -- Network first: it is the destination the player can actually see filling up.
     local added = 0
     if headroom > 0 then
-        added = NetworkAccess.fillFluidAtSquare(square, source.fluidType, math.min(taken, headroom))
+        added = Profiler.time("pump/fill", NetworkAccess.fillFluidAtSquare,
+            square, source.fluidType, math.min(taken, headroom))
     end
 
     local leftover = taken - added
@@ -539,10 +649,16 @@ function System.processPumps(dt)
     end
     local state = State.ensure()
     for _, pipeData in pairs(state.pipes) do
-        local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
-        local pump = square and Pump.findOnSquare(square)
-        if pump and Pump.isPowered(pump) then
-            System.processPump(pump, square, dt)
+        -- Skip only what we KNOW is not a pump. An entry without `kinds` predates the registry
+        -- recording it, so it is still probed -- being slow for one ten-minute cycle is the price of
+        -- never silently switching off a pump in an existing save.
+        local metadata = pipeData.metadata
+        if not (metadata and metadata.kinds and not metadata.pump) then
+            local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
+            local pump = square and Pump.findOnSquare(square)
+            if pump and Pump.isPowered(pump) then
+                System.processPump(pump, square, dt)
+            end
         end
     end
 end
@@ -993,6 +1109,58 @@ local function onObjectAboutToBeRemoved(object)
     schedulePipeRemoval(object, true)
 end
 
+-- Rotates through state.pipes a few tiles at a time, so every tile is checked eventually and no
+-- single pass costs anything measurable.
+local verifyCursor = 0
+local VERIFY_TILES_PER_PASS = 12
+
+local function verifyCachesAgainstTheWorld()
+    local state = State.ensure()
+
+    local coords = {}
+    for _, pipeData in pairs(state.pipes) do
+        coords[#coords + 1] = pipeData
+    end
+    if #coords == 0 then
+        return
+    end
+
+    local disagreed = 0
+    for step = 1, math.min(VERIFY_TILES_PER_PASS, #coords) do
+        verifyCursor = (verifyCursor % #coords) + 1
+        local pipeData = coords[verifyCursor]
+        local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
+        if square then
+            if Adapter.verifySquareVessels and not Adapter.verifySquareVessels(square) then
+                disagreed = disagreed + 1
+                Logger.warn(string.format(
+                    "CACHE DRIFT: vessel classification at %d:%d:%d disagreed with the world. An "
+                        .. "object left that tile without OnObjectAboutToBeRemoved firing. This is the "
+                        .. "case docs/removal-events.md is waiting for -- please report what was there.",
+                    pipeData.x, pipeData.y, pipeData.z))
+            end
+            if PipeObjectUtils.verifySquareScan and not PipeObjectUtils.verifySquareScan(square) then
+                disagreed = disagreed + 1
+                Logger.warn(string.format(
+                    "CACHE DRIFT: pipe scan at %d:%d:%d disagreed with the world. See "
+                        .. "docs/removal-events.md.",
+                    pipeData.x, pipeData.y, pipeData.z))
+            end
+        end
+    end
+
+    -- A disagreement means something else may be stale too, and the verifier only repaired the tiles
+    -- it looked at. Falling back to the old wholesale drop is the safe response to being wrong about
+    -- the premise -- and it happens only when the premise IS wrong, which is the whole difference.
+    if disagreed > 0 then
+        Adapter.invalidateVesselCache()
+        PipeObjectUtils.invalidateScanCache()
+        if Hydraulics and Hydraulics.invalidate then
+            Hydraulics.invalidate()
+        end
+    end
+end
+
 local function onEveryTenMinutes()
     System.tick()
 
@@ -1004,39 +1172,84 @@ local function onEveryTenMinutes()
     end
 end
 
+-- The last input to the head field with no event behind it: whether a pump has power. That is
+-- square:haveElectricity(), which changes when a generator starts, stops or runs dry, and the game
+-- announces none of it.
+--
+-- So it is WATCHED rather than assumed stale. The field used to be thrown away once a minute on the
+-- chance that this had changed, which cost a full re-solve every minute whether or not anything had;
+-- checking costs one lookup per pump, and there are a handful of those now that the registry records
+-- which pipes are pumps.
+--
+-- The first pass after a load finds no remembered state and invalidates once, which is correct: the
+-- field was solved before any of this was known.
+local pumpPowerState = {}
+
+local function checkPumpPower()
+    local state = State.ensure()
+    local changed = false
+
+    for key, pipeData in pairs(state.pipes) do
+        local metadata = pipeData.metadata
+        if not (metadata and metadata.kinds and not metadata.pump) then
+            local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
+            local pump = square and Pump.findOnSquare(square)
+            if pump then
+                local powered = Pump.isPowered(pump) and true or false
+                if pumpPowerState[key] ~= powered then
+                    pumpPowerState[key] = powered
+                    changed = true
+                end
+            elseif pumpPowerState[key] ~= nil then
+                pumpPowerState[key] = nil        -- the pump left; the layout event already fired
+            end
+        end
+    end
+
+    if changed and Hydraulics and Hydraulics.invalidate then
+        Hydraulics.invalidate()
+    end
+end
+
 local function onEveryOneMinute()
     -- The head field is no longer dropped per frame (see NetworkAccess.invalidateTraversalCache), so
     -- this is what bounds how stale it can get. A minute is the cadence the water itself moves on --
     -- everything below either fills or drains something -- so re-solving here means the field is never
     -- reasoning about a supply that has since run dry, while costing one solve a minute instead of one
     -- a frame.
-    if Hydraulics and Hydraulics.invalidate then
-        Hydraulics.invalidate()
-    end
+    Profiler.time("1min/invalidate", checkPumpPower)
+
+    -- The vessel classification and the pipe-object scan used to be dropped here too, wholesale, once
+    -- a minute. Measured: that drop forced ~190 ms of client work in the frame that followed it, and
+    -- it protected against nothing anyone has ever observed -- both are invalidated by tile on object
+    -- add/remove and on LoadGridsquare, and pipes cannot even be destroyed by anything but a player
+    -- (isThumpable = false on every pipe entity). What is left of the doubt is now a VERIFICATION on
+    -- the ten-minute pass, which is cheap and says out loud when it disagrees. docs/removal-events.md
+    -- explains how to retire it for good.
 
     -- Routers process once per in-game minute (rates are per-minute; dt defaults to 1.0). This is the
     -- cheap cadence -- no per-frame OnTick work -- at the cost of the readout updating once a minute.
-    local okRouters, errRouters = pcall(System.processRouters)
+    local okRouters, errRouters = pcall(Profiler.time, "1min/routers", System.processRouters)
     if not okRouters then
         Logger.error("Router processing failed: " .. tostring(errRouters))
     end
 
-    local okPumps, errPumps = pcall(System.processPumps)
+    local okPumps, errPumps = pcall(Profiler.time, "1min/pumps", System.processPumps)
     if not okPumps then
         Logger.error("Pump processing failed: " .. tostring(errPumps))
     end
 
-    local okMains, errMains = pcall(System.processAllMains)
+    local okMains, errMains = pcall(Profiler.time, "1min/mains", System.processAllMains)
     if not okMains then
         Logger.error("Mains supply processing failed: " .. tostring(errMains))
     end
 
-    local okHydrants, errHydrants = pcall(System.processHydrants)
+    local okHydrants, errHydrants = pcall(Profiler.time, "1min/hydrants", System.processHydrants)
     if not okHydrants then
         Logger.error("Hydrant processing failed: " .. tostring(errHydrants))
     end
 
-    local ok, err = pcall(System.refreshPlumbedEndpoints)
+    local ok, err = pcall(Profiler.time, "1min/endpoints", System.refreshPlumbedEndpoints)
     if not ok then
         Logger.error("Endpoint plumbing refresh failed: " .. tostring(err))
     end
@@ -1077,6 +1290,16 @@ local function drainIrrigationPass()
 end
 
 local function onWaterAmountChange(object, prevAmount)
+    -- Before the suppression guard, deliberately. The head field cares only whether a vessel holds
+    -- water, and it has to hear about that crossing whoever caused it -- rain, a player scooping from
+    -- a barrel by hand, another mod, or this mod's own draw. The guard below exists to stop endpoint
+    -- reconciliation and stagnation clocks re-entering on our own writes; neither concern applies to
+    -- an invalidation, which is idempotent.
+    if object and Adapter.noteEmptinessCrossing then
+        local ok, amount = pcall(Adapter.readWorldFluidAmount, object)
+        pcall(Adapter.noteEmptinessCrossing, object, prevAmount, ok and amount or 0)
+    end
+
     -- Ignore the echo of our OWN network writes. ContainerAdapter.writeWorldFluidAmount fires
     -- OnWaterAmountChange purely so external mods (e.g. Useful Barrels) refresh; processing it here
     -- would reset stagnation clocks and re-reconcile endpoints for no reason (and risk re-entrancy).
@@ -1297,15 +1520,22 @@ if Events then
     end
 
     if Events.EveryTenMinutes then
-        Events.EveryTenMinutes.Add(onEveryTenMinutes)
+        Events.EveryTenMinutes.Add(function()
+            WaterPipes.Profiler.time("system/10min", onEveryTenMinutes)
+            WaterPipes.Profiler.time("10min/verify", verifyCachesAgainstTheWorld)
+        end)
     end
 
     if Events.EveryOneMinute then
-        Events.EveryOneMinute.Add(onEveryOneMinute)
+        Events.EveryOneMinute.Add(function()
+            WaterPipes.Profiler.time("system/1min", onEveryOneMinute)
+        end)
     end
 
     if Events.EveryHours then
-        Events.EveryHours.Add(onEveryHours)
+        Events.EveryHours.Add(function()
+            WaterPipes.Profiler.time("system/1h", onEveryHours)
+        end)
     end
 
     if Events.OnTick then

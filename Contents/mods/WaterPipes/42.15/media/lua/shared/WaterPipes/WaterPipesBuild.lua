@@ -291,9 +291,24 @@ local function markAndRegister(thumpable, opts)
                 tostring(opts.edge), square:getX(), square:getY(), square:getZ()))
         end
         -- registerPipeAt rebuilds the network, refreshes plumbed endpoints and runs the autotile.
-        -- Routers pass metadata so the graph rebuild can isolate them as flow boundaries.
-        WaterPipes.System.registerPipeAt(square:getX(), square:getY(), square:getZ(),
-            opts.router and { router = true } or nil)
+        --
+        -- The WHOLE kind goes into the registry, not just the router flag. Everything here is already
+        -- known -- it was just written to the object's modData a dozen lines up -- and passing only
+        -- `router` meant every periodic pass that wanted pumps or emitters had to rediscover them by
+        -- asking the world about every pipe in the base. That is exactly why processRouters, which can
+        -- filter, costs nothing per minute, while processPumps, which could not, cost 56 ms.
+        --
+        -- `kinds` marks the entry as carrying the full set. Without it a pass cannot tell "not a pump"
+        -- from "registered before this was recorded", and a save from an older build would have its
+        -- pumps quietly filtered out of existence. See reconcilePipeKinds.
+        WaterPipes.System.registerPipeAt(square:getX(), square:getY(), square:getZ(), {
+            kinds = true,
+            router = opts.router and true or nil,
+            pump = opts.pump and true or nil,
+            drip = opts.drip and true or nil,
+            sprinkler = opts.sprinkler and true or nil,
+            riser = opts.riser and true or nil,
+        })
     end
 end
 
@@ -360,6 +375,13 @@ local function markPurifierContainer(thumpable, tier)
     end
     if thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)
+    end
+
+    -- Record where it is. Nothing else needs to go looking for it afterwards.
+    local square = thumpable.getSquare and thumpable:getSquare() or nil
+    local State = WaterPipes.State
+    if square and State and State.registerPurifier then
+        pcall(State.registerPurifier, square:getX(), square:getY(), square:getZ())
     end
 end
 

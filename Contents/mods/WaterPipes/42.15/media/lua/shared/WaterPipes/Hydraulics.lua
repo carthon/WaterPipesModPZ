@@ -811,16 +811,107 @@ end
 -- zone, so it is computed once and keyed by every node in it -- a second emitter three tiles away hits
 -- the cache instead of walking 192 tiles again.
 --
--- Dropped once per frame like the other caches, and explicitly when the layout changes. The FLUID is
+-- Dropped by the per-minute pass and by the events that can change it, never by a frame boundary --
+-- see Hydraulics.invalidateAroundSquare and the note on NetworkAccess.invalidateTraversalCache. The FLUID is
 -- not cached (callers still read vessels live through NetworkAccess); what is cached is the field,
 -- which moves only when topology, pump state or emitter count does -- none of which can change inside
 -- a frame without an event firing.
 local solutionCache = {}
 local zoneOfNode = {}
 
+-- Counters. Free while nothing reads them, and the only way to tell a cache that is working from one
+-- being dropped faster than it is built -- which is the failure this file already shipped with once.
+Hydraulics.counters = { solves = 0, hits = 0, scoped = 0, global = 0, untouched = 0 }
+
+-- Every field on the map. For the per-minute pass and for the changes not tied to a tile: a pump
+-- switched, a sandbox value, a full network rebuild.
 function Hydraulics.invalidate()
     solutionCache = {}
     zoneOfNode = {}
+    Hydraulics.counters.global = Hydraulics.counters.global + 1
+end
+
+-- Forget one zone, leaving every other network on the map alone.
+--
+-- zoneOfNode also holds entries for tiles that are not network nodes -- a sink asking for pressure is
+-- recorded against the zone it borrows. Those are not walked here, so they survive as pointers to a
+-- zone that no longer exists. That is safe by construction: solveAt only trusts a pointer when
+-- solutionCache still holds the zone, so a stale one costs one missed lookup and is overwritten by
+-- the solve that follows. The global drop clears them.
+local function forgetZone(zoneId)
+    local solution = zoneId and solutionCache[zoneId]
+    if not solution then
+        return false
+    end
+
+    solutionCache[zoneId] = nil
+    for _, nodeKey in ipairs(solution.order) do
+        if zoneOfNode[nodeKey] == zoneId then
+            zoneOfNode[nodeKey] = nil
+        end
+    end
+    zoneOfNode[zoneId] = nil
+    return true
+end
+
+-- Something appeared or vanished at a tile. The only fields that can be wrong because of it are the
+-- ones whose zone touches that tile, so those are the only ones dropped.
+--
+-- There is deliberately NO test of what the object is. A predicate here would have to enumerate every
+-- type that can matter -- pipe, router, pump, hydrant, purifier, mains fixture, sprinkler, drip,
+-- anything holding a fluid -- and a type missing from that list would fail silently, which is the
+-- failure mode this subsystem specialises in. Asking "what zone is cached at this tile" needs no such
+-- list: if nothing is cached there, nothing can be wrong, whatever the object was. A new pipe looks
+-- like a counterexample and is not -- it belongs to no zone yet, but the zones it merges are its
+-- NEIGHBOURS', which is why they are dropped too.
+--
+-- Vertical neighbours are the plain z+/-1 tiles rather than a riser lookup, which would cost world
+-- reads on an event that fires for every object the map streams in. A riser geometry this misses
+-- stays stale until the per-minute pass -- the same backstop that already bounds vessel emptiness.
+function Hydraulics.invalidateAroundSquare(square)
+    if not square or not square.getX then
+        Hydraulics.invalidate()
+        return
+    end
+
+    local okX, x = pcall(square.getX, square)
+    local okY, y = pcall(square.getY, square)
+    local okZ, z = pcall(square.getZ, square)
+    if not okX or not okY or not okZ or x == nil or y == nil or z == nil then
+        Hydraulics.invalidate()
+        return
+    end
+
+    local dropped = forgetZone(zoneOfNode[keyOf(x, y, z)])
+    for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
+        if forgetZone(zoneOfNode[keyOf(x + offset.x, y + offset.y, z)]) then
+            dropped = true
+        end
+    end
+    if forgetZone(zoneOfNode[keyOf(x, y, z - 1)]) then dropped = true end
+    if forgetZone(zoneOfNode[keyOf(x, y, z + 1)]) then dropped = true end
+
+    local counters = Hydraulics.counters
+    if dropped then
+        counters.scoped = counters.scoped + 1
+    else
+        counters.untouched = counters.untouched + 1
+    end
+end
+
+function Hydraulics.invalidateAroundObject(worldObject)
+    if not worldObject or not worldObject.getSquare then
+        Hydraulics.invalidate()
+        return
+    end
+
+    local ok, square = pcall(worldObject.getSquare, worldObject)
+    if not ok or not square then
+        Hydraulics.invalidate()
+        return
+    end
+
+    Hydraulics.invalidateAroundSquare(square)
 end
 
 function Hydraulics.solveAt(square)
@@ -831,6 +922,7 @@ function Hydraulics.solveAt(square)
     local key = squareKey(square)
     local zoneId = zoneOfNode[key]
     if zoneId and solutionCache[zoneId] then
+        Hydraulics.counters.hits = Hydraulics.counters.hits + 1
         return solutionCache[zoneId]
     end
 
@@ -868,6 +960,7 @@ function Hydraulics.solveAt(square)
     zoneId = zoneOfNode[seedKey]
     if zoneId and solutionCache[zoneId] then
         zoneOfNode[key] = zoneId
+        Hydraulics.counters.hits = Hydraulics.counters.hits + 1
         return solutionCache[zoneId]
     end
 
@@ -877,6 +970,7 @@ function Hydraulics.solveAt(square)
     end
 
     solution.id = seedKey
+    Hydraulics.counters.solves = Hydraulics.counters.solves + 1
     solutionCache[seedKey] = solution
     zoneOfNode[key] = seedKey
     for _, nodeKey in ipairs(solution.order) do
@@ -1102,8 +1196,15 @@ end
 -- every draw still reads the real vessels through NetworkAccess. The worst a stale field can do is
 -- let an emitter believe for one minute that a barrel that just ran dry is still behind it.
 if Events then
-    if Events.OnObjectAdded then Events.OnObjectAdded.Add(Hydraulics.invalidate) end
-    if Events.OnObjectAboutToBeRemoved then Events.OnObjectAboutToBeRemoved.Add(Hydraulics.invalidate) end
+    -- Scoped, not global. These fire for every object the world streams in as the player walks, and
+    -- almost none of them are ours; wiring the global drop here meant the field was thrown away
+    -- continuously and the per-zone cache never lived long enough to be one.
+    if Events.OnObjectAdded then
+        Events.OnObjectAdded.Add(Hydraulics.invalidateAroundObject)
+    end
+    if Events.OnObjectAboutToBeRemoved then
+        Events.OnObjectAboutToBeRemoved.Add(Hydraulics.invalidateAroundObject)
+    end
 end
 
 return Hydraulics

@@ -441,6 +441,14 @@ end
 -- Dropped once per frame, plus explicitly whenever the pipe layout changes.
 local traversalCache = {}
 
+-- Zone id -> the tiles of that zone that actually hold a vessel. Same lifetime as the traversal cache
+-- above: one frame, plus an explicit drop when the layout changes. See vesselSquaresOfZone.
+local zoneVesselMemo = {}
+
+-- "zone|z|kind" -> the summary every consumer on that zone, at that level, would have built for
+-- itself. See NetworkAccess.getStatusSummary.
+local statusSummaryMemo = {}
+
 -- `conduct` is part of the key, and it must be the VALUE, not its truthiness: a draw walk and a fill
 -- walk from the same square cross routers in opposite directions and so reach different squares.
 -- Collapsing them to a boolean would hand a fill query the draw query's network.
@@ -460,12 +468,26 @@ end
 -- get the same answer, which is what made the pressure work feel slower than the walk it replaced.
 local function dropTraversalCacheOnly()
     traversalCache = {}
+    zoneVesselMemo = {}
+    statusSummaryMemo = {}
+end
+
+-- An object appeared or vanished somewhere. The traversal cache is frame-scoped and rebuilt on demand,
+-- so dropping all of it costs nothing and needs no reasoning about where the object was. The head
+-- field is the opposite -- expensive to rebuild, and only wrong near the tile that changed -- so it is
+-- invalidated by tile, from its own handler in Hydraulics.lua. This one does NOT call the global drop:
+-- these events fire for every object the map streams in, and doing so meant the field never survived
+-- long enough to be a cache at all.
+local function onWorldObjectChanged()
+    traversalCache = {}
 end
 
 -- The layout changed: drop both. This is what a build, a removal, a valve setting or a hydrant toggle
 -- wants -- the shape the field was solved against no longer exists.
 function NetworkAccess.invalidateTraversalCache()
     traversalCache = {}
+    zoneVesselMemo = {}
+    statusSummaryMemo = {}
     if Hydraulics and Hydraulics.invalidate then
         Hydraulics.invalidate()
     end
@@ -495,7 +517,9 @@ local function collectConnectedPipeSquares(endpointObject)
     return collectPipeSquaresCached(endpointObject:getSquare())
 end
 
-local function collectStorageDescriptors(pipeSquares, hops, chains)
+-- The original walk, kept for fills and visualization: they have no solve to key a zone off, ask a
+-- different question (where can water GO from here) and are not on the hot path.
+local function collectStorageDescriptorsByWalk(pipeSquares, hops, chains)
     local scannedSquares = {}
     local descriptors = {}
 
@@ -518,6 +542,71 @@ local function collectStorageDescriptors(pipeSquares, hops, chains)
 
     return descriptors
 end
+
+-- The tiles of a zone that hold a vessel, found once per zone per frame.
+--
+-- collectStorageDescriptors walked every tile of the zone for every consumer that asked. On a 180-tile
+-- farm with 47 emitters the spray FX did that 47 times per rebuild -- 8 400 iterations and as many key
+-- strings built and thrown away -- to rediscover the same twenty barrels. Where a zone keeps its water
+-- is a property of the ZONE, so it is found once and shared: the same collapse the head field got, on
+-- the half that was left behind.
+--
+-- Safe to key by zone because squaresFromSolution hands back Hydraulics.pipeSquares BY REFERENCE --
+-- the tile set is identical for every consumer on the zone, and only the hop counts are measured from
+-- the asking tile.
+--
+-- What is deliberately NOT shared is the descriptors. Those are still built per query, because the
+-- caller decorates them with pipeHops and pressureChain measured from ITS own tile, and handing two
+-- consumers the same table would have the second silently overwrite the first's. Only the discovery is
+-- pooled; the pricing stays private.
+local function vesselSquaresOfZone(solution)
+    local id = solution and solution.id
+    if not id then
+        return nil
+    end
+
+    local cached = zoneVesselMemo[id]
+    if cached then
+        return cached
+    end
+
+    local list = {}
+    local seen = {}
+    for _, pipeSquare in ipairs(Hydraulics.pipeSquares(solution)) do
+        local key = squareKey(pipeSquare)
+        if not seen[key] then
+            seen[key] = true
+            -- Cheap: the adapter memoises its per-square classification for the frame, and this asks
+            -- only whether anything is there, never what is inside it.
+            if Adapter.hasSquareContainers(pipeSquare) then
+                list[#list + 1] = { square = pipeSquare, key = key }
+            end
+        end
+    end
+
+    zoneVesselMemo[id] = list
+    return list
+end
+
+local function collectStorageDescriptors(pipeSquares, hops, chains, solution)
+    local pooled = solution and vesselSquaresOfZone(solution) or nil
+    if pooled then
+        local descriptors = {}
+        for _, entry in ipairs(pooled) do
+            local distance = hops and hops[entry.key] or 0
+            local chain = chains and chains[entry.key] or nil
+            for descriptorKey, descriptor in pairs(Adapter.collectSquareContainers(entry.square)) do
+                descriptor.pipeHops = distance
+                descriptor.pressureChain = chain
+                descriptors[descriptorKey] = descriptor
+            end
+        end
+        return descriptors
+    end
+
+    return collectStorageDescriptorsByWalk(pipeSquares, hops, chains)
+end
+
 
 -- Turn the purifier outlets the walk found into ordinary storage descriptors, so every consumer,
 -- gauge and rebalance treats the clean buffer as what it is: 50 litres of storage on that network.
@@ -596,7 +685,13 @@ end
 --
 -- With the pressure model off both gates stand aside and every connected vessel qualifies, exactly as
 -- before.
-local function applyPressureGate(descriptors, originSquare, kind, solution, zoneLift)
+-- statusOnly asks a different question, and the difference is the short-circuit below. A DRAW must
+-- return nothing when the solve excluded this consumer -- that is what stops a starved emitter taking
+-- water. A STATUS query wants to know what water is behind the tile whether or not this consumer may
+-- have it, because the caller reports the two facts separately and because the answer is shared with
+-- every consumer on the level (see getStatusSummary): letting one starved emitter empty the shared
+-- summary would report every healthy emitter beside it as dry.
+local function applyPressureGate(descriptors, originSquare, kind, solution, zoneLift, statusOnly)
     local enabled = Pressure.isEnabled()
     if not enabled then
         return descriptors, Pressure.containerBase()
@@ -606,7 +701,7 @@ local function applyPressureGate(descriptors, originSquare, kind, solution, zone
     -- healthy head precisely BECAUSE it was excluded, so anything that re-derives the answer from the
     -- field here lets every starved emitter straight through. See that function.
     local canDraw, head = Hydraulics.canDrawAt(solution, originSquare, kind)
-    if not canDraw then
+    if not canDraw and not statusOnly then
         return {}, nil
     end
 
@@ -682,7 +777,7 @@ local function squaresFromSolution(solution, originSquare)
     }
 end
 
-local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill)
+local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, statusOnly)
     if not originSquare then
         return nil
     end
@@ -719,7 +814,7 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill)
         return nil
     end
 
-    local descriptorMap = collectStorageDescriptors(pipeSquares, hops, chains)
+    local descriptorMap = collectStorageDescriptors(pipeSquares, hops, chains, solution)
     addPurifierOutletDescriptors(descriptorMap, zone)
     local descriptors = normalizeDescriptorList(descriptorMap)
     if #descriptors == 0 then
@@ -738,7 +833,7 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill)
             descriptors = applyFillGate(descriptors, originSquare, liftHead)
         else
             descriptors, pressure = applyPressureGate(descriptors, originSquare, kind,
-                solution, liftHead)
+                solution, liftHead, statusOnly)
         end
         if #descriptors == 0 then
             return nil
@@ -998,6 +1093,19 @@ end
 
 -- For visualization: the pipe squares reachable from a square + the container descriptors on them.
 -- Unlike getFluidSummaryAtSquare it returns the pipe squares even when there are no containers.
+-- Just the tiles of the physically-connected network -- both directions, routers solid, the shape the
+-- player built rather than the shape water can travel.
+--
+-- Split out from getNetworkFromSquare because two of its three callers wanted only this and threw the
+-- descriptors away. Building those means visiting every tile of the network and reading the fluid in
+-- every vessel on it, which is the most expensive thing a summary does; doing it for a caller that
+-- discards the result is pure waste. Measured on the per-minute pass, where the purifier lookup was
+-- paying it once a minute to answer a question about routers.
+function NetworkAccess.getNetworkSquares(originSquare)
+    local pipeSquares = collectPipeSquaresCached(originSquare, "both")
+    return pipeSquares
+end
+
 function NetworkAccess.getNetworkFromSquare(originSquare)
     -- Visualization: show the whole physically-connected network (both directions), not just the
     -- gravity-reachable part.
@@ -1188,6 +1296,50 @@ end
 -- behind its back.
 function NetworkAccess.getDrawSummary(square, kind)
     return buildSummaryFromSquare(square, "both", kind or Constants.PRESSURE_KIND_TAP)
+end
+
+-- The same summary, shared by every consumer on the zone standing at the same LEVEL.
+--
+-- READ-ONLY, and not for draws. The descriptors carry the hop counts of whichever consumer built the
+-- summary first, and a draw orders by those to empty the nearest vessel -- handing this to one would
+-- silently reorder it. getDrawSummary stays the way to take water.
+--
+-- What makes the sharing sound is that the only per-consumer term in the gate is elevation:
+--
+--     Pressure.canFillTo(vessel.z, consumer.z, zoneLift)
+--
+-- three numbers, none of them the tile. So which vessels are reachable is a property of the zone and
+-- the level and nothing finer. test_hydraulics.lua test 13 pins exactly that; if it ever fails, this
+-- function is invalid and the callers must go back to building their own.
+--
+-- Why it exists: the presentational callers -- spray FX, wetness, the emitter tooltip -- all ask one
+-- question, "is there water behind me", and each was building the whole summary to answer it. A
+-- descriptor table and a live fluid read for every vessel on the zone, per emitter. Measured in game
+-- at 4.3 ms each with the spray FX asking ten times a second: 42 ms/s, half of everything this mod
+-- spent. Shared, it is one build per zone per level per frame.
+--
+-- Per-frame, like the caches it sits beside, because the AMOUNTS in it are live: a draw made later in
+-- the frame must not be hidden from whatever reads next.
+function NetworkAccess.getStatusSummary(square, kind)
+    if not square then
+        return nil
+    end
+
+    local solution = Hydraulics.solveAt(square)
+    if not solution then
+        return nil
+    end
+
+    kind = kind or Constants.PRESSURE_KIND_TAP
+    local key = tostring(solution.id) .. "|" .. tostring(square:getZ()) .. "|" .. tostring(kind)
+    local cached = statusSummaryMemo[key]
+    if cached ~= nil then
+        return cached or nil          -- `false` is a remembered "there is nothing here"
+    end
+
+    local summary = buildSummaryFromSquare(square, "both", kind, nil, true)
+    statusSummaryMemo[key] = summary or false
+    return summary
 end
 
 -- Take `amount` out of an already-built summary. Returns the amount actually drawn.
@@ -1521,10 +1673,10 @@ end
 -- because a build and the network rebuild it triggers happen inside that same frame.
 if Events then
     if Events.OnObjectAdded then
-        Events.OnObjectAdded.Add(NetworkAccess.invalidateTraversalCache)
+        Events.OnObjectAdded.Add(onWorldObjectChanged)
     end
     if Events.OnObjectAboutToBeRemoved then
-        Events.OnObjectAboutToBeRemoved.Add(NetworkAccess.invalidateTraversalCache)
+        Events.OnObjectAboutToBeRemoved.Add(onWorldObjectChanged)
     end
     if Events.OnTick then
         Events.OnTick.Add(dropTraversalCacheOnly)

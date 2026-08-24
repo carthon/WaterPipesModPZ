@@ -110,10 +110,14 @@ end
 -- from each of the four neighbours the tile is reached from. Every one of those calls walks the
 -- square's entire object list and allocates a fresh table.
 --
--- The answer cannot change unless an object is added to or removed from the square, and both raise
--- events. So it is memoised, and the memo is dropped on those events and, as a backstop, once per
--- frame. That bounds staleness at a single frame while letting a whole periodic pass -- which runs
--- inside one frame -- share one scan per tile instead of thirteen.
+-- The answer cannot change unless an object is added to or removed from the square, or streaming
+-- rebuilds the square itself. All three raise events, so it is memoised and dropped on those events --
+-- by TILE, not wholesale.
+--
+-- It used to be dropped once per frame as well, and that clear undid the invalidation above it: this
+-- scan is what classify() calls for every one of the 1,681 tiles the client registry sweeps, and
+-- rebuilding it sixty times a second to get the same answer is the same mistake the head field and
+-- the vessel classification both shipped with.
 local scanMemo = {}
 
 local function memoKey(square)
@@ -122,6 +126,45 @@ end
 
 function PipeObjectUtils.invalidateScanCache()
     scanMemo = {}
+end
+
+-- Recompute ONE tile and compare it against what was remembered. True when they agree.
+--
+-- This replaces the periodic wholesale drop, and the difference is the point. The drop assumed the
+-- memo was wrong and paid to rebuild every tile of every network -- measured at ~190 ms of client
+-- work per in-game minute, landing in one frame. This assumes the memo is RIGHT, checks a few tiles
+-- to see, and says so when it is not.
+--
+-- The memo is left holding the fresh answer either way, so a disagreement is also a repair.
+--
+-- A disagreement means an object left a tile without OnObjectAboutToBeRemoved firing, which is the
+-- one thing that could justify the old drop and which nobody has ever observed. If this never fires
+-- across enough play, the check goes away and takes the last periodic rescan with it. If it does
+-- fire, the log names the tile and the path can be hooked properly. Either way it is evidence
+-- instead of nerve -- see docs/removal-events.md.
+function PipeObjectUtils.verifySquareScan(square)
+    if not square or not square.getObjects then
+        return true
+    end
+
+    local key = memoKey(square)
+    local remembered = scanMemo[key]
+    if not remembered then
+        return true
+    end
+
+    scanMemo[key] = nil
+    local fresh = PipeObjectUtils.getPipeObjectsOnSquare(square)
+
+    if #fresh ~= #remembered then
+        return false
+    end
+    for index = 1, #fresh do
+        if fresh[index] ~= remembered[index] then
+            return false
+        end
+    end
+    return true
 end
 
 function PipeObjectUtils.invalidateSquareScan(square)
@@ -244,9 +287,10 @@ function PipeObjectUtils.getRiserVerticalNeighborCoords(x, y, z)
     return coords
 end
 
--- The scan memo's invalidation. Object add/remove clears the square it happened on; the per-frame
--- clear is the backstop that keeps any path we have not thought of from ever seeing a stale list for
--- longer than one frame.
+-- The scan memo's invalidation. Object add/remove clears the square it happened on; LoadGridsquare
+-- clears a square the world has just rebuilt underneath us, which is the case the per-frame clear was
+-- really guarding and the only one it caught that these do not. The per-minute pass drops the lot as a
+-- backstop for anything not thought of here.
 if Events then
     local function invalidateForObject(object)
         local square = object and object.getSquare and object:getSquare() or nil
@@ -259,7 +303,9 @@ if Events then
 
     if Events.OnObjectAdded then Events.OnObjectAdded.Add(invalidateForObject) end
     if Events.OnObjectAboutToBeRemoved then Events.OnObjectAboutToBeRemoved.Add(invalidateForObject) end
-    if Events.OnTick then Events.OnTick.Add(PipeObjectUtils.invalidateScanCache) end
+    if Events.LoadGridsquare then
+        Events.LoadGridsquare.Add(function(square) pcall(PipeObjectUtils.invalidateSquareScan, square) end)
+    end
 end
 
 function PipeObjectUtils.getSquareFromWorldObjects(worldobjects)

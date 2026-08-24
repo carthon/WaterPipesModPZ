@@ -12,6 +12,7 @@
 -- like the reference mod it is a single-screen effect (splitscreen shows it on the first view only).
 
 require "WaterPipes/Constants"
+require "WaterPipes/Profiler"
 require "WaterPipes/Hydrant"
 require "WaterPipes/Irrigation"
 require "WaterPipes/WaterPipesTileRegistry"
@@ -88,7 +89,7 @@ end
 -- not the save contained a single emitter. It now asks the tile registry, which remembers where they
 -- are, so the work is proportional to the number of emitters near the player rather than to the area
 -- around them. See WaterPipesTileRegistry.
-local function rescan()
+local function rescanInner()
     local player = getPlayer and getPlayer() or nil
     if not player then
         FX.active = {}
@@ -102,7 +103,8 @@ local function rescan()
     -- Tiles already claimed by a hydrant. A pipe (and so an emitter) can legally share a hydrant's
     -- tile, and the hydrant's gush is the bigger effect, so it wins the tile.
     local claimed = {}
-    for _, found in ipairs(Registry.near("hydrants", px, py, pz, DRAW_RADIUS)) do
+    for _, found in ipairs(WaterPipes.Profiler.time("sprayfx: near",
+        Registry.near, "hydrants", px, py, pz, DRAW_RADIUS)) do
         local sq = found.square
         claimed[sq:getX() .. ":" .. sq:getY() .. ":" .. sq:getZ()] = true
         if Hydrant.isFlowing(found.object) then
@@ -115,10 +117,14 @@ local function rescan()
     -- pressure + water + not burst) gets its spray this pass. The status is cached per tile by the
     -- registry -- it is derived from the network, which only moves on the server's minute pass, so
     -- recomputing it on every rescan was asking a question whose answer could not have changed.
-    for _, found in ipairs(Registry.near("emitters", px, py, pz, DRAW_RADIUS)) do
+    local considered = 0
+    for _, found in ipairs(WaterPipes.Profiler.time("sprayfx: near",
+        Registry.near, "emitters", px, py, pz, DRAW_RADIUS)) do
+        considered = considered + 1
         local sq, emitter = found.square, found.object
         if not claimed[sq:getX() .. ":" .. sq:getY() .. ":" .. sq:getZ()] then
-            local status = Registry.emitterStatus(emitter, sq)
+            local status = WaterPipes.Profiler.time("sprayfx: status",
+                Registry.emitterStatus, emitter, sq)
             if status and status.active then
                 local kind = Irrigation.isSprinkler(emitter) and "sprinkler" or "drip"
                 list[#list + 1] = { x = sq:getX(), y = sq:getY(), z = sq:getZ(),
@@ -128,6 +134,11 @@ local function rescan()
     end
 
     FX.active = list
+    -- Per-rebuild totals are meaningless across sessions without these: a farm with
+    -- forty emitters in range and one with eight cost different amounts for the same
+    -- code. Cost per emitter is the number that compares.
+    WaterPipes.Profiler.count("sprayfx: emitters in range", considered)
+    WaterPipes.Profiler.count("sprayfx: rebuilds", 1)
 end
 
 -- ===== Draw =====
@@ -232,7 +243,7 @@ local function onTick()
         return
     end
     tickCounter = 0
-    pcall(rescan)
+    pcall(WaterPipes.Profiler.time, "sprayfx/rescan", rescanInner)
 end
 
 if Events and Events.OnTick then

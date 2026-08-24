@@ -199,16 +199,35 @@ function Irrigation.getEmitterStatus(worldObject, square)
     end
 
     local NetworkAccess = WaterPipes.NetworkAccess
+    local Hydraulics = WaterPipes.Hydraulics
+    local Pressure = WaterPipes.Pressure
     local kind = isDrip and Constants.PRESSURE_KIND_DRIP or Constants.PRESSURE_KIND_SPRINKLER
-    -- One summary answers both questions the readout asks -- what head reaches here, and whether
-    -- there is water behind it. Asking them separately built the same network summary twice.
-    local summary = NetworkAccess.getDrawSummary(square, kind)
+
+    -- Two questions, and they have different scopes. Which vessels hold water this emitter can lift
+    -- from is a property of the ZONE and the LEVEL, so it is shared (see getStatusSummary); what head
+    -- arrives HERE is a property of the tile, so it is read from the field, which is already solved
+    -- and cached. Building a whole summary per emitter to answer both was measured at 4.3 ms each.
+    local summary = NetworkAccess.getStatusSummary(square, kind)
     local status = {
         kind = kind,
-        pressure = summary and summary.pressure or nil,
-        minimum = WaterPipes.Pressure.minimumFor(kind),
+        minimum = Pressure.minimumFor(kind),
         burst = isDrip and Irrigation.isDripBurst(worldObject) or false,
     }
+
+    if not Pressure.isEnabled() then
+        -- With the model off the gate never runs and the summary carries the flat container base,
+        -- which is the reading the old code reported. Nothing here is per-tile.
+        status.pressure = summary and summary.pressure or nil
+    else
+        -- Hydraulics.canDrawAt, never a head comparison of our own: a consumer the solve excluded
+        -- reads a healthy head BECAUSE it was excluded. The head is still reported -- a starved
+        -- emitter showing the static pressure behind it, next to the minimum it cannot meet, says
+        -- more than a blank line does.
+        local solution = Hydraulics.solveAt(square)
+        local canDraw, head = Hydraulics.canDrawAt(solution, square, kind)
+        status.pressure = head
+        status.canDraw = canDraw and true or false
+    end
 
     -- Is there actually water to draw here? (A dry network makes an emitter idle even at full pressure.)
     local fluidTypeName = summary and not summary.isMixed and summary.fluidTypeName or nil
@@ -218,9 +237,12 @@ function Irrigation.getEmitterStatus(worldObject, square)
 
     -- With the pressure model off every connected emitter qualifies, exactly as the irrigation pass
     -- itself decides (Pressure.canReach short-circuits) -- otherwise the readout would call an emitter
-    -- starved while it was happily watering.
-    status.reaches = status.pressure ~= nil
-        and (not WaterPipes.Pressure.isEnabled() or status.pressure >= status.minimum)
+    -- starved while it was happily watering. With it on, the solve's verdict is the authority.
+    if not Pressure.isEnabled() then
+        status.reaches = status.pressure ~= nil
+    else
+        status.reaches = status.canDraw == true
+    end
     status.active = status.reaches and status.hasWater and not status.burst
     return status
 end
@@ -401,7 +423,12 @@ local function collectEmitters()
 
     local emitters = {}
     for _, pipeData in pairs(state.pipes) do
-        local square = getCellSquare(pipeData.x, pipeData.y, pipeData.z)
+        -- Skip only what we KNOW carries no emitter. An entry without `kinds` predates the registry
+        -- recording it and is still probed, so an existing save keeps watering while the ten-minute
+        -- pass fills the gaps in. See WaterPipesBuild's registerPipeAt call.
+        local metadata = pipeData.metadata
+        local skip = metadata and metadata.kinds and not metadata.drip and not metadata.sprinkler
+        local square = (not skip) and getCellSquare(pipeData.x, pipeData.y, pipeData.z) or nil
         if square then
             local drip = Irrigation.findDripOnSquare(square)
             if drip then

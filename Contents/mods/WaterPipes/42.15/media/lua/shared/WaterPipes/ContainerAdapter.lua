@@ -390,6 +390,39 @@ end
 -- on the echo, so this resets no stagnation clock and re-reconciles no endpoint -- it is purely an
 -- outward signal. Save/restore (not true/false) stays correct if a listener re-enters; pcall keeps the
 -- flag clean if one errors. Fired only on a real change, and only for a real IsoObject.
+-- The head field cares WHETHER a vessel holds water, never how much: a barrel with a litre in it
+-- supplies exactly the head a full one does. So the field only goes stale when a vessel crosses
+-- between empty and not, and that crossing is the ONLY thing about water movement it needs told.
+--
+-- This is what replaces dropping the whole field once a minute on the chance that something somewhere
+-- ran dry. A farm whose barrels stay wet now never invalidates at all; one that runs dry invalidates
+-- once, at the moment it matters.
+--
+-- Scoped to the tile, so a barrel emptying on one network leaves every other network's field standing.
+local function noteEmptinessCrossing(worldObject, prevAmount, newAmount)
+    local wasEmpty = (prevAmount or 0) <= 0
+    local isEmpty = (newAmount or 0) <= 0
+    if wasEmpty == isEmpty then
+        return
+    end
+
+    local Hydraulics = WaterPipes.Hydraulics
+    if not Hydraulics or not Hydraulics.invalidateAroundSquare then
+        return
+    end
+
+    local ok, square = pcall(worldObject.getSquare, worldObject)
+    if ok and square then
+        pcall(Hydraulics.invalidateAroundSquare, square)
+    end
+end
+
+function Adapter.noteEmptinessCrossing(worldObject, prevAmount, newAmount)
+    if worldObject then
+        noteEmptinessCrossing(worldObject, prevAmount, newAmount)
+    end
+end
+
 local function fireExternalWaterChange(worldObject, prevAmount)
     if not worldObject or not worldObject.getModData then
         return
@@ -441,6 +474,7 @@ function Adapter.writeWorldFluidAmount(worldObject, fluidAmount, fluidTypeName)
             pcall(worldObject.transmitModData, worldObject)
         end
 
+        noteEmptinessCrossing(worldObject, prevAmount, clampedAmount)
         fireExternalWaterChange(worldObject, prevAmount)
         return true
     end
@@ -761,6 +795,52 @@ local function classifySquareVesselsCached(square)
     return cached
 end
 
+-- (Defined here, below classifySquareVessels, and not beside the other invalidation helpers:
+-- it closes over that local, and a function compiled above it would bind the name to a nil
+-- GLOBAL instead -- silently, since that is valid Lua and luac -p cannot see it. Third time
+-- this shape has bitten in this file's history; test_container_cache.lua now calls it.)
+-- Recompute ONE tile and compare it against what was remembered. True when they agree.
+--
+-- This replaces the periodic wholesale drop, and the difference is the point. The drop assumed the
+-- memo was wrong and paid to rebuild every tile of every network -- measured at ~190 ms of client
+-- work per in-game minute, landing in one frame. This assumes the memo is RIGHT, checks a few tiles
+-- to see, and says so when it is not.
+--
+-- The memo is left holding the fresh answer either way, so a disagreement is also a repair.
+--
+-- A disagreement means an object left a tile without OnObjectAboutToBeRemoved firing, which is the
+-- one thing that could justify the old drop and which nobody has ever observed. If this never fires
+-- across enough play, the check goes away and takes the last periodic rescan with it. If it does
+-- fire, the log names the tile and the path can be hooked properly. Either way it is evidence
+-- instead of nerve -- see docs/removal-events.md.
+function Adapter.verifySquareVessels(square)
+    if not square or not square.getX then
+        return true
+    end
+
+    local key = vesselMemoKey(square)
+    local remembered = vesselMemo[key]
+    if not remembered then
+        return true          -- nothing cached here, so nothing can be stale
+    end
+
+    vesselMemo[key] = nil
+    local fresh = classifySquareVessels(square)
+    vesselMemo[key] = fresh
+
+    if #fresh ~= #remembered then
+        return false
+    end
+    for index = 1, #fresh do
+        -- Object identity AND position in the list: the index is baked into every descriptor key, so
+        -- a renumber is just as wrong as a substitution even when the same objects are present.
+        if fresh[index].object ~= remembered[index].object
+            or fresh[index].objectIndex ~= remembered[index].objectIndex then
+            return false
+        end
+    end
+    return true
+end
 -- Is there any network vessel on this square at all? The router walk asks this per crossing and does
 -- not care what is inside, so it never pays for a fluid read.
 function Adapter.hasSquareContainers(square)
@@ -799,12 +879,25 @@ function Adapter.collectSquareContainers(square)
     return result
 end
 
--- The vessel memo's invalidation, mirroring PipeObjectUtils' scan memo: an object appearing on or
--- leaving a square renumbers that square's object list, and the index is baked into every descriptor
--- key -- so the affected square is dropped at once. The per-frame clear is the backstop.
+-- The vessel memo's invalidation: an object appearing on or leaving a square renumbers that square's
+-- object list, and the index is baked into every descriptor key -- so the affected square is dropped
+-- at once, and only that square.
 --
 -- Note this does NOT need to fire on water moving. Amounts and fluid types are never memoised, so a
--- barrel filling or emptying is seen by the very next query without any invalidation at all.
+-- barrel filling or emptying is seen by the very next query without any invalidation at all. What is
+-- remembered is only WHICH objects on a tile are containers.
+--
+-- There used to be a per-frame clear here as well, and it cost more than everything above it saved.
+-- Classifying a tile is the most expensive per-square routine in the mod, and finding the vessels on a
+-- zone means classifying every tile of it: measured at 77% of a spray-FX rebuild, which runs three
+-- times a second. Throwing the answer away every frame meant paying that over and over for a result
+-- that had not changed -- the same mistake the head field shipped with (see
+-- NetworkAccess.invalidateTraversalCache).
+--
+-- What the per-frame clear was really guarding is a square being re-created underneath us by chunk
+-- streaming, which leaves the memo holding indices into an object list that no longer exists. That
+-- has its own event, so it is hooked directly instead of being swept up sixty times a second, and the
+-- per-minute pass drops the lot as a backstop for anything not thought of here.
 if Events then
     local function invalidateForObject(object)
         local square = object and object.getSquare and object:getSquare() or nil
@@ -817,5 +910,5 @@ if Events then
 
     if Events.OnObjectAdded then Events.OnObjectAdded.Add(invalidateForObject) end
     if Events.OnObjectAboutToBeRemoved then Events.OnObjectAboutToBeRemoved.Add(invalidateForObject) end
-    if Events.OnTick then Events.OnTick.Add(Adapter.invalidateVesselCache) end
+    if Events.LoadGridsquare then Events.LoadGridsquare.Add(Adapter.invalidateSquareVessels) end
 end
