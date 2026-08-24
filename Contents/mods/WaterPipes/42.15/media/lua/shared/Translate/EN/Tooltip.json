@@ -5,7 +5,7 @@
     "Tooltip_craft_WaterPipeRiserHiddenDesc": "A vertical pipe plastered into the wall. Links floors out of sight. Reveal it with 'Show pipe network'. Metal pipe or fired clay; clay is spent for good. Needs a Pipe Wrench and a bucket of mixed cement.",
     "Tooltip_craft_WaterPurifierElectricDesc": "Electric purifier tank. Put it on a Fluid Router: tainted water enters from the green (IN) side and leaves purified through the red (OUT) side while it has power. The filter wears with use; right-click to repair it with charcoal and ripped sheets. Needs welding gear and clear space above.",
     "Tooltip_craft_WaterPipeRouterDesc": "A one-way valve: water flows in through the green band (IN) and out through the red band (OUT), never back, capped at the pressure ceiling you set. Put a vessel on its tile and the two sides exchange only through it: a purifier cleans water in transit, a tank buffers it. Rotate with R to aim the OUT side.",
-    "Tooltip_WaterPipesFilterCondition": "Filter condition: %1%",
+    "Tooltip_WaterPipesFilterCondition": "Filter condition: %1%%",
     "Tooltip_WaterPipesRepairNeeds": "Requires:",
     "Tooltip_craft_WaterPumpDesc": "Electric pump. On a pipe run it raises pressure while powered, and chained pumps add up. Beside a well or open water it also draws water into the network. It sucks up from about two floors below but pushes far higher, so place it low. Needs a Pipe Wrench and welding gear.",
     "Tooltip_craft_WaterPipeDripDesc": "Drip emitter. A pipe that waters the crop on its own tile and passes water on. No pressure needed, only water. Too much pressure bursts it, so keep pumps off its line or cap it with a router. Needs a Pipe Wrench.",

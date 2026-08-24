@@ -19,7 +19,7 @@
     "IGUI_WaterPipes_Options": "Water Pipes",
     "IGUI_WaterPipes_SoundEnabled": "Machine sounds",
     "IGUI_WaterPipes_SoundEnabled_tooltip": "Looping ambient hum played by working machines, such as the electric purifier while it is powered. Turn off for total silence.",
-    "IGUI_WaterPipes_SoundVolume": "Machine sound volume (%)",
+    "IGUI_WaterPipes_SoundVolume": "Machine sound volume (%%)",
     "IGUI_WaterPipes_SoundVolume_tooltip": "Volume of the mod's machine sounds, from 0 (silent) to 100 (loudest).",
     "IGUI_WaterPipes_EffectsEnabled": "Water spray effects",
     "IGUI_WaterPipes_EffectsEnabled_tooltip": "Animated water spray drawn over running sprinklers and open fire hydrants. Purely visual; turn off if you prefer no effects or want to save a little performance.",
