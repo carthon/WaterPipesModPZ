@@ -441,6 +441,14 @@ Constants.SPRINKLER_NOISE_VOLUME = 8
 
 -- Litres of network fluid per +1 waterLvl. 10 waterLvl = 1 use = 200 mL, so 1 waterLvl = 0.02 L.
 Constants.IRRIGATION_LITRES_PER_WATER_LEVEL = 0.02
+
+-- How often emitters are charged for the water they spend, in in-game minutes. Rounded up to a
+-- multiple of 10, the finest cadence the mod has.
+--   60 -> one pass an hour: the whole bill lands as a single step, six times cheaper to compute.
+--   10 -> the drain is visible as it happens, at six times the passes.
+-- The water delivered per game-hour is identical either way: every rate in Irrigation is linear in
+-- dtHours, and the pass is charged for the time that actually elapsed.
+Constants.IRRIGATION_STEP_MINUTES = 10
 Constants.IRRIGATION_MAX_WATER_LEVEL = 100
 
 -- ===== Fluid writes =====

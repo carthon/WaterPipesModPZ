@@ -1202,6 +1202,28 @@ local function verifyCachesAgainstTheWorld()
     end
 end
 
+-- Emitters are charged on a multiple of the ten-minute tick (Constants.IRRIGATION_STEP_MINUTES).
+-- `dtHours` is the time that ACTUALLY elapsed since the last pass, so the water delivered per game-hour
+-- is the same whatever the step -- six passes of 1/6 h spend exactly what one pass of 1 h does.
+-- Only the queueing happens here; the emitters drain a few per frame under a millisecond budget.
+local minutesSinceIrrigation = 0
+
+local function stepIrrigation()
+    minutesSinceIrrigation = minutesSinceIrrigation + 10
+    if minutesSinceIrrigation < math.max(Constants.IRRIGATION_STEP_MINUTES or 60, 10) then
+        return
+    end
+
+    local dtHours = minutesSinceIrrigation / 60
+    minutesSinceIrrigation = 0
+
+    Profiler.count("irrigation: passes started", 1)
+    local ok, err = pcall(Irrigation.beginPass, dtHours)
+    if not ok then
+        Logger.error("Irrigation pass failed: " .. tostring(err))
+    end
+end
+
 local function onEveryTenMinutes()
     System.tick()
 
@@ -1212,6 +1234,7 @@ local function onEveryTenMinutes()
         Logger.error("Rain contamination pass failed: " .. tostring(errRain))
     end
 
+    stepIrrigation()
 end
 
 -- The endpoint index's backstop, deliberately NOT on the same frame as the pass above: it costs 13.5 ms
@@ -1339,17 +1362,9 @@ local function onEveryOneMinute()
     end
 end
 
--- Irrigation runs hourly, not per minute: crops drain 1 waterLvl every 5 in-game hours, so anything
--- faster is pure overhead. It is also the only place pressure is computed for emitters, which pins that
--- cost to the slowest cadence in the mod.
+-- Irrigation moved to stepIrrigation, on the ten-minute tick. What is left here is stagnation, which is
+-- a days-scale process and has no reason to run faster.
 local function onEveryHours()
-    -- Queued rather than run outright: the pass hands itself out a few emitters per frame, so a field of
-    -- thirty sprinklers no longer lands as one hourly hitch.
-    local ok, err = pcall(Irrigation.beginPass, 1.0)
-    if not ok then
-        Logger.error("Irrigation pass failed: " .. tostring(err))
-    end
-
     -- Stagnation is a days-scale process, so the hourly cadence keeps its network walk off the hot path.
     local okStag, errStag = pcall(System.processStagnation)
     if not okStag then
@@ -1366,7 +1381,7 @@ local function drainIrrigationPass()
 
     -- Timed, because it was not and that hid a quarter of everything the mod does: the bucket table adds up
     -- only its TOP-LEVEL rows, and solve/search was happening underneath an untimed pass.
-    local ok, err = pcall(Profiler.time, "1h/irrigation-step",
+    local ok, err = pcall(Profiler.time, "irrigation/step",
         Irrigation.stepPass, Constants.IRRIGATION_EMITTERS_PER_TICK)
     if not ok then
         Logger.error("Irrigation step failed: " .. tostring(err))
