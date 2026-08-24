@@ -39,11 +39,9 @@ local function ensureStateShape(state)
     -- drain pass cannot find open ones by scanning pipe squares (an open hydrant with no pipe on its
     -- tile is exactly the case that must still waste water). This persisted set is how it finds them.
     state.openHydrants = state.openHydrants or {}
-    -- Where the purifiers are. A purifier cannot exist without a router under it, and both are placed
-    -- and destroyed by the player -- so their positions are known at the moment they change and there
-    -- is nothing to discover. Kept for the same reason openHydrants is: the alternative is searching
-    -- the whole network for them, which is what the per-minute pass used to do once a minute to find
-    -- out there were none.
+    -- Where the purifiers are. A purifier cannot exist without a router under it, and both are placed and
+    -- destroyed by the player, so their positions are known at the moment they change. Kept for the same
+    -- reason openHydrants is: the alternative is searching the whole network for them once a minute.
     state.purifiers = state.purifiers or {}
     -- Tiles known to carry a plumbed fixture or a plumbed generator. See State.registerEndpoint.
     -- Deliberately NOT defaulted to {} for the indexed flag: an existing save has no index, and
@@ -116,19 +114,12 @@ function State.getPurifiers()
 end
 
 -- ===== Plumbed endpoints =====
---
 -- The per-minute refresh used to FIND its work: sweep every pipe tile and its neighbours -- about 700
--- tiles on a 200-pipe farm -- lift each square and scan its object list twice, looking for fixtures
--- and generators that are plumbed. Measured at 15.3 ms a minute, 63% of the whole per-minute pass,
--- to rediscover a handful of sinks that have not moved since the player plumbed them.
---
+-- tiles on a 200-pipe farm -- and scan each square's object list twice. Measured at 15.3 ms a minute,
+-- 63% of the whole per-minute pass, to rediscover a handful of sinks that have not moved.
 -- A fixture becomes plumbed exactly one way: somebody calls EndpointPlumbing.plumb or
--- GeneratorFuel.plumb. That is an event. So it is recorded when it happens, and the refresh iterates
--- what it was told instead of searching for it.
---
--- Treat an entry as a CLAIM, not a fact -- the same contract as the purifier registry above. The
--- reader validates it and drops it if the world disagrees, which is what makes this safe against the
--- ways a fixture can leave the world without telling us.
+-- GeneratorFuel.plumb. That is an event, so it is recorded when it happens.
+-- Treat an entry as a CLAIM, not a fact, the same contract as the purifier registry above.
 function State.registerEndpoint(x, y, z)
     local state = State.ensure()
     local key = State.squareKey(x, y, z)

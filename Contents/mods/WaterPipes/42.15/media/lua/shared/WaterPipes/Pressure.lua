@@ -101,13 +101,10 @@ end
 
 -- Head delivered by a source sitting `hops` pipe tiles away at z = sourceZ, to a consumer at
 -- z = consumerZ drawing at `kind`'s flow rate, with `pumpHead` m.c.a. of pumping in the zone.
--- Falling water gains head, climbing spends it, distance always costs, pumps add.
--- May be negative: that means the source cannot reach the consumer at all.
---
--- Pumps are counted PER ZONE, not per path: every powered pump between the same pair of routers
--- lifts the whole zone. That is a deliberate simplification -- routers are already the only network
--- boundary the mod has, and "this circuit runs at X" is exactly how a player reasons about it.
--- Modelling head per path would need a real relaxation pass and would buy very little.
+-- Falling water gains head, climbing spends it, distance always costs, pumps add. May be negative,
+-- which means the source cannot reach the consumer at all.
+-- Pumps are counted PER ZONE, not per path: every powered pump between the same pair of routers lifts
+-- the whole zone. Routers are already the only network boundary the mod has.
 function Pressure.delivered(sourceZ, consumerZ, hops, kind, pumpHead)
     return Pressure.containerBase()
         + Pressure.levelHead() * ((sourceZ or 0) - (consumerZ or 0))
@@ -115,19 +112,14 @@ function Pressure.delivered(sourceZ, consumerZ, hops, kind, pumpHead)
         + math.max(pumpHead or 0, 0)
 end
 
--- Head that a pressure-reducing valve set to `ceiling` actually lands with, `hops` tiles downstream
--- of itself at z = regulatorZ.
---
--- A regulator fixes the head at ITS OUTLET, not everywhere behind it. Past the valve the water keeps
--- paying friction for distance and keeps gaining or losing height, exactly as it does coming off a
--- source -- so the valve is priced as a fresh source that happens to deliver `ceiling`. That is why
--- this is Pressure.delivered with `ceiling` in place of the container base: same physics, different
--- origin. Capping the finished head instead (what this replaced) made a whole regulated branch sit at
--- the setting no matter how long it was, which no real pipe does.
---
--- `pumpHead` is only the pumps standing BETWEEN the valve and the consumer. A pump upstream of a
--- regulator cannot push past it -- that is what a regulator is for -- but one downstream re-pressurises
--- its own branch, so you can hold the mains at 10 and still run sprinklers off a booster.
+-- Head that a pressure-reducing valve set to `ceiling` lands with, `hops` tiles downstream of itself at
+-- z = regulatorZ.
+-- A regulator fixes the head at ITS OUTLET, not everywhere behind it: past the valve the water keeps
+-- paying friction and height exactly as it does coming off a source, so the valve is priced as a fresh
+-- source that happens to deliver `ceiling`. Capping the finished head instead made a whole regulated
+-- branch sit at the setting no matter how long it was, which no real pipe does.
+-- `pumpHead` is only the pumps BETWEEN the valve and the consumer. One upstream cannot push past it --
+-- that is what a regulator is for -- but one downstream re-pressurises its own branch.
 function Pressure.atRegulator(ceiling, regulatorZ, consumerZ, hops, kind, pumpHead)
     return (ceiling or 0)
         + Pressure.levelHead() * ((regulatorZ or 0) - (consumerZ or 0))
@@ -145,14 +137,11 @@ function Pressure.canReach(sourceZ, consumerZ, hops, kind, pumpHead)
     return Pressure.delivered(sourceZ, consumerZ, hops, kind, pumpHead) >= Pressure.minimumFor(kind)
 end
 
--- The FILL side: can fluid entering the network at originZ reach a container at targetZ?
--- Only lift is priced here, not distance -- filling is the network settling, not a consumer drawing,
--- and charging friction for it would strand containers that have always filled fine.
---
--- With no pump this reproduces the old "down" traversal exactly, which is why the fill path can stop
--- special-casing gravity: climbing needs lift > 0 and is refused, the same floor costs 0 and passes,
--- falling is negative and passes. Add a pump and the same rule lets water climb pumpHead/3 floors,
--- which is what makes vertical distribution work.
+-- The FILL side: can fluid entering the network at originZ reach a container at targetZ? Only lift is
+-- priced, not distance -- filling is the network settling, not a consumer drawing.
+-- With no pump this reproduces the old "down" traversal exactly: climbing needs lift > 0 and is
+-- refused, the same floor costs 0 and passes, falling is negative and passes. Add a pump and the same
+-- rule lets water climb pumpHead/3 floors.
 function Pressure.canFillTo(originZ, targetZ, pumpHead)
     if not Pressure.isEnabled() then
         return true

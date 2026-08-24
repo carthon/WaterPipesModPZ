@@ -1,38 +1,24 @@
 -- =====================================================================================
 -- WaterPipes public integration API
 --
--- A small, STABLE surface that other mods can call to read and consume water from a
--- Water Pipes network, WITHOUT depending on this mod's internals. It only delegates to
--- the network layer, so our internals can change freely without breaking integrators.
+-- A small, STABLE surface other mods can call to read and consume water from a Water Pipes network
+-- without depending on this mod's internals. It only delegates to the network layer.
 --
--- Availability: the global table `WaterPipesAPI`, present once this mod's shared files
--- have loaded (i.e. from OnGameStart / OnServerStarted onward). Always guard:
---     if WaterPipesAPI and WaterPipesAPI.getWaterAmount(sq) > 0 then ... end
+-- Available as the global `WaterPipesAPI` once this mod's shared files have loaded (OnGameStart /
+-- OnServerStarted onward). Always guard on it being present.
 --
--- All functions are SQUARE-based: pass the IsoGridSquare of a tile that has a pipe on it
--- (typically your fixture's OWN tile, with a pipe built on it). The network reachable
--- from that pipe is what gets read/drawn.
+-- All functions are SQUARE-based: pass the IsoGridSquare of a tile that has a pipe on it. The network
+-- reachable from that pipe is what gets read or drawn.
 --
--- Multiplayer: the read functions (hasNetwork / getWaterAmount / getWaterSummary) are safe on
--- any side. The WRITE functions (drawWater / fillWater) mutate network containers, so they only
--- run on the AUTHORITATIVE side (server or single-player) and return 0 on a plain MP client --
--- call them server-side (a client write would desync and be overwritten on the next sync).
+-- Multiplayer: the read functions are safe on any side. The WRITE functions mutate network containers,
+-- so they run only on the AUTHORITATIVE side and return 0 on a plain MP client.
 --
--- API:
 --   WaterPipesAPI.VERSION                              -> integer (bumped on breaking changes)
---   WaterPipesAPI.hasNetwork(square)                   -> bool        (a pipe network is reachable)
---   WaterPipesAPI.getWaterAmount(square)               -> number      (usable fluid units; 0 if none/mixed)
+--   WaterPipesAPI.hasNetwork(square)                   -> bool
+--   WaterPipesAPI.getWaterAmount(square)               -> number      (0 if none or mixed)
 --   WaterPipesAPI.getWaterSummary(square)              -> table|nil   { amount, capacity, fluidType, isMixed }
---   WaterPipesAPI.drawWater(square, fluidType, amount) -> number      (units actually drawn from the network)
---        fluidType may be nil to draw whatever single fluid the network currently holds.
---   WaterPipesAPI.fillWater(square, fluidType, amount) -> number      (units actually added to the network)
---        only fills an empty network, or one already holding the same fluid (never mixes).
---
--- Example (a shower reading then consuming network water at its own tile):
---     local sq = shower:getSquare()
---     if WaterPipesAPI and WaterPipesAPI.getWaterAmount(sq) > 0 then
---         local got = WaterPipesAPI.drawWater(sq, "Water", needed)
---     end
+--   WaterPipesAPI.drawWater(square, fluidType, amount) -> number      (fluidType nil = whatever it holds)
+--   WaterPipesAPI.fillWater(square, fluidType, amount) -> number      (empty or same-fluid networks only)
 -- =====================================================================================
 
 require "WaterPipes/NetworkAccess"
@@ -40,9 +26,9 @@ require "WaterPipes/NetworkAccess"
 WaterPipes = WaterPipes or {}
 local NetworkAccess = WaterPipes.NetworkAccess
 
--- Fluid mutations must only run on the authoritative side (server or single-player). A plain MP
--- client writing to a FluidContainer would desync and be overwritten on the next server sync, so
--- the write functions below no-op there. Mirrors the guard used across the mod.
+-- Fluid mutations must only run on the authoritative side. A plain MP client writing to a
+-- FluidContainer would desync and be overwritten on the next server sync, so the write functions
+-- below no-op there.
 local function isAuthoritative()
     if isServer and isServer() then
         return true

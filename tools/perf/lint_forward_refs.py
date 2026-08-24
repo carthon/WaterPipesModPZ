@@ -2,48 +2,18 @@
 # -*- coding: utf-8 -*-
 """Find references to a Lua `local` that appear ABOVE its declaration.
 
-This is a linter for one bug, because that one bug has shipped from this repo
-three times, and was written a fourth time while this file already existed.
+A linter for one bug, which has shipped from this repo three times. In Lua a name used before its
+`local` is neither an error nor an upvalue: it compiles to a GLOBAL access, nil at run time. It loads
+cleanly, passes `luac -p`, and passes every test that does not CALL the function.
 
-In Lua, a name used before the `local` that declares it is not an upvalue and is
-not an error. It compiles to a GLOBAL access, which is nil at run time. So:
-
-    function Adapter.verifySquareVessels(square)   -- written first
-        return classifySquareVessels(square)       -- binds to a nil GLOBAL
-    end
-    local function classifySquareVessels(square)   -- declared after
-        ...
-    end
-
-...loads cleanly, passes `luac -p`, passes every test that does not CALL the
-function, and throws "Object tried to call a nil value" the first time a player
-touches it. That is exactly how it reached a game log: the function was public,
-the suite was green, and nothing in the suite called it.
-
-A READ of a nil global at least tends to blow up. A WRITE is worse and quieter:
-
-    function Registry.requestSweep()
-        nextSweepAtMs = nil        -- sets a global nobody reads
-    end
-    ...
-    local nextSweepAtMs = nil      -- never touched by the line above
-
-Nothing fails. The local simply never changes, and the feature it controls
-silently stops working. This linter's first version looked only for `name(`,
-`name.` and `name[`, so it missed exactly that -- an assignment has none of those
-characters. It looks for any use now.
+A READ of a nil global tends to blow up. A WRITE is quieter -- the local simply never changes and the
+feature it controls stops working -- and an assignment carries no `(`, `.` or `[`, which is all the
+first version of this file looked for. It looks for any use now.
 
     python lint_forward_refs.py [path ...]      # default: the mod's lua tree
 
-Exits 1 if anything is found, so it can gate a commit.
-
-Known limits, stated rather than hidden: it strips comments and string literals
-with regexes rather than parsing, and it has no notion of scope -- so a name is
-only reported when NO `local` for it appears anywhere above the use. That is the
-shape of the real bug (a module-level local used by a function written above it)
-and it is what keeps the report free of noise: `local ok, modData = pcall(...)`
-declares both names on that line, and until this file understood that, it
-reported seven healthy files.
+Limits: comments and strings are stripped with regexes rather than parsed, and there is no notion of
+scope, so a name is reported only when NO `local` for it appears anywhere above the use.
 """
 
 import io
@@ -83,11 +53,9 @@ def without_table_keys(lines):
     out = []
     depth = 0
     for line in lines:
-        # A declaration's NAME LIST is not a table constructor, and stripping inside it
-        # was destroying the very thing the scan reads: `local okType, fullType = ...`
-        # became `local okType, = ...`, so fullType looked undeclared and every later
-        # `local fullType` in the file looked like its declaration. Only the right-hand
-        # side of a `local` can hold a constructor, so only that side is cleaned.
+        # A declaration's NAME LIST is not a table constructor, and stripping inside it destroyed the very
+        # thing the scan reads: `local okType, fullType = ...` became `local okType, = ...`. Only the
+        # right-hand side of a `local` can hold a constructor, so only that side is cleaned.
         prefix = ""
         if re.match(r"\s*local\s", line) and "=" in line:
             cut = line.index("=") + 1
@@ -143,9 +111,8 @@ def scan(path):
     for name, declaration in declared_at.items():
         if name in bound_elsewhere or len(name) < 3:
             continue
-        # Any use at all: a call, a field read, an index, an assignment, or a bare
-        # mention in an expression. All of them bind, and the assignment is the one
-        # that fails silently.
+        # Any use at all: a call, a field read, an index, an assignment, or a bare mention. All of them bind,
+        # and the assignment is the one that fails silently.
         used = re.compile(r"(?<![\w.:])" + re.escape(name) + r"(?![\w])")
         for index in range(declaration):
             if used.search(code[index]):

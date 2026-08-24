@@ -2,39 +2,20 @@
 # -*- coding: utf-8 -*-
 """Find calls to a WaterPipes module member that is never defined.
 
-Third linter, third distinct way this codebase has shipped a call to something
-that was not there:
+`luac -p` accepts these, because they are valid Lua, and a test catches one only if something CALLS
+the function. Hydraulics.nodeKeyOf was called from NetworkAccess and then deleted by an edit that
+replaced the block it sat in: the call site was fine, the definition was gone, and the game threw
+"Object tried to call nil in getPressureReport" the next time somebody right-clicked a pipe.
 
-  1. `verifySquareVessels` referenced a local declared further down the file, so
-     the name bound to a nil GLOBAL. That is lint_forward_refs.py.
-
-  2. `next()` was used three times, and PZ's Kahlua does not expose it.
-
-  3. `Hydraulics.nodeKeyOf` was called from NetworkAccess and then deleted from
-     Hydraulics by an edit that replaced the block it happened to sit in. The
-     call site was fine, the definition was gone, and the game threw "Object
-     tried to call nil in getPressureReport" the next time somebody right-clicked
-     a pipe.
-
-All three share one property: `luac -p` accepts them, because they are valid Lua.
-A test catches them only if something CALLS the function, and in every one of
-these cases nothing in the suite did.
-
-So this reads the module surface directly. For every file it works out which
-locals are aliases of a WaterPipes module (`local Hydraulics = WaterPipes.Hydraulics`),
-collects every member defined on any module anywhere in the tree, and reports any
-`Module.member(...)` call whose member is never defined.
+So this reads the module surface directly. It works out which locals are aliases of a WaterPipes
+module, collects every member defined on any module in the tree, and reports any `Module.member(...)`
+call whose member is never defined.
 
     python lint_calls.py [path ...]      # default: the mod's lua tree
 
-Exits 1 on a finding.
-
-Known limits, stated rather than hidden: it only understands the alias form this
-codebase actually uses, it cannot see members assigned dynamically, and it only
-looks at CALLS -- `Module.member` read as a value is left alone, because that is
-how the code probes for optional functions (`if Module.member then`). Those probes
-are the reason a missing member can stay quiet, and also the reason flagging them
-would be wrong.
+Limits: it understands only the alias form this codebase uses, it cannot see members assigned
+dynamically, and it looks only at CALLS -- `Module.member` read as a value is how the code probes for
+optional functions.
 """
 
 import io
@@ -51,11 +32,9 @@ NAME = r"[A-Za-z_]\w*"
 ALIAS = re.compile(r"^\s*local\s+(" + NAME + r")\s*=\s*WaterPipes\.(" + NAME + r")\s*$")
 DEF_QUALIFIED = re.compile(r"^\s*function\s+WaterPipes\.(" + NAME + r")\.(" + NAME + r")\s*\(")
 DEF_ALIASED = re.compile(r"^\s*function\s+(" + NAME + r")\.(" + NAME + r")\s*\(")
-# ANY assignment counts as a definition, not just `= function`. This codebase writes
-# `GeneratorFuel.isGenerator = isGenerator` -- promoting a local -- and
-# `ContextMenu.originalOnPlumbItem = ... or ISWorldObjectContextMenu.onPlumbItem`, and
-# insisting on the `function` keyword reported eight healthy call sites. A linter that
-# has to be argued with about correct code does not get run.
+# ANY assignment counts as a definition, not just `= function`. This codebase promotes locals
+# (`GeneratorFuel.isGenerator = isGenerator`), and insisting on the `function` keyword reported eight
+# healthy call sites. A linter that has to be argued with about correct code does not get run.
 ASSIGN_QUALIFIED = re.compile(r"^\s*WaterPipes\.(" + NAME + r")\.(" + NAME + r")\s*=(?!=)")
 ASSIGN_ALIASED = re.compile(r"^\s*(" + NAME + r")\.(" + NAME + r")\s*=(?!=)")
 # A call, not a read: the trailing paren is what makes a missing member fatal.

@@ -2,21 +2,16 @@
 --
 -- Says out loud, once per removal, what left the world and whether this mod's tables were told.
 --
--- Several caches and registries in this mod are kept correct by object-lifecycle events rather than
--- by periodic rescanning, and each one carries a periodic "backstop" that exists solely because
--- nobody could prove the events fire in every case. Those backstops are the most expensive thing the
--- mod does -- the drop they force was measured at ~190 ms of client work per in-game minute -- and
--- they are being paid for a doubt, not for a known failure.
+-- Several caches here are kept correct by object-lifecycle events rather than by periodic rescanning,
+-- and each carries a periodic "backstop" that exists solely because nobody could prove the events fire
+-- in every case. Those backstops are the most expensive thing the mod does -- ~190 ms of client work
+-- per in-game minute -- and they are paid for a doubt, not for a known failure.
 --
--- This turns the doubt into an experiment. Destroy things by every means you can arrange -- fire,
--- zombies, a sledgehammer, an explosion, another mod, a chunk being unloaded under you -- and read
--- the log. Every removal this mod NOTICES prints a line. A removal that produces no line is a hole,
--- and the line it failed to print names exactly what would have gone stale.
+-- This turns the doubt into an experiment. Destroy things by every means you can arrange and read the
+-- log: every removal this mod NOTICES prints a line, and one that produces no line is a hole.
+-- See docs/removal-events.md for what has been established so far.
 --
--- See docs/removal-events.md for what has been established so far and what remains to be proven.
---
--- Off by default. Turn it on from the pipe Debug menu; it prints one line per relevant removal and
--- nothing at all for the corpses, bags and litter that make up almost every removal in a real game.
+-- Off by default. Turn it on from the pipe Debug menu.
 
 require "WaterPipes/Logger"
 require "WaterPipes/PipeObjectUtils"

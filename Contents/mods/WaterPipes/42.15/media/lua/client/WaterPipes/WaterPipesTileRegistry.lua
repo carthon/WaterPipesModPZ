@@ -1,33 +1,21 @@
 -- Where the interesting tiles are (client-only).
 --
--- Four presentational modules -- the spray FX, the wetness check, the two ambient sound loops and
--- the irrigation overlay -- all need the same thing: "which emitters / hydrants / purifiers are near
--- the player right now?". Each of them answered it by sweeping a square area around the player and
--- scanning every tile's object list: 1369 tiles for the FX, 841 for each sound module, 961 for the
--- overlay, several times a second, whether or not a single one of those objects existed anywhere in
--- the save. That sweep cost more than everything it was looking for.
+-- Four presentational modules -- the spray FX, the wetness check, the two ambient sound loops and the
+-- irrigation overlay -- all ask the same thing: "which emitters / hydrants / purifiers are near the
+-- player right now?". Each answered it by sweeping a square area and scanning every tile's object list,
+-- several times a second, whether or not one of those objects existed anywhere in the save.
 --
--- A registry answers the same question by remembering, so the readers pay for the handful of tiles
--- that matter instead of the thousand that do not.
---
--- It is filled two ways, and the split is the whole design:
---
+-- Filled two ways, and the split is the whole design:
 --   * OnObjectAdded, immediately -- so an emitter the player just built sprays at once.
 --   * a full sweep on a SLOW timer -- which is what actually finds everything else.
 --
--- The slow sweep is not belt-and-braces, it is load-bearing, and the first version of this file was
--- wrong for leaving it out. Populating from LoadGridsquare looks right and does not work: at the
--- moment that event fires the objects are on the square but their modData is not attached yet, and
--- every emitter/hydrant/purifier check in this mod reads modData. The classification silently found
--- nothing and the registry stayed empty, so no spray was ever drawn. (PipeObjectUtils.isPipeObject
--- already carries a getName() fallback for exactly this reason -- that fallback is the fossil of the
--- same bug.) Sweeping later, off a timer, asks the question when the answer exists.
+-- The slow sweep is load-bearing, not belt-and-braces. Populating from LoadGridsquare looks right and
+-- does not work: at the moment it fires the objects are on the square but their modData is not attached
+-- yet, and every emitter/hydrant/purifier check in this mod reads modData. Sweeping later, off a timer,
+-- asks the question when the answer exists.
 --
--- Five seconds of latency on a decorative spray is not worth a cleverer mechanism, and the sweep at
--- this cadence still costs a fraction of what the per-module sweeps it replaced did.
---
--- Deliberately client-side and purely an index: it owns no state the simulation reads, so being
--- briefly wrong costs a few seconds of a missing spray, never a wrong water level.
+-- Purely an index, and client-side: it owns no state the simulation reads, so being briefly wrong costs
+-- a few seconds of a missing spray, never a wrong water level.
 
 require "WaterPipes/Constants"
 require "WaterPipes/Hydrant"
@@ -46,29 +34,22 @@ local Profiler = WaterPipes.Profiler
 local Purifier = WaterPipes.Purifier
 local Registry = WaterPipes.TileRegistry
 
--- How long an emitter's computed status is reused. The values behind it (network pressure, whether
--- the line still holds water) only move when the server runs its minute pass, so anything below that
--- is asking a question whose answer cannot have changed. Kept well under a minute anyway so a network
--- running dry still shows up promptly.
+-- How long an emitter's computed status is reused. The values behind it -- network pressure, whether the
+-- line still holds water -- only move when the server runs its minute pass, but this is kept well under
+-- a minute anyway so a network running dry still shows up promptly.
 local STATUS_TTL_MS = 3000
 
--- The sweep that actually populates the registry. Radius covers the widest reader (the spray FX at
--- 18) with margin; the interval is what keeps it cheap -- the sweeps this replaced ran at 0.75 s,
--- 1 s and 0.25 s, three of them, every second of play.
--- Milliseconds, not ticks, for the reason spelled out over RESCAN_MS in WaterPipesSprayFX: a tick
--- count measures how fast the machine is, not how much time has passed. "300 ticks, ~5 s at 60 fps"
--- is 2.4 s at 127, so this swept twice as often on a better PC -- and it was 18% of everything the
--- mod did in the window that showed it.
+-- The sweep that actually populates the registry. Radius covers the widest reader (the spray FX at 18)
+-- with margin; the interval is what keeps it cheap -- the sweeps this replaced ran at 0.75 s, 1 s and
+-- 0.25 s, three of them, every second of play.
+-- Milliseconds, not ticks: a tick count measures how fast the machine is, not how much time has passed.
+-- "300 ticks, ~5 s at 60 fps" is 2.4 s at 127, so this swept twice as often on a better PC.
 local SWEEP_INTERVAL_MS = 5000
 local SWEEP_RADIUS = 20
--- Rows of the sweep done per tick. Spreading it stops the rebuild from landing as one visible spike
--- in a single frame -- it is the same total work, just not all at once.
---
--- Measured on the medium bench scenario: the full sweep is ~69,500 bridge calls over 1,681 tiles,
--- about 1,700 per row. At 8 rows that is ~13,100 landing in one frame; at 2 it is ~3,300 spread
--- over 21 frames. The sweep then takes ~0.35 s instead of ~0.10 s, which costs nothing that
--- matters -- the registry feeds decorative FX on a five-second cadence, so a third of a second of
--- extra latency is invisible. The total is identical either way; only the worst frame moves.
+-- Rows of the sweep done per tick. Spreading it stops the rebuild landing as one visible spike -- the
+-- same total work, just not all at once. The full sweep is ~69 500 bridge calls over 1 681 tiles, so 8
+-- rows puts ~13 100 in one frame where 2 puts ~3 300 over 21 frames. The sweep then takes ~0.35 s
+-- instead of ~0.10 s, which is invisible on a five-second cadence; only the worst frame moves.
 local SWEEP_ROWS_PER_TICK = 2
 
 Registry.emitters = Registry.emitters or {}     -- ["x:y:z"] = { x, y, z }
@@ -116,26 +97,21 @@ local function classify(square)
     return emitter, hydrant, purifier
 end
 
--- The sweep in progress, if any; assigned by the sweep block below. Declared up here because both
--- entryFor's callers and forgetResolved close over it, and a local declared after them would leave
--- those closures bound to a nil global instead -- silently, which is the worst way to be wrong.
+-- Declared up here because entryFor's callers and forgetResolved both close over it: a local declared
+-- after them would leave those closures bound to a nil global instead, silently.
 local pendingSweep = nil
 
--- A remembered tile, with the square and object already resolved.
---
--- Registry.near used to re-resolve BOTH on every read -- a getGridSquare and a full object scan, per
--- remembered tile, per caller, and five modules call it several times a second. Measured in game at
--- ~12 ms per spray-FX rebuild, on every rebuild, warm status cache or not.
---
+-- A remembered tile, with the square and object already resolved. Registry.near used to re-resolve BOTH
+-- on every read -- a getGridSquare and a full object scan, per remembered tile, per caller, with five
+-- modules calling several times a second.
 -- Both references are dropped by forgetResolved when the tile changes underneath them, which is what
--- keeps this from being a stale-object bug: see the two events it is wired to.
+-- keeps this from being a stale-object bug.
 local function entryFor(square, x, y, z, object)
     return { x = x, y = y, z = z, square = square, object = object }
 end
 
--- Drop what a tile resolved to, keeping the tile itself remembered. Forgetting the tile outright
--- would blank the registry every time the player walks past a chunk boundary; forgetting only the
--- references costs one lookup on the next read.
+-- Drop what a tile resolved to, keeping the tile itself remembered: forgetting the tile outright would
+-- blank the registry every time the player walks past a chunk boundary.
 local RESOLVED_KINDS = { "emitters", "hydrants", "purifiers" }
 
 function Registry.forgetResolved(square)
@@ -160,10 +136,8 @@ end
 
 -- Classify one square now and record the answer. Driven by OnObjectAdded, where modData is already
 -- attached -- unlike LoadGridsquare, where it is not (see the header).
---
--- Declared before the sweep block so it can be defined here, but it writes into the in-progress
--- sweep too: a sweep swaps in a freshly built set when it finishes, and without that an emitter
--- placed mid-sweep would be recorded and then thrown away seconds later.
+-- It writes into the in-progress sweep too: a sweep swaps in a freshly built set when it finishes, and
+-- without that an emitter placed mid-sweep would be recorded and then thrown away seconds later.
 function Registry.noteSquare(square)
     if not square or not square.getX then
         return
@@ -205,16 +179,14 @@ function Registry.clear()
 end
 
 -- ===== The sweep =====
---
--- Rebuilt rather than merged: the registry is meant to describe the player's surroundings, so tiles
--- left behind should be forgotten instead of accumulating for the whole session. Built into a
--- separate set and swapped in at the end, so a half-finished sweep never leaves the readers looking
--- at a registry that is missing things.
+-- Rebuilt rather than merged: the registry describes the player's surroundings, so tiles left behind are
+-- forgotten instead of accumulating for the whole session. Built into a separate set and swapped in at
+-- the end, so a half-finished sweep never leaves the readers looking at a registry missing things.
 local sweep = nil            -- in-progress sweep, nil when idle
 local sweepCountdown = 0
--- Declared HERE, beside the state it belongs to, and not down by the tick handler that reads it:
--- Registry.requestSweep below writes it, and a write to a name whose `local` comes later in the file
--- is a write to a GLOBAL. It compiles, it runs, and the local it was meant for never changes.
+-- Declared HERE, beside the state it belongs to: Registry.requestSweep below writes it, and a write to a
+-- name whose `local` comes later in the file is a write to a GLOBAL. It compiles, it runs, and the local
+-- it was meant for never changes.
 local nextSweepAtMs = nil
 
 local function beginSweep()
@@ -285,19 +257,13 @@ local FINDERS = {
 }
 
 -- Every remembered tile of `kind` within `radius` of (px, py, pz).
---
--- Each result carries `x`, `y`, `z` and `key` as well as the square and the object, and that is not
--- convenience -- it is the point. The registry already knows the coordinates; it stored them. Handing
--- back only the square made every caller ask the engine for them again: the spray FX made NINE bridge
--- calls per emitter per rebuild (three for the hydrant-claim key, three for the list entry, three
--- inside emitterStatus) plus two string builds, for numbers that were sitting in the entry all along.
--- At 43 emitters and 2.7 rebuilds a second that was 66 000 bridge calls in a sixty-second window to
--- re-derive what was never lost.
---
--- Each candidate is re-checked here rather than trusted. That is what lets the registry survive the
--- cases PZ gives us no event for -- a chunk unloading, a save loaded with tiles already streamed in --
--- and it is affordable precisely because the list is short: a handful of remembered tiles instead of
--- the thousand-tile sweep this replaces. A candidate that no longer holds what it promised is dropped.
+-- Each result carries `x`, `y`, `z` and `key` as well as the square and the object, and that is the
+-- point: the registry already stored the coordinates, and handing back only the square made every
+-- caller ask the engine for them again -- nine bridge calls per emitter per spray-FX rebuild, 66 000 in
+-- a sixty-second window, to re-derive what was never lost.
+-- Each candidate is re-checked here rather than trusted, which is what lets the registry survive the
+-- cases PZ gives no event for -- a chunk unloading, a save loaded with tiles already streamed in. It is
+-- affordable because the list is short. A candidate that no longer holds what it promised is dropped.
 function Registry.near(kind, px, py, pz, radius)
     local table_ = Registry[kind]
     local finder = FINDERS[kind]
@@ -312,9 +278,8 @@ function Registry.near(kind, px, py, pz, radius)
         if entry.z == pz
             and math.abs(entry.x - px) <= radius
             and math.abs(entry.y - py) <= radius then
-            -- Resolved once and remembered. A miss here is a tile whose references were dropped
-            -- because something changed on it, so the lookup that follows is the re-check that
-            -- decides whether it still belongs in the registry at all.
+            -- Resolved once and remembered. A miss here is a tile whose references were dropped because something
+            -- changed on it, so the lookup that follows is the re-check.
             local square, object = entry.square, entry.object
             if not object then
                 square = getCellSquare(entry.x, entry.y, entry.z)
@@ -344,37 +309,25 @@ function Registry.near(kind, px, py, pz, radius)
     return results
 end
 
--- How far into the TTL window a tile's first stamp is backdated, so that emitters do not all expire
--- together. Deterministic from the tile: stable across sessions, and it needs no stored state.
---
--- The multipliers are large on purpose. A farm row is consecutive x, so a small multiplier -- the
--- (x * 7 + y * 13) used for the animation phase, where the modulus is a frame count -- would put
--- neighbours a few milliseconds apart and spread forty-seven emitters over a fraction of the window.
--- These put adjacent tiles most of a second apart instead.
+-- How far into the TTL window a tile's first stamp is backdated, so emitters do not all expire together.
+-- Deterministic from the tile: stable across sessions, and it needs no stored state.
+-- The multipliers are large on purpose. A farm row is consecutive x, so a small one would put
+-- neighbours a few milliseconds apart; these put adjacent tiles most of a second apart instead.
 local function statusPhase(x, y, z)
     return (x * 1103 + y * 2749 + z * 4111) % STATUS_TTL_MS
 end
 
--- Irrigation.getEmitterStatus walks the whole network (once: pressure and available fluid are two
--- readings off one summary). The presentational callers ask it several times a second, per emitter,
--- for an answer that only changes when the server's minute pass runs -- so it is cached per tile
--- for STATUS_TTL_MS.
---
--- The first stamp is PHASED, and that is what stops the cost arriving in one frame. Every emitter
--- near the player is first read in the same rebuild, so without this they are all stamped together,
--- all expire together, and stay locked in step for the rest of the session. Measured in game: a
--- rebuild averaged 13.4 ms and its worst was 186 -- a factor of fourteen -- because roughly one
--- rebuild in nine recomputed all forty-seven emitters at once while the other eight were nearly free.
---
--- Backdating the first stamp by a per-tile amount breaks the convoy. It is the same total work over
--- the same three seconds; it just stops being a spike. Note this cannot show up in tools/perf, which
--- counts calls made and not when they land -- the profiler is the instrument for it.
--- One clock read for a whole pass.
---
--- The cached path through statusOf below is otherwise nothing but a table lookup and a subtraction --
--- and it was spending a pcall and a bridge call per emitter to ask what time it was. Same answer for
--- every emitter in the same rebuild, 7 386 times in a sixty-second window. A caller that is about to
--- ask about several tiles takes one stamp and passes it down.
+-- Irrigation.getEmitterStatus walks the whole network. The presentational callers ask it several times a
+-- second, per emitter, for an answer that only changes when the server's minute pass runs -- so it is
+-- cached per tile for STATUS_TTL_MS.
+-- The first stamp is PHASED, and that is what stops the cost arriving in one frame. Every emitter near
+-- the player is first read in the same rebuild, so without it they stamp together, expire together and
+-- stay in step for the session: a rebuild averaged 13.4 ms and its worst was 186, because one rebuild
+-- in nine recomputed all forty-seven at once. Same total work over the same three seconds, minus the
+-- spike. This cannot show up in tools/perf, which counts calls made and not when they land.
+
+-- One clock read for a whole pass. The cached path through statusOf is otherwise a table lookup and a
+-- subtraction, and it was spending a pcall and a bridge call per emitter to ask what time it was.
 function Registry.stamp()
     return nowMs()
 end
@@ -397,12 +350,10 @@ local function statusOf(entry, stampMs)
     Profiler.count("sprayfx: status recomputed", 1)
     local status = Irrigation.getEmitterStatus(emitter, square)
     if stamp then
-        -- Only the FIRST sighting is phased. Afterwards the tile re-stamps at its own expiry, which
-        -- is already offset from its neighbours', so the spread maintains itself.
-        --
-        -- Registry.invalidate clears the entry, which makes the next read a first sighting again. That
-        -- is correct for what it is for: the recompute still happens immediately on that read -- a
-        -- cleared entry is a miss -- and only the tile's next expiry is re-phased.
+        -- Only the FIRST sighting is phased; afterwards the tile re-stamps at its own expiry, which is already
+        -- offset from its neighbours', so the spread maintains itself. Registry.invalidate clears the entry,
+        -- which makes the next read a first sighting again -- correct, since the recompute still happens
+        -- immediately on that read and only the tile's next expiry is re-phased.
         statusCache[key] = {
             stamp = cached and stamp or (stamp - statusPhase(x, y, z)),
             status = status,
@@ -419,11 +370,10 @@ function Registry.statusFor(entry, stampMs)
     return statusOf(entry, stampMs)
 end
 
--- There is deliberately NO square-only form. Every reader of this module gets its tiles from
--- Registry.near, so every one of them has an entry; a convenience wrapper for a caller that does not
--- exist would be a public function with no caller, which is an untested function however green the
--- suite looks. That is precisely how Adapter.verifySquareVessels shipped bound to a nil global. If a
--- caller ever genuinely holds only a square, add it back WITH a test that calls it.
+-- There is deliberately NO square-only form. Every reader gets its tiles from Registry.near, so a
+-- convenience wrapper for a caller that does not exist would be a public function with no caller -- an
+-- untested function however green the suite looks. That is how Adapter.verifySquareVessels shipped
+-- bound to a nil global. If a caller ever genuinely holds only a square, add it back WITH a test.
 
 -- Drop a tile's cached status so the next read recomputes it. For the moments the player expects an
 -- immediate answer (opening the pump switch, toggling a hydrant) rather than up to a TTL of lag.
@@ -436,9 +386,8 @@ function Registry.invalidateAll()
 end
 
 -- ===== Wiring =====
---
--- Note what is NOT here: LoadGridsquare. It fires too early to classify anything (see the header),
--- and hooking it would only pay for a scan of every streamed tile to learn nothing.
+-- Note what is NOT here: LoadGridsquare. It fires too early to classify anything (see the header), and
+-- hooking it would only pay for a scan of every streamed tile to learn nothing.
 
 -- Rows per tick stays frame-based on purpose: that one is about not spiking a single frame, and a
 -- frame is exactly what it is spreading the work across. Only the INTERVAL is a duration.
@@ -476,10 +425,9 @@ if Events then
         Events.OnObjectAdded.Add(function(object) pcall(Registry.noteObject, object) end)
     end
     if Events.OnObjectAboutToBeRemoved then
-        -- The object is still on the square here, so re-classifying now would re-add it. The lazy
-        -- re-check in Registry.near drops it on the next read instead -- which is exactly why the
-        -- resolved references have to go with it. Leaving them would hand every later read the object
-        -- that is being removed, and that re-check would never run.
+        -- The object is still on the square here, so re-classifying now would re-add it. The lazy re-check in
+        -- Registry.near drops it on the next read instead -- which is why the resolved references have to go
+        -- with it, or every later read would be handed the object that is being removed.
         Events.OnObjectAboutToBeRemoved.Add(function(object)
             local square = object and object.getSquare and object:getSquare() or nil
             if square then
@@ -489,9 +437,8 @@ if Events then
         end)
     end
     if Events.LoadGridsquare then
-        -- Streaming rebuilds a square, which leaves any reference we hold pointing at a grid square
-        -- that no longer exists. Too early to CLASSIFY here (see the header) -- but never too early to
-        -- forget, which is all this does.
+        -- Streaming rebuilds a square, leaving any reference we hold pointing at one that no longer exists. Too
+        -- early to CLASSIFY here (see the header), but never too early to forget.
         Events.LoadGridsquare.Add(function(square) pcall(Registry.forgetResolved, square) end)
     end
     if Events.OnGameStop then

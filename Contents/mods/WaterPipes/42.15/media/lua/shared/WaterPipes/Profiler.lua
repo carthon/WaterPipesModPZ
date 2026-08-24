@@ -1,27 +1,18 @@
 -- WaterPipes/Profiler.lua
 --
--- Real milliseconds for the mod's periodic work, on the player's own machine.
+-- Real milliseconds for the mod's periodic work, on the player's own machine. The bench in tools/perf
+-- models bridge calls and pure-Lua operations, which is good at SHAPE but cannot say what something
+-- costs in a frame on real hardware, or whether the stutter is even ours.
 --
--- The bench in tools/perf models bridge calls and pure-Lua operations. It is good at SHAPE -- work
--- that scales with the network, work happening per frame that belongs per minute -- and it cannot
--- answer the two questions that decide an optimisation: what does this cost in a frame on real
--- hardware, and is the stutter even ours. It cannot see the base game at all.
+-- Off by default, and free when off: time() returns the call straight through with no clock read and no
+-- table write. Turn it on from the pipe Debug menu.
 --
--- This can. It exists because "I see small stutters" is not a number, and every optimisation argued
--- from a number that does not exist is a guess.
+-- Reports per bucket (calls, total ms, average, worst call), per frame (worst frame, and how many
+-- frames crossed 5 / 10 / 20 ms of OUR work) and raw counters, notably the hydraulic cache hit rate.
 --
--- Off by default, and free when off: time() returns the call straight through with no clock read and
--- no table write. Turn it on from the pipe Debug menu.
---
--- What it reports:
---   * per bucket -- calls, total ms, average, worst single call
---   * per frame  -- worst frame, and how many frames crossed 5 / 10 / 20 ms of OUR work
---   * counters   -- raw tallies, notably the hydraulic cache's hit rate
---
--- The frame figures are approximate by construction. A frame is closed by this module's own OnTick
--- handler, and handler order within a tick is not guaranteed, so work registered after it lands in
--- the next frame's bucket. That skews individual frames and not the distribution, which is what the
--- numbers are read for.
+-- The frame figures are approximate by construction: a frame is closed by this module's own OnTick
+-- handler and handler order within a tick is not guaranteed, so work registered after it lands in the
+-- next frame's bucket. That skews individual frames, not the distribution.
 
 require "WaterPipes/Constants"
 
@@ -41,22 +32,15 @@ local startedAtMs = nil
 local totalMs = 0           -- our work over the window, top level only
 local depth = 0             -- how many timings are open right now
 
--- Timings nest, and for a long time nothing here knew that.
---
--- `sprayfx: status` runs inside `sprayfx/rescan`; `pump/headroom` runs inside `1min/pumps` inside
--- `system/1min`. Every one of those was added to the same running total, so the same millisecond was
--- counted two and three times. The report said "share of wall clock 7.11%" where the truth was 4.11%,
--- and "worst frame 338 ms" where the truth was one 169 ms frame counted twice.
---
--- Worse than being wrong, it was wrong by a factor that CHANGED: adding three nested buckets to
--- measure the fill path made the headline number rise while the mod got faster, which reads as a
--- regression and is not one. A measurement that moves when you measure it differently is not a
--- measurement.
---
--- So: a bucket still records its own elapsed time, children included -- that is what a breakdown is
--- for. But the WINDOW and FRAME totals take only depth-0 timings, which are each counted exactly
--- once. Buckets entered while another timing was open are marked `nested` and reported as such, so
--- the table says plainly which rows are already inside a row above them.
+-- Timings nest, and for a long time nothing here knew that. `sprayfx: status` runs inside
+-- `sprayfx/rescan`; `pump/headroom` runs inside `1min/pumps` inside `system/1min`. Every one was added
+-- to the same running total, so the same millisecond was counted two and three times -- 7.11% of wall
+-- clock reported where the truth was 4.11%.
+-- Worse, it was wrong by a factor that CHANGED: adding nested buckets made the headline number rise
+-- while the mod got faster. A measurement that moves when you measure it differently is not one.
+-- So a bucket still records its own elapsed time, children included -- that is what a breakdown is for
+-- -- but the WINDOW and FRAME totals take only depth-0 timings. Nested buckets are marked and reported
+-- as such, so the table says which rows are already inside a row above them.
 
 local function nowMs()
     if not getTimestampMs then
@@ -96,9 +80,9 @@ function Profiler.reset()
     depth = 0
     startedAtMs = nowMs()
 
-    -- The hydraulic counters live in Hydraulics so that module needs no dependency on this one. They
-    -- are cumulative since load, so they are zeroed here too -- otherwise the first report after a
-    -- long session measures the session, not the window being tested.
+    -- The hydraulic counters live in Hydraulics so that module needs no dependency on this one. They are
+    -- cumulative since load, so they are zeroed here too -- otherwise the first report after a long session
+    -- measures the session, not the window being tested.
     local Hydraulics = WaterPipes.Hydraulics
     if Hydraulics and Hydraulics.counters then
         for key in pairs(Hydraulics.counters) do
@@ -144,11 +128,9 @@ function Profiler.record(name, elapsed, openDepth)
     if elapsed > bucket.worstMs then
         bucket.worstMs = elapsed
     end
-    -- An average is only a description when the calls resemble each other. These stopped doing that:
-    -- a spray-FX rebuild averaged 16 ms with a worst of 180, and the frame histogram showed nothing at
-    -- all between 5 and 20 -- most rebuilds nearly free, a few enormous. Dividing the total by the
-    -- count in that situation invents a call that never happened, and one round of this was spent
-    -- optimising the number rather than the cost.
+    -- An average is only a description when the calls resemble each other. These stopped doing that: a
+    -- spray-FX rebuild averaged 16 ms with a worst of 180, and the histogram showed nothing between 5 and
+    -- 20. Dividing total by count there invents a call that never happened.
     if elapsed >= 20 then
         bucket.over20 = bucket.over20 + 1
     elseif elapsed >= 5 then
@@ -156,9 +138,8 @@ function Profiler.record(name, elapsed, openDepth)
     elseif elapsed >= 1 then
         bucket.over1 = bucket.over1 + 1
     end
-    -- Only depth 0 reaches the window and frame totals. A nested timing is already inside the
-    -- parent's elapsed time; adding it again is what made every headline number in this report
-    -- larger than the work it described.
+    -- Only depth 0 reaches the window and frame totals. A nested timing is already inside the parent's
+    -- elapsed time; adding it again is what made every headline number larger than the work it described.
     if (openDepth or 0) == 0 then
         frameMs = frameMs + elapsed
         totalMs = totalMs + elapsed
@@ -175,19 +156,17 @@ function Profiler.mark()
     if not started then
         return nil
     end
-    -- The depth AT WHICH THIS OPENED travels with the mark, so an unbalanced pair cannot make a
-    -- sibling look nested. Depth is also reset every frame (see endFrame), so a mark abandoned by an
-    -- error costs one frame of accounting rather than the rest of the session.
+    -- The depth AT WHICH THIS OPENED travels with the mark, so an unbalanced pair cannot make a sibling
+    -- look nested. Depth is also reset every frame, so a mark abandoned by an error costs one frame of
+    -- accounting rather than the rest of the session.
     depth = depth + 1
     return { at = started, depth = depth - 1 }
 end
 
 -- Close a timing opened by Profiler.mark.
---
--- This pair exists because Profiler.time cannot wrap everything: it forwards only the first two
--- return values, and a call site that returns more would lose the rest SILENTLY -- which is a bug
--- introduced by adding instrumentation, the worst kind. Where the arity does not fit, bracket the
--- call instead of wrapping it.
+-- This pair exists because Profiler.time cannot wrap everything: it forwards only the first two return
+-- values, and a call site returning more would lose the rest SILENTLY -- a bug introduced by adding
+-- instrumentation. Where the arity does not fit, bracket the call instead of wrapping it.
 function Profiler.since(name, mark)
     if not enabled or not mark then
         return
@@ -203,10 +182,8 @@ end
 
 -- Time one call. Returns whatever the call returned, so a wrapped call site reads the same as the
 -- unwrapped one and can be left in place permanently.
---
--- ONLY THE FIRST TWO RETURN VALUES ARE FORWARDED. Carrying an arbitrary number would cost a table
--- allocation per call in the path this module exists to measure. If what you are timing returns more
--- than two things, use Profiler.mark / Profiler.since -- do not wrap it here and hope.
+-- ONLY THE FIRST TWO RETURN VALUES ARE FORWARDED: carrying an arbitrary number would cost a table
+-- allocation per call in the path this module exists to measure. Use mark/since when the arity is more.
 function Profiler.time(name, fn, ...)
     if not enabled then
         return fn(...)
@@ -216,13 +193,10 @@ function Profiler.time(name, fn, ...)
     local started = nowMs()
     depth = depth + 1
 
-    -- pcall, and then re-raise. Not defensiveness: without it a throw skips the line that restores
-    -- the depth, and every timing for the rest of the frame would be booked as nested -- i.e. dropped
-    -- from the totals. A measuring instrument that goes quiet after the first error is the worst
-    -- possible failure mode, because the reading still looks like a reading.
-    --
-    -- The error is re-raised at level 0 so the message is passed through exactly as thrown; callers
-    -- that already wrap this in their own pcall see no difference at all.
+    -- pcall, and then re-raise. Without it a throw skips the line that restores the depth, and every timing
+    -- for the rest of the frame would be booked as nested -- i.e. dropped from the totals. A measuring
+    -- instrument that goes quiet after the first error is the worst failure mode, because the reading still
+    -- looks like a reading. Re-raised at level 0 so the message passes through exactly as thrown.
     local ok, first, second = pcall(fn, ...)
     depth = openedAt
     local finished = nowMs()
@@ -245,18 +219,16 @@ function Profiler.count(name, amount)
     counters[name] = (counters[name] or 0) + (amount or 1)
 end
 
--- Close the frame. Registered on OnTick; see the header on why this is approximate.
--- Public so the frame boundary can be exercised without an engine: it is where the nesting depth is
--- recovered after a throw, which is behaviour worth a test rather than a hope.
+-- Close the frame. Registered on OnTick; see the header on why this is approximate. Public so the frame
+-- boundary can be exercised without an engine: it is where the nesting depth is recovered after a throw.
 function Profiler.endFrame()
     if not enabled then
         return
     end
 
-    -- Depth is reset here, not merely decremented, because an error thrown inside a timed call skips
-    -- its close. Without this a single failure would leave everything after it looking nested and the
-    -- totals would silently fall to zero -- a measuring instrument that breaks quietly is worse than
-    -- none. A frame is the natural place: nothing legitimately holds a timing across one.
+    -- Depth is reset here, not merely decremented, because an error thrown inside a timed call skips its
+    -- close. Without this a single failure would leave everything after it looking nested and the totals
+    -- would silently fall to zero. A frame is the natural place: nothing legitimately holds a timing across one.
     depth = 0
 
     frames = frames + 1
@@ -366,9 +338,8 @@ function Profiler.report()
         add("  'supply-only' is a vessel crossing empty: the zone keeps its shape and is re-priced")
         add("  without walking the world. It should be most of them on a farm that is watering.")
         if c.solves and c.solves > 0 then
-            -- What a cold solve actually DOES, which is the number to optimise against: a re-pricing
-            -- is one accumulate plus one relaxation of the whole zone, and a relax call is one node of
-            -- one sweep. Times move between machines; these do not.
+            -- What a cold solve actually DOES, which is the number to optimise against: a re-pricing is one
+            -- accumulate plus one relaxation of the whole zone. Times move between machines; these do not.
             add(string.format("  per solve: %.1f re-pricings, %.1f relax passes, %.0f relax calls",
                 (c.repricings or 0) / c.solves,
                 (c.relaxPasses or 0) / c.solves,
@@ -387,9 +358,8 @@ function Profiler.report()
         add("  invalidation every one of those was a global drop.")
     end
 
-    -- The fill topology, which is the same story one layer up: every network walk that is not a draw
-    -- goes through this cache. It used to be dropped every frame, so a per-minute fill query never
-    -- once read it warm and pump/headroom walked the whole network cold, 20 ms a call.
+    -- The fill topology, the same story one layer up: every network walk that is not a draw goes through
+    -- this cache. It used to be dropped every frame, so pump/headroom walked the network cold, 20 ms a call.
     local NetworkAccess = WaterPipes.NetworkAccess
     if NetworkAccess and NetworkAccess.counters then
         local c = NetworkAccess.counters
@@ -407,9 +377,8 @@ function Profiler.report()
         add("  invalidateTraversalCache. 'overflow' should be 0: above it, scoping is given up on.")
     end
 
-    -- The header is written by the first counter rather than tested for up front: next() is not
-    -- exposed by PZ's Lua, and reaching for it to ask "is this table empty" is a mistake this repo has
-    -- now made three times (see ffc19f4 and 843016d).
+    -- The header is written by the first counter rather than tested for up front: next() is not exposed by
+    -- PZ's Lua, and reaching for it to ask "is this table empty" is a mistake this repo has made three times.
     local Audit = WaterPipes.RemovalAudit
     if Audit and Audit.isEnabled and Audit.isEnabled() then
         add("")
@@ -429,11 +398,9 @@ function Profiler.report()
     return lines
 end
 
--- Guarded, and not out of habit. report() builds every line and prints none until it returns, so a
--- fault anywhere in it costs the whole window -- which is exactly what the next() bug did: the
--- buckets, the frame histogram and the cache figures had all been formatted correctly and were thrown
--- away by the last and least useful section. A diagnostic that destroys the measurement it was asked
--- for is worse than one that says it failed.
+-- Guarded, and not out of habit. report() builds every line and prints none until it returns, so a fault
+-- anywhere in it costs the whole window -- which is exactly what the next() bug did. A diagnostic that
+-- destroys the measurement it was asked for is worse than one that says it failed.
 function Profiler.dump()
     local ok, lines = pcall(Profiler.report)
     if not ok then

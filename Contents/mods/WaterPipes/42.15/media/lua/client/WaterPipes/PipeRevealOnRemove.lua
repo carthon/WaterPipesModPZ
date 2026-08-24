@@ -1,8 +1,6 @@
--- Reveal concealed pipes while a DESTROY (sledgehammer) or MOVEABLE (pick up / disassemble) cursor
--- is active, so the otherwise-invisible pipe shows up as a target instead of an empty-looking tile.
---
--- Purely client-cosmetic: it flips the sprite via PipeAutotile.revealPipe and restores the
--- transparent one with rehidePipe once the cursor is dismissed. Nothing is transmitted.
+-- Reveal concealed pipes while a DESTROY or MOVEABLE cursor is active, so the otherwise-invisible pipe
+-- shows up as a target instead of an empty-looking tile. Purely client-cosmetic: it flips the sprite
+-- via PipeAutotile.revealPipe and restores it with rehidePipe. Nothing is transmitted.
 
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/PipeAutotile"

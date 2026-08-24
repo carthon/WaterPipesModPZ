@@ -2,29 +2,17 @@
 # -*- coding: utf-8 -*-
 """Add or update the emitter-diagnosis strings in the three IG_UI.json files.
 
-Kept as a file rather than run as a shell one-liner, and that is the whole point.
-Three encoding accidents in a row came out of doing this from a heredoc:
+A file rather than a shell one-liner, deliberately: three encoding accidents came out of doing this
+from a heredoc -- writing with `utf-8-sig`, which PREPENDS a BOM and crashed the game on load;
+double-encoding the accents through `.decode('unicode_escape')`; and the shell eating the backslashes
+out of the regex patterns.
 
-  1. writing with Python's `utf-8-sig`, which PREPENDS a BOM -- PZ's parser then
-     reports "A JSONObject text must begin with '{'" and drops every translated
-     string in the mod. That one crashed the game on load.
-
-  2. building the accented text with `.encode('utf-8').decode('unicode_escape')`,
-     which double-encoded it: the file ended up holding the two UTF-8 bytes of
-     each accented character as two separate characters. Still valid UTF-8, still
-     valid JSON, still wrong.
-
-  3. the shell eating the backslash escapes out of the regex patterns, twice.
-
-So: the strings below are ordinary Python literals in a real source file. Bytes
-in, bytes out, one decode and one encode, and the file's existing line ending is
-preserved rather than guessed at. Re-running replaces what is there, so fixing
-the wording is the same one command as adding it.
+So the strings below are ordinary Python literals. Bytes in, bytes out, one decode and one encode, and
+the file's existing line ending is preserved rather than guessed at. Re-running replaces what is there.
 
     python add_emitter_strings.py
 
-Then check the result with lint_json.py, which reads bytes and will catch all
-three of the accidents above.
+Then check the result with lint_json.py, which reads bytes and catches all three accidents.
 """
 
 import io
@@ -42,10 +30,8 @@ ANCHOR = "IGUI_WaterPipesEmitterLow"
 # The minimum is deliberately never restated in these. It reads fine for a sprinkler
 # and absurd for a drip, whose minimum is 0.0 -- "0.2 short of the 0.0 it needs".
 STRINGS = {
-    # The water answer. It used to open with "Pressure is fine, but..." -- which is only true when
-    # there IS water and the pressure happens to be adequate. With the pipes empty there is no supply
-    # for the field to propagate from, so there is no pressure reading at all, and claiming one is
-    # fine was the same kind of confident wrong sentence this whole readout has been shedding.
+    # The water answer. It used to open with "Pressure is fine, but..." -- which is only true when there
+    # IS water and the pressure happens to be adequate; with the pipes empty there is no reading at all.
     "IGUI_WaterPipesEmitterDry": {
         "EN": "There is no water in the network for it to draw. "
               "Fill a barrel on the line, or switch on a pump with a source.",
@@ -55,17 +41,11 @@ STRINGS = {
               "请为管路上的水桶加水，或启动一台有水源的水泵。",
     },
 
-    # ONE message, and the number in it is how much more head the LINE needs -- not how far this tile
-    # is below its own minimum.
-    #
-    # That distinction is the whole point. A sprinkler reading 30 m against a minimum of 20 is short of
-    # nothing itself; it is switched off because turning it on would push a DIFFERENT emitter under.
-    # Asking the tile returned zero, so the readout could only say "the line cannot supply this
-    # emitter" -- true, and not the number anybody wanted. Asking the whole set gives a figure that
-    # covers both reasons an emitter is off, so there is one sentence instead of three.
-    #
-    # "At least", because the search serves a prefix: other starved emitters between this one and the
-    # ones already running have to clear their own minimums too.
+    # ONE message, and the number in it is how much more head the LINE needs -- not how far this tile is
+    # below its own minimum. A sprinkler reading 30 against a minimum of 20 is short of nothing itself; it
+    # is off because turning it on would push a DIFFERENT emitter under. Asking the whole set covers both
+    # reasons in one figure. "At least", because the search serves a prefix: other starved emitters in
+    # between have to clear their own minimums too.
     "IGUI_WaterPipesEmitterShort": {
         "EN": "Cannot water: the line needs at least %1 m more pressure for it. "
               "Add a pump, shorten the run, or move some emitters onto another line.",

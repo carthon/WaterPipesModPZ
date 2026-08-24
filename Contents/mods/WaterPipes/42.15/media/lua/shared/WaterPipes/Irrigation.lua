@@ -12,14 +12,11 @@ local NetworkAccess = WaterPipes.NetworkAccess
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 
 -- Drip emitters and sprinklers. Both are pipe variants: they sit on the line, pass water onward, and
--- water crops as it goes -- so a row of drips down a furrow behaves like real drip tape.
---
--- What makes them different is efficiency, not throughput. That is deliberate: vanilla crops drain
--- only 1 waterLvl per 5 in-game hours, so a barrel would keep a field alive for a year and water
--- COST can never be the balance. Both spend water whenever they are actually emitting -- the spray
--- you see is water leaving the line -- but the drip wets one tile while the sprinkler is charged
--- for its whole 3x3, crops or not. Nine times the footprint, nine times the bill (plus the noise):
--- that is the real-world trade and the reason to pick one over the other.
+-- water crops as it goes, so a row of drips down a furrow behaves like real drip tape.
+-- What makes them different is efficiency, not throughput. Vanilla crops drain only 1 waterLvl per 5
+-- in-game hours, so water COST can never be the balance: both spend water whenever they emit, but the
+-- drip wets one tile while the sprinkler is charged for its whole 3x3, crops or not. Nine times the
+-- footprint, nine times the bill, plus the noise.
 
 local function getModData(worldObject)
     if not worldObject or not worldObject.getModData then
@@ -121,14 +118,14 @@ end
 
 -- ===== Farming bridge =====
 
--- Server-only: SFarmingSystem.lua starts with `if isClient() then return end`, so instance is nil on
--- an MP client. Every caller below is already inside the server-side pass.
+-- Server-only: SFarmingSystem.lua starts with `if isClient() then return end`, so instance is nil on an
+-- MP client. Every caller below is already inside the server-side pass.
 local function farmingSystem()
     return SFarmingSystem and SFarmingSystem.instance or nil
 end
 
--- The thirsty crop on a square, or nil. "plow" is tilled soil with nothing planted; a dead plant
--- cannot be revived by watering, so both are skipped.
+-- The thirsty crop on a square, or nil. "plow" is tilled soil with nothing planted; a dead plant cannot
+-- be revived by watering, so both are skipped.
 local function thirstyPlantOn(square)
     local system = farmingSystem()
     if not system or not square or not system.getLuaObjectOnSquare then
@@ -150,8 +147,8 @@ local function thirstyPlantOn(square)
     return plant
 end
 
--- Add waterLvl directly rather than via plant:water(), which only moves in whole +10 steps. The
--- fields are the ones SFarmingSystem persists, and saveData() is what makes it stick.
+-- Add waterLvl directly rather than via plant:water(), which only moves in whole +10 steps. These are
+-- the fields SFarmingSystem persists, and saveData() is what makes it stick.
 local function addWater(plant, amount)
     local before = plant.waterLvl or 0
     local after = math.min(before + amount, Constants.IRRIGATION_MAX_WATER_LEVEL)
@@ -175,9 +172,9 @@ function Irrigation.litresFor(waterLevels)
 end
 
 -- ===== Debug logging =====
--- Off by default. The debug overlay flips it on so every watering event lands in console.txt with
--- the tile, the amount and the source -- which is how you tell "not watering" from "watering, but
--- too slowly to see".
+-- Off by default. The debug overlay flips it on so every watering event lands in console.txt with the
+-- tile, the amount and the source -- which is how you tell "not watering" from "watering too slowly
+-- to see".
 Irrigation.debugLog = false
 
 local function debugLog(fmt, ...)
@@ -189,8 +186,8 @@ end
 -- ===== Live emitter status (for the overlay; never waters) =====
 
 -- Everything the overlay needs about one emitter, computed instantly with no time passing: whether it
--- CAN water right now and, if not, why. This is the real diagnostic -- a sprinkler with no pump
--- reads "needs 20.0, has 1.0" the moment you look, instead of you waiting an hour to see nothing.
+-- CAN water right now and, if not, why. A sprinkler with no pump reads "needs 20.0, has 1.0" the moment
+-- you look, instead of waiting an hour to see nothing.
 function Irrigation.getEmitterStatus(worldObject, square)
     local isDrip = Irrigation.isDrip(worldObject)
     local isSprinkler = Irrigation.isSprinkler(worldObject)
@@ -203,10 +200,9 @@ function Irrigation.getEmitterStatus(worldObject, square)
     local Pressure = WaterPipes.Pressure
     local kind = isDrip and Constants.PRESSURE_KIND_DRIP or Constants.PRESSURE_KIND_SPRINKLER
 
-    -- Two questions, and they have different scopes. Which vessels hold water this emitter can lift
-    -- from is a property of the ZONE and the LEVEL, so it is shared (see getStatusSummary); what head
-    -- arrives HERE is a property of the tile, so it is read from the field, which is already solved
-    -- and cached. Building a whole summary per emitter to answer both was measured at 4.3 ms each.
+    -- Two questions with different scopes. Which vessels hold water this emitter can lift from is a property
+    -- of the ZONE and the LEVEL, so it is shared (getStatusSummary); what head arrives HERE is a property
+    -- of the tile, read from the already-solved field. Building a summary per emitter measured 4.3 ms each.
     local summary = NetworkAccess.getStatusSummary(square, kind)
     local status = {
         kind = kind,
@@ -215,29 +211,24 @@ function Irrigation.getEmitterStatus(worldObject, square)
     }
 
     if not Pressure.isEnabled() then
-        -- With the model off the gate never runs and the summary carries the flat container base,
-        -- which is the reading the old code reported. Nothing here is per-tile.
+        -- With the model off the gate never runs and the summary carries the flat container base, which is what
+        -- the old code reported. Nothing here is per-tile.
         status.pressure = summary and summary.pressure or nil
     else
-        -- Hydraulics.canDrawAt, never a head comparison of our own: a consumer the solve excluded
-        -- reads a healthy head BECAUSE it was excluded. The head is still reported -- a starved
-        -- emitter showing the static pressure behind it, next to the minimum it cannot meet, says
-        -- more than a blank line does.
+        -- Hydraulics.canDrawAt, never a head comparison of our own: a consumer the solve excluded reads a
+        -- healthy head BECAUSE it was excluded. The head is still reported -- a starved emitter showing the
+        -- static pressure behind it, next to the minimum it cannot meet, says more than a blank line.
         local solution = Hydraulics.solveAt(square)
         local canDraw, head = Hydraulics.canDrawAt(solution, square, kind)
         status.pressure = head
         status.canDraw = canDraw and true or false
 
         -- WHY it cannot draw, which is not the same question and has two very different answers.
-        --
-        -- `starved` means the servable-set search excluded this emitter: the line cannot carry it on
-        -- top of what it is already serving. The head reported above is then the pressure this tile
-        -- has WITH THIS EMITTER OFF, and it can look perfectly healthy -- 37 against a minimum of 20 --
-        -- because it is high precisely because the emitter is not drawing. Telling the player "not
-        -- enough pressure, needs 20" under a reading of 37 is not a hint, it is a contradiction, and
-        -- the fix it suggests (shorten the run) is not the fix that works (add a pump, or fewer
-        -- emitters on the line).
-        --
+        -- `starved` means the servable-set search excluded this emitter: the line cannot carry it on top of what
+        -- it already serves. The head reported above is then the pressure this tile has WITH THIS EMITTER OFF,
+        -- and it can look perfectly healthy -- 37 against a minimum of 20 -- precisely because it is not
+        -- drawing. "Not enough pressure, needs 20" under a reading of 37 is a contradiction, and the fix it
+        -- suggests (shorten the run) is not the one that works (add a pump, or fewer emitters).
         -- Anything else that fails the gate really is below the minimum, and the old message is right.
         status.starved = Hydraulics.isStarvedAt
             and Hydraulics.isStarvedAt(solution, square) and true or false
@@ -249,9 +240,9 @@ function Irrigation.getEmitterStatus(worldObject, square)
         and (fluidTypeName == "Water" or fluidTypeName == "TaintedWater")
         and (summary.totalAmount or 0) > 0
 
-    -- With the pressure model off every connected emitter qualifies, exactly as the irrigation pass
-    -- itself decides (Pressure.canReach short-circuits) -- otherwise the readout would call an emitter
-    -- starved while it was happily watering. With it on, the solve's verdict is the authority.
+    -- With the pressure model off every connected emitter qualifies, exactly as the irrigation pass itself
+    -- decides -- otherwise the readout would call an emitter starved while it was happily watering. With it
+    -- on, the solve's verdict is the authority.
     if not Pressure.isEnabled() then
         status.reaches = status.pressure ~= nil
     else
@@ -264,18 +255,15 @@ end
 -- ===== The irrigation pass =====
 
 local function isWaterFluid(fluidTypeName)
-    -- Tainted water irrigates exactly as well as clean: vanilla whitelists both in ISFarmingMenu and
-    -- the fluid type never even reaches SPlantGlobalObject:water. Pumping a river straight onto the
-    -- crops is therefore intended, not an oversight.
+    -- Tainted water irrigates exactly as well as clean: vanilla whitelists both in ISFarmingMenu and the
+    -- fluid type never reaches SPlantGlobalObject:water. Pumping a river onto the crops is intended.
     return fluidTypeName == "Water" or fluidTypeName == "TaintedWater"
 end
 
 -- Pull `litres` of whatever water an already-built summary holds. Returns (drawn, fluidTypeName).
---
--- Takes a summary rather than a square on purpose. Each emitter used to build three identical network
--- summaries -- pressure, availability, draw -- and on a field of sprinklers that tripling was the
--- single biggest cost in the mod. One summary answers all three, and because the summary is live the
--- draw it performs is visible to whatever asks it next.
+-- Takes a summary rather than a square on purpose: each emitter used to build three identical ones --
+-- pressure, availability, draw -- and on a field of sprinklers that tripling was the biggest cost in the
+-- mod. The summary is live, so the draw it performs is visible to whatever asks it next.
 local function drawWater(summary, litres)
     if litres <= 0 or not summary then
         return 0, nil
@@ -288,13 +276,11 @@ local function drawWater(summary, litres)
     return drawn or 0, fluidTypeName
 end
 
--- A drip emitter waters only its own tile. It drips whenever it can -- which is exactly what the
--- spray FX shows -- so it spends its trickle whether or not anything grows below; a crop only
--- changes where the water ends up. (It used to spend only with a thirsty crop on the tile, and the
--- visible drip read as free water.) Still the efficient choice: one tile's bill, not nine.
--- `summary` is the network as seen from this tile. Callers that already hold one pass it in; omitted,
--- it is built here. Returns the LITRES this emitter took out of the network, which is what the
--- conservation check balances against (see System.checkIrrigationConservation).
+-- A drip emitter waters only its own tile, and it drips whenever it can -- which is exactly what the
+-- spray FX shows -- so it spends its trickle whether or not anything grows below. Still the efficient
+-- choice: one tile's bill, not nine.
+-- `summary` is the network as seen from this tile; callers that already hold one pass it in. Returns the
+-- LITRES this emitter took out of the network, which is what the conservation check balances against.
 function Irrigation.processDrip(drip, square, dtHours, summary)
     summary = summary or NetworkAccess.getDrawSummary(square, Constants.PRESSURE_KIND_DRIP)
     local pressure = summary and summary.pressure or nil
@@ -302,9 +288,8 @@ function Irrigation.processDrip(drip, square, dtHours, summary)
         return 0   -- nothing can reach this emitter
     end
 
-    -- Real emitters are rated for ~1-1.5 bar and blow out above it. A burst emitter still conducts
-    -- water to the rest of the line -- it just stops watering, exactly like a spent purifier filter
-    -- still passes clean water through.
+    -- Real emitters are rated for ~1-1.5 bar and blow out above it. A burst emitter still conducts water to
+    -- the rest of the line -- it just stops watering, like a spent purifier filter still passes clean water.
     local burst = Irrigation.burstPressure()
     if burst and pressure > burst and not Irrigation.isDripBurst(drip) then
         Irrigation.setDripCondition(drip, 0)
@@ -347,10 +332,9 @@ local function sprinklerNoiseEnabled()
     return true
 end
 
--- A sprinkler covers the 3x3 around it but needs real pressure, and is charged for every tile it
--- sprays whether or not anything is growing there. It is loud, too: that noise plus the wasted water
--- is what the player pays for the coverage.
--- `summary` is the network snapshot; see processDrip. Returns the litres taken from the network.
+-- A sprinkler covers the 3x3 around it but needs real pressure, and is charged for every tile it sprays
+-- whether or not anything is growing there. The noise and the wasted water are what the player pays for
+-- the coverage. Returns the litres taken from the network; `summary` as in processDrip.
 function Irrigation.processSprinkler(sprinkler, square, dtHours, summary)
     -- The summary's pressure already applies the sprinkler's own minimum head, so nil means either
     -- unreachable or not enough pressure -- which for a sprinkler is the same thing.
@@ -398,11 +382,9 @@ function Irrigation.processSprinkler(sprinkler, square, dtHours, summary)
     return drawn
 end
 
--- An open hydrant showers its own 3x3 like a sprinkler while it is losing water -- mains-fed or
--- draining its reserve; the caller has already established that. It spends nothing new and walks
--- nothing: the litres are the ones the open cap is already wasting (see System.processHydrant), so
--- the crops just stand in them. Cost is nine plant lookups per OPEN hydrant per minute, driven off
--- the open-hydrant registry -- no sweep, no network walk.
+-- An open hydrant showers its own 3x3 like a sprinkler while it is losing water. It spends nothing new
+-- and walks nothing: the litres are the ones the open cap is already wasting (see System.processHydrant),
+-- so the crops just stand in them. Nine plant lookups per OPEN hydrant per minute, off the registry.
 function Irrigation.waterHydrantSurroundings(square, dtHours)
     local perTile = Constants.SPRINKLER_WATER_PER_HOUR * math.max(dtHours or 0, 0)
     if perTile <= 0 or not square then
@@ -437,9 +419,8 @@ local function collectEmitters()
 
     local emitters = {}
     for _, pipeData in pairs(state.pipes) do
-        -- Skip only what we KNOW carries no emitter. An entry without `kinds` predates the registry
-        -- recording it and is still probed, so an existing save keeps watering while the ten-minute
-        -- pass fills the gaps in. See WaterPipesBuild's registerPipeAt call.
+        -- Skip only what we KNOW carries no emitter. An entry without `kinds` predates the registry recording it
+        -- and is still probed, so an existing save keeps watering while the ten-minute pass fills the gaps.
         local metadata = pipeData.metadata
         local skip = metadata and metadata.kinds and not metadata.drip and not metadata.sprinkler
         local square = (not skip) and getCellSquare(pipeData.x, pipeData.y, pipeData.z) or nil
@@ -469,22 +450,19 @@ local function processEmitter(emitter, dtHours)
 end
 
 -- ===== The pass, spread over frames =====
---
--- Irrigation is hourly, but "hourly" used to mean every emitter on the map ran inside ONE frame. A
--- field of thirty-odd sprinklers therefore paid its whole bill as a single visible hitch every game
--- hour, which is how a cost shows up to a player even after the cost itself has come down. The work
--- is now handed out a few emitters per tick instead.
---
+-- Irrigation is hourly, but "hourly" used to mean every emitter on the map ran inside ONE frame, so a
+-- field of thirty-odd sprinklers paid its whole bill as a single visible hitch every game hour. The
+-- work is handed out a few emitters per tick instead.
 -- Each emitter still gets the same dtHours, so the water delivered is identical -- only the frame it
--- lands in moves, by at most a second or two of real time on a network of any size.
+-- lands in moves, by at most a second or two of real time.
 local pendingPass = nil
 
 function Irrigation.hasPendingPass()
     return pendingPass ~= nil
 end
 
--- Start a pass. Any pass still draining is finished off first, so a slow frame can never let two
--- hours' worth of emitters pile up into one queue and silently skip an hour of watering.
+-- Start a pass. Any pass still draining is finished off first, so a slow frame can never let two hours'
+-- worth of emitters pile up into one queue and silently skip an hour of watering.
 function Irrigation.beginPass(dtHours)
     if isClient and isClient() then
         return
@@ -503,8 +481,8 @@ function Irrigation.beginPass(dtHours)
 end
 
 -- Run up to `budget` emitters. Returns true once the pass is done.
--- Wall clock, or nil on a build that does not expose one -- in which case the emitter count below is
--- the only limit, exactly as it was before.
+-- Wall clock, or nil on a build that does not expose one -- in which case the emitter count is the only
+-- limit, exactly as it was before.
 local function nowMs()
     if not getTimestampMs then
         return nil
@@ -522,9 +500,9 @@ function Irrigation.stepPass(budget, budgetMs)
     local dtHours = pendingPass.dtHours
     local ceiling = math.min(pendingPass.index + math.max(budget or 1, 1) - 1, #emitters)
 
-    -- The count is a ceiling; the clock is the limit. One emitter always runs, so the pass advances
-    -- however expensive that emitter turns out to be -- and an emitter IS expensive: its draw empties
-    -- a barrel, which invalidates the head field, which the next emitter re-solves.
+    -- The count is a ceiling; the clock is the limit. One emitter always runs, so the pass advances however
+    -- expensive that emitter turns out to be -- and an emitter IS expensive: its draw empties a barrel,
+    -- which invalidates the head field, which the next emitter re-solves.
     local limitMs = budgetMs or Constants.IRRIGATION_MS_PER_TICK
     local startedAt = limitMs and nowMs() or nil
 
@@ -548,14 +526,14 @@ function Irrigation.stepPass(budget, budgetMs)
     return false
 end
 
--- Abandon whatever is left of the current pass. The emitters already processed keep their water;
--- the rest simply miss this hour.
+-- Abandon whatever is left of the current pass. The emitters already processed keep their water; the
+-- rest simply miss this hour.
 function Irrigation.cancelPass()
     pendingPass = nil
 end
 
--- Drain whatever is left of the current pass in this frame. A plain emitter count as the budget --
--- not math.huge, which Kahlua would carry through the index arithmetic.
+-- Drain whatever is left of the current pass in this frame. A plain emitter count as the budget -- not
+-- math.huge, which Kahlua would carry through the index arithmetic.
 function Irrigation.finishPass()
     if not pendingPass then
         return
@@ -563,12 +541,10 @@ function Irrigation.finishPass()
     Irrigation.stepPass(#pendingPass.emitters)
 end
 
--- Run a whole pass right now, in this frame, and return the TOTAL LITRES the emitters took out of
--- the network. The debug command and anything that wants the result immediately use this; the hourly
--- tick uses beginPass/stepPass instead.
---
--- That return value is the whole point of the conservation check: whatever this reports as spent has
--- to be exactly what the network is missing afterwards (see System.checkIrrigationConservation).
+-- Run a whole pass right now, in this frame, and return the TOTAL LITRES the emitters took out of the
+-- network. The hourly tick uses beginPass/stepPass instead.
+-- That return value is the whole point of the conservation check: whatever this reports as spent has to
+-- be exactly what the network is missing afterwards.
 -- Server-only: this is the one place pressure gets computed for emitters.
 function Irrigation.run(dtHours)
     if isClient and isClient() then

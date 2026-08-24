@@ -3,17 +3,14 @@ require "WaterPipes/WaterPipeContextMenu"
 
 -- Right-clicking a CONCEALED pipe.
 --
--- A concealed pipe is an ordinary pipe wearing a fully transparent sprite, so as far as the engine's
--- object picker is concerned its tile holds nothing worth picking. ISWorldObjectContextMenu.createMenu
--- then bails out on `fetch.c == 0` and returns nil, and ISMenuContextWorld.createMenu answers that nil
--- with `or ISContextMenu.get(...)` -- which calls context:clear(). Everything a mod contributed is
--- wiped, and OnFillWorldObjectContextMenu never fired in the first place. That is why the network
--- options went missing on a tile that only holds a concealed pipe.
+-- A concealed pipe wears a fully transparent sprite, so the engine's object picker sees nothing worth
+-- picking on its tile. ISWorldObjectContextMenu.createMenu then bails on `fetch.c == 0` and returns
+-- nil, and ISMenuContextWorld.createMenu answers that nil with `or ISContextMenu.get(...)`, which calls
+-- context:clear() -- wiping every mod contribution, and OnFillWorldObjectContextMenu never fired at all.
 --
--- ISWorldMenuElements is the one contribution point that runs AFTER that reset (it is how vanilla adds
--- its own entity-window option), so the network options are re-offered from here whenever the main
--- pass did not get to add them itself. On a tile the engine picks normally the main pass wins and this
--- element finds its options already present and adds nothing.
+-- ISWorldMenuElements is the one contribution point that runs AFTER that reset, so the network options
+-- are re-offered from here whenever the main pass did not add them. On a tile the engine picks normally
+-- the main pass wins and this element adds nothing.
 
 ISWorldMenuElements = ISWorldMenuElements or {}
 

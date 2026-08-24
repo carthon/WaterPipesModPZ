@@ -1,8 +1,6 @@
 -- Router pressure-limit dialog: a slider for feeling out a value plus a typed field for hitting an
--- exact one. The old context submenu only offered steps of 5, which is too coarse for a setting the
--- player tunes against real thresholds (a drip emitter bursts above 15.0, a sprinkler needs 20.0).
---
--- Nothing is committed until Apply, so dragging the slider does not spam the server with commands.
+-- exact one. The old submenu offered steps of 5, too coarse for a setting tuned against real thresholds
+-- (a drip bursts above 15.0, a sprinkler needs 20.0). Nothing is committed until Apply.
 
 require "ISUI/ISCollapsableWindow"
 require "RadioCom/ISUIRadio/ISSliderPanel"

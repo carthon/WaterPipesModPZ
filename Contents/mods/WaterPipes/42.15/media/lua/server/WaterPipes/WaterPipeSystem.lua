@@ -49,10 +49,9 @@ local Irrigation = WaterPipes.Irrigation
 local State = WaterPipes.State
 local System = WaterPipes.System
 
--- Single-player has no client/server split. PipeAutotile is otherwise driven by client-side events
--- (OnObjectAdded etc.), but those don't reliably fire on a freshly-built entity in SP, so the build
--- path repaints directly -- only in SP. A dedicated/host server must NEVER change & sync the sprite
--- (MP clients and the co-op host autotile locally via PipeAutotile's own events).
+-- Single-player has no client/server split. PipeAutotile is driven by client-side events that do not
+-- reliably fire on a freshly-built entity in SP, so the build path repaints directly -- ONLY in SP.
+-- A dedicated/host server must never change and sync the sprite.
 local function isSinglePlayer()
     return not (isClient and isClient()) and not (isServer and isServer())
 end
@@ -86,9 +85,8 @@ local function refreshPlumbedEndpointsNearCoordinates(coordinates)
                 local key = tostring(square:getX()) .. ":" .. tostring(square:getY()) .. ":" .. tostring(square:getZ()) .. ":" .. tostring(endpointObject:getObjectIndex())
                 if not visited[key] and EndpointPlumbing.isPlumbed(endpointObject) then
                     visited[key] = true
-                    -- Every path that finds a plumbed fixture feeds the index, not just the moment it
-                    -- was plumbed. A save made before the index existed gets picked up the first time
-                    -- anything is built near one of its sinks.
+                    -- Every path that finds a plumbed fixture feeds the index, so a save made before the index existed
+                    -- gets picked up the first time anything is built near one of its sinks.
                     State.registerEndpoint(position.x, position.y, position.z)
                     EndpointPlumbing.refreshEndpointSource(endpointObject)
                 end
@@ -146,15 +144,9 @@ function System.scanContainersAroundPipes()
         if square then
             mergeInto(found, Adapter.collectSquareContainers(square))
 
-            -- Reconcile the purifier registry while we are standing on the tile anyway. Registration
-            -- normally happens at build time, but a save made before the registry existed carries
-            -- purifiers nobody ever recorded, and this is the cheap cadence on which to notice. Only
-            -- router tiles are asked -- a purifier cannot exist away from one -- and the filter is the
-            -- same metadata test that makes processRouters cost nothing.
-            -- Fill in the kind for entries registered before it was recorded. Same reasoning as the
-            -- purifier reconciliation below and the same cadence: the tile is already in hand, the
-            -- answer is on the object, and until it is filled in every per-minute pass has to
-            -- rediscover it. One pass over ten in-game minutes and the whole base is filled.
+            -- Reconcile the purifier registry and fill in a missing `kind` while standing on the tile anyway: a
+            -- save made before either existed carries devices nobody recorded, and the answer is on the object.
+            -- Only router tiles are asked. One pass over ten in-game minutes fills the whole base.
             local metadata = pipeData.metadata
             if not metadata or not metadata.kinds then
                 metadata = metadata or {}
@@ -187,24 +179,18 @@ function System.scanContainersAroundPipes()
 end
 
 -- ===== Conservation accounting =====
---
--- Every litre the mod is holding anywhere, counted by reading the WORLD rather than any summary,
--- cache or graph. That independence is the whole point: a check that asked NetworkAccess how much
--- water there is would be grading the network's arithmetic against itself and would pass however
--- broken the writes were. This walks the pipe registry and reads each vessel's own amount.
---
--- Counted: every fluid vessel sharing a tile with a registered pipe (which includes router tiles),
--- plus the IN and OUT buffers of any purifier, since those are modData numbers rather than
--- FluidContainers and no container scan would ever see them.
---
--- Returns (litres, vesselCount).
+-- Every litre the mod is holding anywhere, counted by reading the WORLD rather than any summary, cache
+-- or graph. That independence is the point: a check that asked NetworkAccess would be grading the
+-- network's arithmetic against itself and would pass however broken the writes were.
+-- Counted: every fluid vessel sharing a tile with a registered pipe, plus the IN and OUT buffers of any
+-- purifier, which are modData numbers no container scan would see. Returns (litres, vesselCount).
 function System.totalNetworkWater()
     local state = State.ensure()
     local total = 0
     local vessels = 0
 
-    -- Vessels are keyed by descriptor key, purifiers by object, so a device reachable from two
-    -- registered tiles (a purifier straddling two routers) is still counted once.
+    -- Vessels keyed by descriptor key, purifiers by object, so a device reachable from two registered tiles
+    -- is still counted once.
     local seenVessels = {}
     local seenPurifiers = {}
 
@@ -219,8 +205,7 @@ function System.totalNetworkWater()
                 end
             end
 
-            -- findForRouterSquare scans a 2x2 footprint, so it is only worth asking on the tiles that
-            -- actually carry a router. Elsewhere the cheap same-tile lookup is enough.
+            -- findForRouterSquare scans a 2x2 footprint, so it is only worth asking on tiles that carry a router.
             local purifier
             if pipeData.metadata and pipeData.metadata.router == true then
                 purifier = Purifier.findForRouterSquare(square)
@@ -239,22 +224,17 @@ function System.totalNetworkWater()
     return total, vessels
 end
 
--- Run one irrigation pass and check the books: the litres the emitters report spending must equal
--- the litres the world is missing afterwards.
---
--- This exists because the water accounting is spread across five places -- the epsilon guard that
--- may decline a write, the carry that re-homes what it declined, the nearest-vessel draw, the
--- summary write-back, and the emitters' own bookkeeping -- and every one of them is a place where a
--- litre could be conjured or destroyed without anything looking wrong on screen.
---
--- `error` is (missing - spent). Positive means the network lost MORE than the emitters claim, i.e.
--- water was destroyed; negative means it lost less, i.e. water was conjured. Either is a bug.
+-- Run one irrigation pass and check the books: the litres the emitters report spending must equal the
+-- litres the world is missing afterwards.
+-- The accounting is spread across five places -- the epsilon guard that may decline a write, the carry
+-- that re-homes what it declined, the nearest-vessel draw, the summary write-back and the emitters' own
+-- bookkeeping -- and any of them could conjure or destroy a litre with nothing looking wrong on screen.
+-- `error` is (missing - spent): positive means water was destroyed, negative means it was conjured.
 function System.checkIrrigationConservation(dtHours)
     dtHours = dtHours or 1.0
 
-    -- Read the world cold. Neither measurement may be served from something built earlier by whatever
-    -- triggered the check, and since none of these caches is frame-scoped any more, dropping them
-    -- explicitly is the only thing that guarantees it.
+    -- Read the world cold: neither measurement may be served from something built earlier by whatever
+    -- triggered the check, and none of these caches is frame-scoped any more.
     Adapter.invalidateVesselCache()
     NetworkAccess.invalidateTraversalCache()
     PipeObjectUtils.invalidateScanCache()
@@ -275,8 +255,8 @@ function System.checkIrrigationConservation(dtHours)
         error = missing - spent,
         vessels = vessels,
     }
-    -- One hundredth of a litre is the write guard's own threshold, so anything at or under it is the
-    -- rounding the design allows. Above it, something is genuinely losing or inventing water.
+    -- One hundredth of a litre is the write guard's own threshold, so anything under it is the rounding the
+    -- design allows. Above it, something is genuinely losing or inventing water.
     report.ok = math.abs(report.error) <= Constants.FLUID_WRITE_EPSILON
 
     Logger.log(string.format(
@@ -329,8 +309,8 @@ function System.redistributeWater()
         end
 
         if fluidTypeCount <= 1 and #containers > 1 and totalCapacity > 0 then
-            -- Gravity settle: water pools to the lowest floors first (relocation). A single-floor
-            -- component reduces to the classic per-pool equalization, so one floor is unchanged.
+            -- Gravity settle: water pools to the lowest floors first. A single-floor component reduces to the
+            -- classic per-pool equalization, so one floor is unchanged.
             GravityFlow.settle(containers, totalWater, networkFluidType)
         elseif fluidTypeCount > 1 then
             Logger.warn("Skipping mixed-fluid network with " .. tostring(fluidTypeCount) .. " fluid types")
@@ -359,35 +339,23 @@ local function processPassthroughRouter(inSquare, outSquare, dt)
     end
 end
 
--- Purifier-container on the tile: IN network -> IN buffer -> convert -> OUT buffer -> OUT network.
--- Water always flows one way, IN side -> OUT side. Intake pulls ONLY TAINTED water and ONLY from the
--- router's IN network; output pushes clean water ONLY into the OUT network. It never draws clean water
--- (no need to purify it) and never pulls anything back off the OUT side. Intake happens with or without
--- power (the tainted water still enters the buffer); only converting it to clean needs power + filter.
---
--- Step order is OUTPUT -> CONVERT -> INTAKE on purpose: draining the output side FIRST and refilling
--- the intake side LAST leaves water resident in both buffers between ticks, so the tanks actually hold
--- (and the readout shows) a real level instead of being fully cycled to 0 every tick; water just takes
--- one extra tick to traverse.
--- `dt` is the elapsed in-game minutes for this sub-step; the per-minute rates are scaled by it so the
--- purifier moves the same amount per game-minute no matter how often we tick.
+-- Purifier on the tile: IN network -> IN buffer -> convert -> OUT buffer -> OUT network. Intake pulls
+-- ONLY TAINTED water and ONLY from the IN network; output pushes clean water ONLY into the OUT network.
+-- Intake happens with or without power; only converting needs power and filter life.
+-- Step order is OUTPUT -> CONVERT -> INTAKE on purpose: draining the output first and refilling the
+-- intake last leaves water resident in both buffers between ticks, so the tanks hold a real level
+-- instead of being cycled to 0 every tick. Water just takes one extra tick to traverse.
+-- `dt` is the elapsed in-game minutes for this sub-step; the per-minute rates are scaled by it.
 local function processPurifierRouter(purifier, inSquare, outSquare, dt)
-    -- Set by whichever of the three steps below actually moves fluid, and written to the purifier at
-    -- the end. A tank sitting full while it pushes clean water out IS busy, and the readout used to
-    -- call that "Stopped" purely because the levels looked static.
+    -- Set by whichever step actually moves fluid. A tank sitting full while it pushes clean water out IS
+    -- busy, and the readout used to call that "Stopped" purely because the levels looked static.
     local processed = false
 
     -- 1. Output: even the OUT buffer out with the rest of the clean network.
-    --
-    -- This used to PUSH: read the buffer, ask the OUT network for headroom, fill it, subtract what
-    -- was taken. That was the right shape while the buffer was invisible to the network -- and it is
-    -- exactly wrong now that the buffer IS one of that network's containers, because the fill would
-    -- rebalance water back into the buffer and the subtraction would then remove it a second time.
-    -- Water would evaporate a little on every tick.
-    --
-    -- Settling instead moves nothing in or out, it only lets the level equalise between the buffer
-    -- and the barrels downstream. With no barrels it is a no-op and the water simply stays in the
-    -- buffer, where a tap can now reach it.
+    -- It used to PUSH -- read the buffer, ask the network for headroom, fill it, subtract what was taken --
+    -- which is exactly wrong now that the buffer IS one of that network's containers: the fill rebalances
+    -- water back into the buffer and the subtraction removes it a second time. Settling moves nothing in or
+    -- out, it only lets the level equalise; with no barrels it is a no-op and a tap can still reach it.
     local outAmount = Purifier.getOutAmount(purifier)
     if outAmount > 0 then
         local settled = NetworkAccess.settleAtSquare(outSquare)
@@ -403,9 +371,8 @@ local function processPurifierRouter(purifier, inSquare, outSquare, dt)
         if outHeadroom > 0 then
             local move = math.min(Constants.PURIFIER_CONVERT_RATE * dt, inAmount, outHeadroom)
             if Purifier.isInTainted(purifier) then
-                -- Cleaning tainted water needs power AND a filter with life left. Every unit converted
-                -- wears the filter; at 0 condition it stops cleaning (the water waits in IN) until the
-                -- player repairs it. moveInToOut clamps to what is actually in IN, so wear by that.
+                -- Cleaning tainted water needs power AND a filter with life left. Every unit converted wears the
+                -- filter; at 0 condition it stops and the water waits in IN until the player repairs it.
                 if Purifier.canFilter(purifier) then
                     local before = Purifier.getInAmount(purifier)
                     Purifier.moveInToOut(purifier, move)   -- lands in the OUT buffer as clean Water
@@ -422,10 +389,9 @@ local function processPurifierRouter(purifier, inSquare, outSquare, dt)
         end
     end
 
-    -- 3. Intake: pull ONLY TAINTED water, and ONLY from the router's IN network. The purifier exists to
-    -- clean tainted water, so it never draws clean water (which needs no purifying) and never pulls
-    -- anything off the OUT side -- inSquare is the IN side. This runs with or without power (the water
-    -- still enters the buffer); only converting it to clean later needs power + filter life.
+    -- 3. Intake: pull ONLY TAINTED water, and ONLY from the router's IN side. The purifier never draws
+    -- clean water and never pulls anything back off the OUT side. Runs with or without power; only
+    -- converting it later needs power and filter life.
     local avail, fluidType = NetworkAccess.availableToPull(inSquare)
     if fluidType == "TaintedWater" and avail > 0 then
         local curIn = Purifier.getInAmount(purifier)
@@ -462,8 +428,8 @@ function System.processRouter(router, rx, ry, rz, dt)
         return
     end
 
-    -- Scan the whole purifier footprint from the router tile (the tank's modData may live on a footprint
-    -- tile other than the router/anchor tile). Missing it here would silently run a plain passthrough.
+    -- Scan the whole purifier footprint from the router tile: the tank's modData may live on a footprint
+    -- tile other than the anchor. Missing it here would silently run a plain passthrough.
     local purifier = Purifier.findForRouterSquare(getSquare(rx, ry, rz))
     if purifier then
         processPurifierRouter(purifier, inSquare, outSquare, dt)
@@ -490,32 +456,17 @@ function System.processRouters(dt)
     end
 end
 
--- A powered pump next to a well or open water injects fluid into its network. It is NOT a container:
--- a well holds 10 000 L and open water is infinite, so letting either join the network as storage
--- would leave rebalanceSummary smearing them across every pipe and the network permanently full.
--- Bounded injection is the same shape the purifier's intake step already uses.
--- A purifier the pump is allowed to feed: one sitting on a router that borders the pump's own zone,
--- approached from the router's IN side.
---
--- The side matters. A router's OUT offset points at its clean side, so if the pipe we reached it
--- from IS that square, we are downstream and pushing raw lake water in there would contaminate the
--- clean run. Only the intake side is fair game.
--- Which purifier, if any, this pump can feed.
---
--- This used to walk the pump's entire network and probe all six neighbours of every tile looking for a
--- router with a purifier on it: about 1,260 world lookups per pump per minute, measured at 25 ms. On a
--- base with no purifier at all it performed every one of them to return nil, once a minute, forever.
---
--- Searching the world for something the player placed is the wrong way round. A purifier cannot exist
--- without a router under it, and both appear and disappear by player action -- so their positions are
--- known at the moment they change and there is nothing to discover. The loop now runs over the
--- REGISTRY, which is usually empty, and the network is only walked once there is something to test
--- against it. No purifiers means no work at all, which is the common case and used to be the
--- expensive one.
---
--- A registry entry is a claim, not a fact -- the same contract processHydrants works to. A purifier
--- can leave the world without the build hook hearing about it (a fire, a save made before the registry
--- existed), so a claim the world contradicts is dropped as it is found.
+-- A powered pump next to a well or open water injects fluid into its network. It is NOT a container: a
+-- well holds 10 000 L and open water is infinite, so letting either join as storage would leave
+-- rebalanceSummary smearing them across every pipe and the network permanently full.
+
+-- Which purifier, if any, this pump can feed: one on a router bordering the pump's own zone, approached
+-- from the router's IN side. The OUT offset points at the clean side, so pushing raw lake water in
+-- there would contaminate the clean run.
+-- Driven by the REGISTRY rather than by searching the world -- a purifier cannot exist without a router
+-- under it, and both appear and disappear by player action. The old walk probed six neighbours of every
+-- tile of the pump's network, about 1 260 lookups per pump per minute, to return nil on a base with no
+-- purifier at all. A registry entry is a claim, not a fact: one the world contradicts is dropped here.
 local function findPurifierIntakeForPump(square)
     local purifiers = State.getPurifiers()
     local cell = getCell and getCell() or nil
@@ -606,10 +557,8 @@ function System.processPump(pump, square, dt)
     end
 
     -- Ask what can take water FIRST, so we never pull it out of a well and lose it.
-    --
-    -- Two destinations, not one. The network is the obvious one, but a fill query stops dead at a
-    -- router, and a purifier sits on a router -- so a pump feeding a purifier with storage only on
-    -- the clean side used to be told "no room" and drew nothing at all. Its intake tank counts too.
+    -- Two destinations, not one: a fill query stops dead at a router and a purifier sits on a router, so a
+    -- pump feeding one with storage only on the clean side was told "no room" and drew nothing at all.
     local tainted = source.fluidType == "TaintedWater"
     local headroom = Profiler.time("pump/headroom", NetworkAccess.availableToPush,
         square, source.fluidType)
@@ -641,8 +590,8 @@ function System.processPump(pump, square, dt)
     end
 
     if added < taken then
-        -- Less was taken than we drew (a race with another consumer, or a mixed-fluid refusal). Put
-        -- the remainder back rather than quietly destroying it.
+        -- Less was taken than we drew (a race with another consumer, or a mixed-fluid refusal). Put the
+        -- remainder back rather than quietly destroying it.
         Pump.refundToSource(source, taken - added)
     end
 end
@@ -654,9 +603,8 @@ function System.processPumps(dt)
     end
     local state = State.ensure()
     for _, pipeData in pairs(state.pipes) do
-        -- Skip only what we KNOW is not a pump. An entry without `kinds` predates the registry
-        -- recording it, so it is still probed -- being slow for one ten-minute cycle is the price of
-        -- never silently switching off a pump in an existing save.
+        -- Skip only what we KNOW is not a pump. An entry without `kinds` predates the registry recording it, so
+        -- it is still probed rather than silently switched off in an existing save.
         local metadata = pipeData.metadata
         if not (metadata and metadata.kinds and not metadata.pump) then
             local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
@@ -668,9 +616,8 @@ function System.processPumps(dt)
     end
 end
 
--- A plumbed fixture that still has town water behind it fills the network. Simpler than the pump:
--- the mains is not a container we can overdraw, so there is nothing to draw first and nothing to
--- refund -- we ask the network what it can take and hand it exactly that.
+-- A plumbed fixture that still has town water behind it fills the network. Simpler than the pump: the
+-- mains is not a container we can overdraw, so there is nothing to draw first and nothing to refund.
 function System.processMains(square, dt)
     local wanted = math.min(Mains.intakeFor(dt),
         NetworkAccess.availableToPush(square, "Water"))
@@ -694,11 +641,9 @@ function System.processAllMains(dt)
     end
 end
 
--- An OPEN hydrant gushes water at its flow rate. Whatever the pipe network on its tile can take is
--- fed in; the rest spills onto the street and is wasted -- so an open hydrant with nothing connected,
--- or with a full network, still loses water. While the town service runs it is mains-fed, so its
--- reserve is held full and the waste costs nothing; once the water is cut, the full flow (delivered
--- plus spilled) is drawn from the fixed reserve, which then runs dry. Closed hydrants are untouched.
+-- An OPEN hydrant gushes at its flow rate: whatever the network on its tile can take is fed in, the
+-- rest spills onto the street and is wasted. While the town service runs its reserve is held full and
+-- the waste costs nothing; once the water is cut, the whole flow comes out of the fixed reserve.
 function System.processHydrant(hydrant, square, dt)
     local mainsFed = Hydrant.isMainsFed()
     if mainsFed then
@@ -711,21 +656,20 @@ function System.processHydrant(hydrant, square, dt)
         return
     end
 
-    -- The network takes what it can; the remainder is spilled. Both come out of the flow, so the
-    -- reserve loses the whole flow whether or not anything was connected.
+    -- The network takes what it can and the remainder is spilled: the reserve loses the whole flow whether
+    -- or not anything was connected.
     NetworkAccess.fillFluidAtSquare(square, "Water", flow)
     if not mainsFed then
         Hydrant.setReserve(hydrant, reserve - flow)
     end
 
-    -- The spilled water lands somewhere: the gush showers the hydrant's own 3x3 like a sprinkler,
-    -- watering whatever grows there. Free litres -- they are already leaving through the open cap.
+    -- The spilled water lands somewhere: the gush waters the hydrant's own 3x3 like a sprinkler. Free
+    -- litres -- they are already leaving through the open cap.
     Irrigation.waterHydrantSurroundings(square, dt / 60)
 end
 
--- Driven by the open-hydrant registry rather than the pipe list, so a hydrant opened with no pipe on
--- its tile still wastes water. The registry is self-cleaning: an entry whose hydrant is gone or has
--- been closed is dropped here.
+-- Driven by the open-hydrant registry rather than the pipe list, so a hydrant opened with no pipe on its
+-- tile still wastes water. Self-cleaning: an entry whose hydrant is gone or closed is dropped here.
 function System.processHydrants(dt)
     dt = dt or 1.0
     if dt <= 0 then
@@ -773,10 +717,9 @@ local function fluidContainerOf(object)
     return ok and fc or nil
 end
 
--- A component taints as one body of water, so we act per component, not per vessel: decide with
--- `predicate`, and the first vessel that says yes taints the whole network through it. Fresh clean
--- vessels with no stamp yet are stamped now, so their clock starts from first sight rather than
--- turning them the instant the feature switches on.
+-- A component taints as one body of water, so this acts per component: the first vessel that says yes
+-- taints the whole network through it. Fresh clean vessels are stamped now, so their clock starts from
+-- first sight rather than turning the instant the feature is switched on.
 local function taintComponentsWhere(predicate)
     for _, component in ipairs(State.getComponents()) do
         local vessels = collectComponentVessels(component)
@@ -821,9 +764,8 @@ function System.processStagnation()
     end)
 end
 
--- Every ten minutes while it rains: an OPEN vessel that is also OUTSIDE contaminates its whole
--- network. Uncovered collection is a gamble whenever the weather turns -- which is what vanilla
--- already does to its rain barrels, extended here to the whole plumbed system.
+-- Every ten minutes while it rains: an OPEN vessel that is also OUTSIDE contaminates its whole network.
+-- The same gamble vanilla already takes with its rain barrels, extended to the plumbed system.
 function System.processRainTaint()
     if not Stagnation.isEnabled() or not Stagnation.rainTaints() then
         return
@@ -845,18 +787,10 @@ function System.processRainTaint()
 end
 
 -- Every pipe tile and its six neighbours, DEDUPLICATED.
---
--- This runs once per in-game minute, which at the default day length is roughly every two and a half
--- seconds of real time -- and it was the single most expensive thing the mod did on that cadence.
--- The reason was arithmetic, not design: a pipe contributes itself plus six neighbours, and on a
--- dense grid almost every one of those neighbours is another pipe, or the neighbour of one. A
--- 192-tile farm therefore produced 1 344 positions covering barely 250 distinct tiles, and each of
--- the two passes below turned every one of them into a getGridSquare and a full object scan --
--- five duplicates of the same tile, five times the work, five times per minute.
---
--- Deduplicating first is the whole fix. The passes still visit their own `visited` set, but that set
--- only spares the ENDPOINT work; the square lookup and the object scan had already been paid by the
--- time it was consulted.
+-- A pipe contributes itself plus six neighbours, and on a dense grid almost every one of those is
+-- another pipe: a 192-tile farm produced 1 344 positions covering barely 250 distinct tiles, and each
+-- pass turned every one into a getGridSquare and a full object scan. The passes' own `visited` sets
+-- spared only the ENDPOINT work -- the lookup and the scan had already been paid.
 local function collectPipeNeighbourhood(state)
     local seen = {}
     local coordinates = {}
@@ -881,21 +815,17 @@ local function collectPipeNeighbourhood(state)
 end
 
 -- Rebuild the endpoint index from the world, and say what it found that nobody had recorded.
---
--- This is the old per-minute behaviour -- sweep the pipe neighbourhood, ~700 tiles on a 200-pipe
--- farm, two object scans each -- kept as a ten-minute BACKSTOP rather than the working path, and made
--- to report. A tile it discovers that the registry did not already claim means a fixture became
--- plumbed without EndpointPlumbing.plumb hearing about it, which is the same question
--- docs/removal-events.md asks about removals: is the event enough on its own? A silent backstop can
--- never answer that. This one can, and if it stays quiet across enough sessions it can be deleted.
+-- The old per-minute behaviour, kept as a ten-minute BACKSTOP rather than the working path, and made to
+-- report: a tile it discovers that the registry did not claim means a fixture became plumbed without
+-- EndpointPlumbing.plumb hearing about it. A silent backstop could never answer that; if this one stays
+-- quiet across enough sessions it can be deleted.
 function System.reindexEndpoints()
     local coordinates = collectPipeNeighbourhood(State.ensure())
     local known = State.getEndpoints()
     local discovered = 0
 
-    -- The FIRST index of a save is a migration, not a finding. A save made before the registry
-    -- existed has every one of its plumbed fixtures unrecorded, and reporting each as an escape would
-    -- bury the one case this is here to catch under a wall of noise the very first time it ran.
+    -- The FIRST index of a save is a migration, not a finding: a save made before the registry existed has
+    -- every plumbed fixture unrecorded, and reporting each as an escape would bury the real case.
     local migrating = not State.endpointsIndexed()
 
     for _, position in ipairs(coordinates) do
@@ -943,14 +873,12 @@ function System.reindexEndpoints()
 end
 
 -- The per-minute refresh, reading the index instead of searching for its work.
---
--- Each entry is a CLAIM, not a fact, and the loop is where it is settled: a tile whose square is
--- loaded and holds nothing plumbed is dropped. A tile whose square is NOT loaded is left alone --
--- walking away from your base must not erase its plumbing, which is the same rule Registry.near
--- follows for the same reason.
+-- Each entry is a CLAIM, settled here: a tile whose square is loaded and holds nothing plumbed is
+-- dropped, while a tile whose square is NOT loaded is left alone -- walking away from your base must
+-- not erase its plumbing.
 function System.refreshPlumbedEndpoints()
-    -- A save made before the index existed has plumbed fixtures and no record of them. Find them
-    -- once, on the first pass after loading, and never again.
+    -- A save made before the index existed has plumbed fixtures and no record of them. Find them once, on
+    -- the first pass after loading, and never again.
     if not State.endpointsIndexed() then
         System.reindexEndpoints()
     end
@@ -993,25 +921,18 @@ function System.refreshPlumbedEndpoints()
     end
 end
 
--- `afterLayoutChange` defaults to true: a build or a removal really has changed the shape, and
--- anything cached off the old one is now a lie.
---
--- The ten-minute pass passes FALSE, and that is the point. It calls this to re-read containers and
--- rebuild the graph, not because anything changed -- and dropping the head field on that timer meant
--- paying a full cold solve every ten minutes for a shape that was almost always identical. At x3 speed
--- a ten-minute pass arrives every seven real seconds, and a cold solve was measured at 141 ms: three
--- of the three global drops in one window came from here, and each one was a freeze.
---
--- Nothing is lost by not dropping. Every way the layout can actually change fires an object event that
--- drops by tile, and the one path established to fire NO event -- fire, see docs/removal-events.md --
--- is caught by verifyCachesAgainstTheWorld, which reports the drift AND falls back to the wholesale
--- drop when it finds any. That is the difference between dropping because something is wrong and
--- dropping in case something might be.
+-- `afterLayoutChange` defaults to true: a build or a removal really has changed the shape.
+-- The ten-minute pass passes FALSE. It calls this to re-read containers and rebuild the graph, not
+-- because anything changed, and dropping the head field on that timer cost a full cold solve -- 141 ms,
+-- arriving every seven real seconds at x3 speed -- for a shape that was almost always identical.
+-- Nothing is lost by not dropping: every way the layout can actually change fires an object event that
+-- drops by tile, and the one path known to fire none (fire) is caught by verifyCachesAgainstTheWorld,
+-- which reports the drift AND falls back to the wholesale drop. Dropping because something IS wrong,
+-- rather than in case it might be.
 function System.rebuild(afterLayoutChange)
     if afterLayoutChange ~= false then
-        -- Both caches are invalidated by tile on object events, but a build and the rebuild it
-        -- triggers happen inside the same frame -- so without this the refresh that follows would
-        -- still see the pre-build shape.
+        -- Both caches invalidate by tile on object events, but a build and the rebuild it triggers happen in the
+        -- same frame -- so without this the refresh that follows would still see the pre-build shape.
         PipeObjectUtils.invalidateScanCache()
         NetworkAccess.invalidateTraversalCache()
     end
@@ -1022,9 +943,8 @@ end
 
 function System.tick()
     local ok, err = pcall(function()
-        -- Broken out because system/10min measured 26 ms a pass and nothing said which third of it
-        -- that was. A rebuild drops the traversal cache and the head field, so it is also what makes
-        -- the NEXT cold solve happen -- worth knowing before deciding it is cheap.
+        -- Broken out because 10min measured 26 ms a pass and nothing said which third that was. A rebuild drops
+        -- the traversal cache and the head field, so it is also what makes the NEXT cold solve happen.
         Profiler.time("10min/rebuild", System.rebuild, false)
         Profiler.time("10min/redist", System.redistributeWater)
         Profiler.time("10min/endpoints", System.refreshPlumbedEndpoints)
@@ -1098,26 +1018,22 @@ local function onInitGlobalModData()
     Logger.log("Server state initialized")
 end
 
--- Pipe removal (sledgehammer destroy, moveable "Pick Up", erosion, etc.) is processed ONE TICK
--- later: some removal events (notably OnObjectAboutToBeRemoved, used by the moveable pickup) fire
--- BEFORE the object actually leaves the square, so a synchronous re-check would still "see" the
--- pipe. Deferring a frame lets us read the true post-removal world state. The next-tick guard
--- (no pipe left on the square) also handles multi-pipe squares and cancelled removals uniformly.
+-- Pipe removal is processed ONE TICK later: some removal events (notably OnObjectAboutToBeRemoved, used
+-- by the moveable pickup) fire BEFORE the object leaves the square, so a synchronous re-check would
+-- still see the pipe. The next-tick guard also covers multi-pipe squares and cancelled removals.
 local pendingPipeRemovals = {}
 local pendingMaterialDrops = {}
 local pendingRemovalScheduled = false
 
--- Chance a dismantled pipe hands its build material back -- the same 90% the old static scrap
--- entry used (see WaterPipeScrap.lua for why the return moved here: the scrap table cannot know
--- what the pipe was built FROM, this code can).
+-- Chance a dismantled pipe hands its build material back. The scrap table cannot know what the pipe was
+-- built FROM; this code can (see WaterPipeScrap.lua).
 local DISMANTLE_RETURN_CHANCE = 90
 
 -- Diagnostics for the build-material stamp, logged once per outcome (see schedulePipeRemoval).
 local loggedDismantleMaterial = { [true] = false, [false] = false }
 
--- Every key a pipe's modData actually carries, sorted. If the material stamp is missing, the next
--- question is always "is anything else there either, or just that one key?" -- a pipe that lost all
--- its modData is a different bug from one that only lost the material.
+-- Every key a pipe's modData carries, sorted: a pipe that lost all its modData is a different bug from
+-- one that only lost the material stamp.
 local function describeModDataKeys(modData)
     if not modData then
         return "<no modData>"
@@ -1146,9 +1062,8 @@ local function processPendingPipeRemovals()
     local drops = pendingMaterialDrops
     pendingMaterialDrops = {}
 
-    -- Material returns first, one per dismantled OBJECT: the entry only pays out when its object
-    -- really left the square, so a cancelled removal drops nothing and a multi-pipe square (floor
-    -- pipe + riser) pays for exactly the pipe that was taken down.
+    -- Material returns first, one per dismantled OBJECT: a cancelled removal drops nothing, and a
+    -- multi-pipe square pays for exactly the pipe that was taken down.
     for _, drop in ipairs(drops) do
         local square = getSquare(drop.x, drop.y, drop.z)
         if square and square.getObjects then
@@ -1188,20 +1103,16 @@ local function schedulePipeRemoval(object, returnsMaterial)
     local x, y, z = square:getX(), square:getY(), square:getZ()
     pendingPipeRemovals[tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)] = { x = x, y = y, z = z }
 
-    -- The material has to be read NOW: by the time the removal is confirmed next tick, the object
-    -- and its modData are gone. Pumps/routers/etc. also pass through here and return their pipe.
-    --
-    -- CLAY GIVES NOTHING BACK. A fired clay segment cannot be unfired, and prying a brittle one out
-    -- of a run breaks it -- so a clay pipe is spent the moment it is laid. That is the whole trade
-    -- against metal: clay is cheap and needs no forge, but it is one-way, while a metal pipe is
-    -- salvage you can move around your base. Without this, clay was strictly better than metal and
-    -- there was no reason to ever forge one.
+    -- The material has to be read NOW: by the time the removal is confirmed next tick the object and its
+    -- modData are gone.
+    -- CLAY GIVES NOTHING BACK. A fired clay segment cannot be unfired, so it is spent the moment it is
+    -- laid. That is the trade against metal: clay is cheap and needs no forge, but it is one-way, while a
+    -- metal pipe is salvage. Without this, clay would be strictly better and nobody would forge one.
     if returnsMaterial then
         local clay, source = PipeObjectUtils.isClayBuilt(object)
 
-        -- Once per outcome per session. The build side logs what it stamped; this logs what the other
-        -- end concluded and which source it came from, which is the only way to tell "never stamped"
-        -- from "stamped and lost" -- and those need completely different fixes.
+        -- Once per outcome per session. The build side logs what it stamped; this logs what the other end
+        -- concluded, which is the only way to tell "never stamped" from "stamped and lost".
         if not loggedDismantleMaterial[clay] then
             loggedDismantleMaterial[clay] = true
             local okMod, modData = pcall(object.getModData, object)
@@ -1233,9 +1144,9 @@ local function onDestroyIsoThumpable(thump, player)
     schedulePipeRemoval(thump, false)
 end
 
--- Fires for moveable "Pick Up" and other lua-driven removals; without it a removed pipe would
--- stay registered and its endpoints would still read as connected. Dismantling (the scrap action)
--- comes through here, so this path hands the build material back.
+-- Fires for moveable "Pick Up" and other lua-driven removals; without it a removed pipe would stay
+-- registered and its endpoints would still read as connected. Dismantling comes through here, so this
+-- path hands the build material back.
 local function onObjectAboutToBeRemoved(object)
     schedulePipeRemoval(object, true)
 end
@@ -1280,9 +1191,8 @@ local function verifyCachesAgainstTheWorld()
         end
     end
 
-    -- A disagreement means something else may be stale too, and the verifier only repaired the tiles
-    -- it looked at. Falling back to the old wholesale drop is the safe response to being wrong about
-    -- the premise -- and it happens only when the premise IS wrong, which is the whole difference.
+    -- A disagreement means something else may be stale too, and the verifier only repaired the tiles it
+    -- looked at. Falling back to the wholesale drop is the safe response to being wrong about the premise.
     if disagreed > 0 then
         Adapter.invalidateVesselCache()
         PipeObjectUtils.invalidateScanCache()
@@ -1304,13 +1214,10 @@ local function onEveryTenMinutes()
 
 end
 
--- The endpoint index's backstop, deliberately NOT on the same frame as the pass above.
---
--- It costs 13.5 ms and System.tick costs 26, and landing both together made a 40 ms frame out of two
--- pieces of work with no reason to share one. It is a backstop for a case that has never fired --
--- every plumbed fixture is recorded by plumb() -- so it runs every third ten-minute pass, half an
--- in-game hour, on a frame of its own. If it ever does report something, that is the moment to make
--- it more frequent, not before.
+-- The endpoint index's backstop, deliberately NOT on the same frame as the pass above: it costs 13.5 ms
+-- and System.tick costs 26, and landing both together made a 40 ms frame for no reason. It is a
+-- backstop for a case that has never fired, so it runs every third ten-minute pass on a frame of its
+-- own. If it ever does report something, that is the moment to make it more frequent.
 local REINDEX_EVERY = 3
 local reindexCountdown = 1
 local reindexDue = false
@@ -1326,8 +1233,7 @@ local function requestEndpointReindex()
     reindexDue = true
 end
 
--- One flag, checked per frame: the cost on a frame with nothing due is a nil test, which is all but
--- every frame. Same shape as drainIrrigationPass, and for the same reason -- work that has a deadline
+-- One flag, checked per frame: on a frame with nothing due the cost is a nil test. Work with a deadline
 -- measured in minutes has no business insisting on a particular frame.
 local function drainEndpointReindex()
     if not reindexDue then
@@ -1343,13 +1249,8 @@ end
 
 -- The last input to the head field with no event behind it: whether a pump has power. That is
 -- square:haveElectricity(), which changes when a generator starts, stops or runs dry, and the game
--- announces none of it.
---
--- So it is WATCHED rather than assumed stale. The field used to be thrown away once a minute on the
--- chance that this had changed, which cost a full re-solve every minute whether or not anything had;
--- checking costs one lookup per pump, and there are a handful of those now that the registry records
--- which pipes are pumps.
---
+-- announces none of it. So it is WATCHED rather than assumed stale -- one lookup per pump, against a
+-- full re-solve every minute on the chance that it moved.
 -- The first pass after a load finds no remembered state and invalidates once, which is correct: the
 -- field was solved before any of this was known.
 local pumpPowerState = {}
@@ -1379,19 +1280,13 @@ local function checkPumpPower()
     return changed
 end
 
--- The two watchers, and ONE drop between them.
---
--- Both used to invalidate on their own, and both invalidate on their first look of a session -- so
--- loading a game cost two full re-solves back to back where one was needed. That was invisible while a
--- solve was one cost among many; with the field now caching at 99.9% a cold solve is 161 ms landing in
--- a single frame, and the second one was pure waste.
---
--- They still want DIFFERENT drops, which is why this is not simply an `or`. Pump power feeds the head
--- field and nothing else -- the fill walks read isPowered live, so they are still correct. The mains
--- shutoff is baked into a cached walk's supply floor, so that one has to take the walks with it.
+-- The two watchers, and ONE drop between them. Both used to invalidate on their own, and both
+-- invalidate on their first look of a session, so loading a game cost two full re-solves back to back.
+-- They still want DIFFERENT drops, which is why this is not simply an `or`: pump power feeds the head
+-- field and nothing else, while the mains shutoff is baked into a cached walk's supply floor.
 local function checkWatchedInputs()
-    -- Both, before either drop: a watcher that does not run because an earlier one already decided to
-    -- invalidate would never record its own state, and would then report a change every single minute.
+    -- Both, before either drop: a watcher skipped because an earlier one already decided to invalidate
+    -- would never record its own state, and would then report a change every single minute.
     local pumpChanged = checkPumpPower()
     local supplyChanged = NetworkAccess.supplyClockChanged()
 
@@ -1403,25 +1298,18 @@ local function checkWatchedInputs()
 end
 
 local function onEveryOneMinute()
-    -- The head field is no longer dropped per frame (see NetworkAccess.invalidateTraversalCache), so
-    -- this is what bounds how stale it can get. A minute is the cadence the water itself moves on --
-    -- everything below either fills or drains something -- so re-solving here means the field is never
-    -- reasoning about a supply that has since run dry, while costing one solve a minute instead of one
-    -- a frame.
-    -- Both un-evented inputs, watched together and dropped once. The other one is the day the town
-    -- water is cut: it is read live inside Mains.isLiveAt, so a cached walk would keep counting a dead
-    -- main as a supply floor and keep letting water climb on pressure that is no longer there.
-    -- Watching it is one boolean compare a minute against a clock that flips once in the life of a
-    -- save, where expiring the walks for it would be a full re-walk every minute forever.
+    -- The head field is no longer dropped per frame, so this is what bounds how stale it can get. A minute
+    -- is the cadence the water itself moves on, so the field is never reasoning about a supply that has
+    -- since run dry, at one solve a minute instead of one a frame.
+    -- The other un-evented input is the day the town water is cut: it is read live inside Mains.isLiveAt,
+    -- so a cached walk would keep counting a dead main as a supply floor.
     Profiler.time("1min/invalidate", checkWatchedInputs)
 
-    -- The vessel classification and the pipe-object scan used to be dropped here too, wholesale, once
-    -- a minute. Measured: that drop forced ~190 ms of client work in the frame that followed it, and
-    -- it protected against nothing anyone has ever observed -- both are invalidated by tile on object
-    -- add/remove and on LoadGridsquare, and pipes cannot even be destroyed by anything but a player
-    -- (isThumpable = false on every pipe entity). What is left of the doubt is now a VERIFICATION on
-    -- the ten-minute pass, which is cheap and says out loud when it disagrees. docs/removal-events.md
-    -- explains how to retire it for good.
+    -- The vessel classification and the pipe-object scan used to be dropped here too, wholesale: measured at
+    -- ~190 ms of client work in the frame that followed, protecting against nothing anyone has observed.
+    -- Both are invalidated by tile on object add/remove and on LoadGridsquare, and pipes cannot be
+    -- destroyed by anything but a player. What is left of the doubt is a VERIFICATION on the ten-minute
+    -- pass, which is cheap and says out loud when it disagrees.
 
     -- Routers process once per in-game minute (rates are per-minute; dt defaults to 1.0). This is the
     -- cheap cadence -- no per-frame OnTick work -- at the cost of the readout updating once a minute.
@@ -1452,18 +1340,17 @@ local function onEveryOneMinute()
 end
 
 -- Irrigation runs hourly, not per minute: crops drain 1 waterLvl every 5 in-game hours, so anything
--- faster would be pure overhead. It is also the only place pressure is computed for emitters, which
--- keeps that cost pinned to the slowest cadence in the mod.
+-- faster is pure overhead. It is also the only place pressure is computed for emitters, which pins that
+-- cost to the slowest cadence in the mod.
 local function onEveryHours()
-    -- Queued rather than run outright: the pass hands itself out a few emitters per frame (see
-    -- drainIrrigationPass), so a field of thirty sprinklers no longer lands as one hourly hitch.
+    -- Queued rather than run outright: the pass hands itself out a few emitters per frame, so a field of
+    -- thirty sprinklers no longer lands as one hourly hitch.
     local ok, err = pcall(Irrigation.beginPass, 1.0)
     if not ok then
         Logger.error("Irrigation pass failed: " .. tostring(err))
     end
 
-    -- Stagnation is a days-scale process, so the hourly cadence is plenty and keeps its network walk
-    -- off the hot path.
+    -- Stagnation is a days-scale process, so the hourly cadence keeps its network walk off the hot path.
     local okStag, errStag = pcall(System.processStagnation)
     if not okStag then
         Logger.error("Stagnation pass failed: " .. tostring(errStag))
@@ -1477,11 +1364,8 @@ local function drainIrrigationPass()
         return
     end
 
-    -- Timed, because it was not and that hid a quarter of everything the mod does. The bucket table
-    -- adds up only its TOP-LEVEL rows, and in one window those came to 1104 ms against a total of
-    -- 2108: the difference was solve/search happening underneath an untimed pass. A hydraulic solve is
-    -- the most expensive thing in this mod and this is one of the places that asks for one, so it
-    -- needs a row of its own rather than being visible only as an unexplained gap.
+    -- Timed, because it was not and that hid a quarter of everything the mod does: the bucket table adds up
+    -- only its TOP-LEVEL rows, and solve/search was happening underneath an untimed pass.
     local ok, err = pcall(Profiler.time, "1h/irrigation-step",
         Irrigation.stepPass, Constants.IRRIGATION_EMITTERS_PER_TICK)
     if not ok then
@@ -1492,19 +1376,17 @@ local function drainIrrigationPass()
 end
 
 local function onWaterAmountChange(object, prevAmount)
-    -- Before the suppression guard, deliberately. The head field cares only whether a vessel holds
-    -- water, and it has to hear about that crossing whoever caused it -- rain, a player scooping from
-    -- a barrel by hand, another mod, or this mod's own draw. The guard below exists to stop endpoint
-    -- reconciliation and stagnation clocks re-entering on our own writes; neither concern applies to
-    -- an invalidation, which is idempotent.
+    -- Before the suppression guard, deliberately. The head field cares only whether a vessel holds water,
+    -- and it has to hear about that crossing whoever caused it. The guard below stops endpoint
+    -- reconciliation and stagnation clocks re-entering on our own writes; neither applies to an
+    -- invalidation, which is idempotent.
     if object and Adapter.noteEmptinessCrossing then
         local ok, amount = pcall(Adapter.readWorldFluidAmount, object)
         pcall(Adapter.noteEmptinessCrossing, object, prevAmount, ok and amount or 0)
     end
 
-    -- Ignore the echo of our OWN network writes. ContainerAdapter.writeWorldFluidAmount fires
-    -- OnWaterAmountChange purely so external mods (e.g. Useful Barrels) refresh; processing it here
-    -- would reset stagnation clocks and re-reconcile endpoints for no reason (and risk re-entrancy).
+    -- Ignore the echo of our OWN network writes. writeWorldFluidAmount fires OnWaterAmountChange purely so
+    -- external mods refresh; processing it here would reset stagnation clocks and risk re-entrancy.
     if WaterPipes._suppressWaterEvent then
         return
     end
@@ -1530,9 +1412,8 @@ local function onWaterAmountChange(object, prevAmount)
         end
     end
 
-    -- Any change to a water vessel counts as movement, which resets its stagnation clock. Reading the
-    -- fluid type off the object keeps clean water fresh while it is being used and leaves tainted water
-    -- untouched -- so the very act of tainting a vessel never resets its own clock.
+    -- Any change to a water vessel counts as movement and resets its stagnation clock. Reading the fluid
+    -- type off the object leaves tainted water untouched, so tainting a vessel never resets its own clock.
     if Stagnation.isEnabled() and object.getModData then
         local ok, fluidType = pcall(function()
             local descriptors = Adapter.collectSquareContainers(object:getSquare())
@@ -1662,9 +1543,8 @@ local function onClientCommand(module, command, player, args)
         return
     end
 
-    -- Pump switch: server-authoritative so every client agrees on which pumps are running, the same
-    -- way the hydrant valve is. A switched-off pump reads as unpowered everywhere (Pump.isPowered),
-    -- so it stops both boosting pressure and drawing from its source.
+    -- Pump switch: server-authoritative so every client agrees on which pumps are running. A switched-off
+    -- pump reads as unpowered everywhere, so it stops both boosting pressure and drawing from its source.
     if command == "setPumpEnabled" then
         local square = resolveCommandSquare(args)
         local pump = square and Pump.findOnSquare(square)

@@ -3,21 +3,16 @@
 """
 WaterPipes performance harness.
 
-Counts the Lua -> Java bridge calls each periodic pass of the mod makes, for a
-set of fixed scenarios, so an optimisation can be measured instead of guessed at.
+Counts the Lua -> Java bridge calls each periodic pass of the mod makes, for a set of fixed scenarios,
+so an optimisation can be measured instead of guessed at.
 
     python wp_bench.py                 # human-readable report
     python wp_bench.py --save-baseline # record current counts as the baseline
     python wp_bench.py --check         # diff against the baseline, non-zero exit on regression
 
-The model lives in wp_model.py and is a hand transcription of the mod's control
-flow -- it is approximate by design. What it gets right is the SHAPE: how many
-network walks each pass makes, how many object scans each walk makes, and how
-all of that grows with the size of the build. Absolute milliseconds are an
-estimate (see --report notes); relative before/after numbers are the point.
-
-Update the model whenever the traversal or the per-tick passes change, or the
-baseline stops meaning anything.
+The model lives in wp_model.py and is a hand transcription of the mod's control flow, approximate by
+design. What it gets right is the SHAPE: how many walks each pass makes, how many scans each walk
+makes, and how that grows with the size of the build. Use the deltas, not the absolutes.
 """
 
 import argparse
@@ -141,17 +136,11 @@ def run_suite():
         row["TOTAL 1min"] = n
         row["TOTAL 1min :walks"] = calls.get("BFS", 0)
 
-        # ...and what five consecutive minutes cost, which is a different question and
-        # the one the fill path's cache lifetime actually answers.
-        #
-        # Every per-pass number above is measured cold on purpose: it is a worst case,
-        # and worst cases stay comparable. But no minute after the first is cold in a
-        # real game. Only a run of them shows what an event lifetime buys, because the
-        # whole benefit is that minute two does not re-walk what minute one walked --
-        # and a bench made only of cold single passes is structurally blind to it.
-        #
-        # frame_reset between minutes, and nothing else: that is exactly the OnTick
-        # boundary. What survives it is what the mod says survives it.
+        # ...and what five consecutive minutes cost, which is a different question and the one the fill path's
+        # cache lifetime actually answers. Every per-pass number above is measured cold on purpose -- a worst
+        # case stays comparable -- but no minute after the first is cold in a real game, and a bench made only
+        # of cold single passes is structurally blind to what an event lifetime buys.
+        # frame_reset between minutes and nothing else: that is exactly the OnTick boundary.
         sc = build(spec)
         M.reset()
         M.cold()

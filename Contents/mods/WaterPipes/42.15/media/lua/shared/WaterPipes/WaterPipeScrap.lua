@@ -1,32 +1,23 @@
--- Water pipes are B42 entities and are intentionally NOT moveable "pick up" items: moving an
--- entity through the moveable system corrupts MP sync (duplicated sinks, failed pickups). Instead
--- they are removed via the vanilla "Disassemble" option, which is driven by the tiles' Material.
---
--- The pipe tiles carry CanScrap + Material = "WaterPipesScrap" (see tools/texturepack/edit_tiles.py);
--- this registers the matching scrap definition: hammer, low Woodwork.
+-- Water pipes are B42 entities and are intentionally NOT moveable "pick up" items: moving an entity
+-- through the moveable system corrupts MP sync. They are removed via the vanilla "Disassemble" option,
+-- driven by the tiles' Material -- CanScrap + Material = "WaterPipesScrap" -- which this registers.
 --
 -- ===== Why there is a zero-chance return item =====
 --
--- Vanilla will not offer "Disassemble" for a material whose scrap definition has no return items at
--- all. ISMoveableDefinitions.isScrapDefinitionValid() is literally `#returnItems > 0`, and both
--- ISThumpableSpriteProps.fromObject (canScrap) and ISMoveableCursor gate the option on it. Registering
--- the action without a return item therefore does not mean "dismantles for nothing" -- it means the
--- option never appears, on any pipe.
+-- Vanilla will not offer "Disassemble" for a material whose scrap definition has no return items:
+-- ISMoveableDefinitions.isScrapDefinitionValid() is literally `#returnItems > 0`. Registering the
+-- action without one does not mean "dismantles for nothing", it means the option never appears.
 --
--- But the return itself cannot live here either. A scrap table is keyed by TILE material, and metal
--- and clay pipes share their tiles; only the pipe's modData knows which it was, and the two do not
--- pay out the same (metal 90%, clay nothing at all). So the entry below exists purely to make the
--- definition valid, and its chance is zero so vanilla never actually pays it: addScrapItemToList
--- rolls ZombRandFloat(0,101) < chance, which no roll satisfies at 0 -- including under the mod-cheat
--- path, which scales the chance and so leaves it at 0. With no `unusableItem` on the definition,
--- vanilla's "gave nothing, hand over scrap instead" fallback stays quiet too.
+-- But the return cannot live here either. A scrap table is keyed by TILE material, and metal and clay
+-- pipes share their tiles; only the pipe's modData knows which it was, and they do not pay out the same
+-- (metal 90%, clay nothing). So this entry exists purely to make the definition valid, at a chance of
+-- zero so vanilla never pays it -- addScrapItemToList rolls ZombRandFloat(0,101) < chance, which no
+-- roll satisfies at 0, mod-cheat path included. With no `unusableItem`, vanilla's "gave nothing, hand
+-- over scrap instead" fallback stays quiet too.
 --
--- The real payout is WaterPipeSystem's schedulePipeRemoval, which reads the modData and drops the
--- right thing -- or nothing.
---
--- Keep MetalPipe as the named item even though it is never rolled: the dynamic-recipe UI reads
--- returnItems[1] when a definition has no static items, so this is the thing a "Scrap" recipe entry
--- would name, and metal is the honest default for a pipe.
+-- The real payout is WaterPipeSystem's schedulePipeRemoval, which reads the modData.
+-- MetalPipe stays the named item even though it is never rolled: the dynamic-recipe UI reads
+-- returnItems[1] when a definition has no static items.
 
 require "Moveables/ISMoveableDefinitions"
 

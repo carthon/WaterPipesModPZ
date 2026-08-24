@@ -2,27 +2,18 @@
 # -*- coding: utf-8 -*-
 """Validate the mod's translations against each other and against the code.
 
-lint_json.py checks that each file is readable the way the game reads it. This
-checks that the CONTENT is coherent, which is a different set of failures and all
-of them silent:
+lint_json.py checks that each file is readable the way the game reads it. This checks that the CONTENT
+is coherent, which is a different set of failures and all of them silent:
 
-  * a key the Lua asks for that no language defines -- getText returns the key
-    itself, so the player sees "IGUI_WaterPipesEmitterShort" in the tooltip
-  * a key EN defines that a translation is missing -- that language quietly falls
-    back to English for that one string
-  * a key a translation defines that EN does not -- almost always a rename that
-    was applied to one file and not the others, i.e. dead weight that looks alive
-  * PLACEHOLDER DRIFT: EN says %1 and %2, a translation says only %1. The second
-    value is dropped, and nothing anywhere complains
+  * a key the Lua asks for that no language defines -- getText returns the key itself
+  * a key one language defines and another does not, usually a rename applied to one file
+  * PLACEHOLDER DRIFT: EN says %1 and %2, a translation says only %1, and a value is dropped
   * an empty string, which renders as a blank line in a tooltip
-
-None of these throws. They are the failures that reach a player looking like a
-design decision.
 
     python lint_translations.py [root]
 
-Exits 1 on anything that would be visibly wrong; key parity between languages is
-reported but does not fail, since a partial translation is a normal state.
+Exits 1 on anything visibly wrong. Key parity is reported but does not fail: a partial translation is
+a normal state.
 """
 
 import io
@@ -44,11 +35,9 @@ GETTEXT_DYNAMIC = re.compile(r'\bgetText(?:OrNull)?\s*\(\s*(?!")')
 PLACEHOLDER = re.compile(r"%(\d)")
 
 
-# Where the base game keeps its own strings. A mod legitimately borrows them -- this one
-# reads ContextMenu_PlumbItem to find the engine's own "Plumb %1" option by its localized
-# prefix -- so a key the mod does not define is only a fault if VANILLA does not define it
-# either. Without this the check reported that borrowed key as missing, which is how a
-# linter teaches people to ignore its output.
+# Where the base game keeps its own strings. A mod legitimately borrows them -- this one reads
+# ContextMenu_PlumbItem to find the engine's "Plumb %1" option by its localized prefix -- so a key the
+# mod does not define is only a fault if VANILLA does not define it either.
 VANILLA = [
     "D:/Archivos de Programas/SteamLibrary/steamapps/common/ProjectZomboid",
     "C:/Program Files (x86)/Steam/steamapps/common/ProjectZomboid",
@@ -78,11 +67,8 @@ VANILLA_KEY = re.compile(r'^\s*"([^"]+)"\s*:', re.M)
 def vanilla_keys():
     """Every key name the base game defines, with where they came from, or (set(), None).
 
-    Read with a regex rather than a JSON parser, on purpose. PZ's own translation files
-    contain trailing commas -- org.json accepts them and json.loads does not -- so parsing
-    them strictly threw and left the base-game key set empty, which turned a borrowed key
-    back into a reported problem. Only the key NAMES are wanted here; the game's own files
-    are not this mod's to validate.
+    Read with a regex rather than a JSON parser: PZ's own translation files carry trailing commas,
+    which org.json accepts and json.loads does not. Only the key NAMES are wanted here.
     """
     for root in VANILLA:
         base = os.path.join(root, "media", "lua", "shared", "Translate", REFERENCE)

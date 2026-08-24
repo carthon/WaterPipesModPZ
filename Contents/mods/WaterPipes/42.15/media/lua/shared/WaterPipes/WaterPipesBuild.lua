@@ -1,13 +1,13 @@
 -- B42 entity build hooks for the Water Pipe buildables.
 --
 -- The pipes are placed through the native B42 entity build system (ISBuildIsoEntity), which is
--- multiplayer-safe: the engine validates on the server and runs :create() server-side. We only
--- supply two SpriteConfig hooks per entity:
---   OnIsValid(params) -> bool   (runs on client cursor AND server; pure validation)
---   OnCreate(params)            (runs inside :create(), i.e. on the server in MP; registers the pipe)
+-- multiplayer-safe: the engine validates on the server and runs :create() server-side. We supply two
+-- SpriteConfig hooks per entity:
+--   OnIsValid(params) -> bool   (client cursor AND server; pure validation)
+--   OnCreate(params)            (inside :create(), i.e. the server in MP; registers the pipe)
 --
--- The hooks are referenced from the entity scripts by the dotted global path
--- "WaterPipesBuild.<fn>", so this table MUST be a global and must load before scripts are parsed.
+-- Referenced from the entity scripts by the dotted global path "WaterPipesBuild.<fn>", so this table
+-- MUST be a global and must load before scripts are parsed.
 
 require "WaterPipes/Constants"
 require "WaterPipes/PipeObjectUtils"
@@ -113,16 +113,12 @@ function Build.riserOnIsValid(params)
 end
 
 -- Did this build consume a fired clay pipe segment instead of a metal pipe?
---
 -- CraftRecipeData exposes the build's items through several lists that do not all populate in every
--- situation, so we ask each in turn rather than trusting one. getAllRecordedConsumedItems is the
--- narrowest (vanilla's barricade code checks it for emptiness before using it, so it is known to come
--- back blank); getAllInputItems is what vanilla's own lamp-on-pillar OnCreate uses to identify which
--- item went into a build, which is exactly our question. First list that names the clay segment wins.
---
+-- situation, so each is asked in turn. getAllRecordedConsumedItems is the narrowest (vanilla checks it
+-- for emptiness before using it); getAllInputItems is what vanilla's own lamp-on-pillar OnCreate uses.
+-- First list that names the clay segment wins.
 -- Getting this wrong is not loud: the pipe silently reads as metal and hands a metal pipe back when
--- dismantled, which is precisely how it shipped broken once. Hence the warning at the bottom -- if no
--- accessor yields a single item, something about the build path has changed and we want to know.
+-- dismantled, which is how it shipped broken once. Hence the warning at the bottom.
 local CRAFT_ITEM_ACCESSORS = {
     "getAllRecordedConsumedItems",
     "getAllConsumedItems",
@@ -151,8 +147,7 @@ end
 
 -- What each accessor actually returned, as one line for console.txt. Logged once per session on the
 -- first pipe built, because which of these lists populates is a property of the running build of the
--- game and cannot be settled by reading our own code -- and when it changes, the symptom is a silent
--- wrong material rather than an error.
+-- game and cannot be settled by reading our own code.
 local function describeCraftInputs(data)
     local parts = {}
     for _, accessor in ipairs(CRAFT_ITEM_ACCESSORS) do
@@ -168,9 +163,8 @@ local function describeCraftInputs(data)
                 local types = {}
                 for index = 0, count - 1 do
                     local okGet, item = pcall(items.get, items, index)
-                    -- Each pcall on its own statement. `a and b and pcall(f)` truncates to ONE value,
-                    -- so folding these into a chain silently throws the type away and reports every
-                    -- item as nil -- which is exactly what this line did on its first outing.
+                    -- Each pcall on its own statement. `a and b and pcall(f)` truncates to ONE value, so folding these
+                    -- into a chain silently throws the type away and reports every item as nil.
                     local fullType = nil
                     if okGet and item then
                         local okType, resolved = pcall(item.getFullType, item)
@@ -186,10 +180,9 @@ local function describeCraftInputs(data)
 end
 
 local warnedNoInputs = false
--- Reported once per OUTCOME, not once per session: a player testing this builds one of each, and
--- both lines have to land or the log cannot tell "clay was detected" from "clay was never tried".
--- Two lines a session, and they are the only thing that answers "did the stamp work" without
--- dismantling the pipe to find out.
+-- Reported once per OUTCOME, not once per session: a player testing this builds one of each, and both
+-- lines have to land or the log cannot tell "clay was detected" from "clay was never tried". They are
+-- the only thing that answers "did the stamp work" without dismantling the pipe to find out.
 local describedOutcome = { [true] = false, [false] = false }
 
 local function reportMaterial(data, isClay)
@@ -228,8 +221,8 @@ local function consumedClay(params)
 
     reportMaterial(data, false)
 
-    -- Every accessor came back empty. That is not "a metal pipe was used" -- it is "we could not
-    -- tell", and the two are indistinguishable downstream, so say so once.
+    -- Every accessor came back empty. That is not "a metal pipe was used", it is "we could not tell", and
+    -- the two are indistinguishable downstream, so say so once.
     if not sawAnyItem and not warnedNoInputs then
         warnedNoInputs = true
         if WaterPipes.Logger and WaterPipes.Logger.warn then
@@ -291,16 +284,12 @@ local function markAndRegister(thumpable, opts)
                 tostring(opts.edge), square:getX(), square:getY(), square:getZ()))
         end
         -- registerPipeAt rebuilds the network, refreshes plumbed endpoints and runs the autotile.
-        --
-        -- The WHOLE kind goes into the registry, not just the router flag. Everything here is already
-        -- known -- it was just written to the object's modData a dozen lines up -- and passing only
-        -- `router` meant every periodic pass that wanted pumps or emitters had to rediscover them by
-        -- asking the world about every pipe in the base. That is exactly why processRouters, which can
-        -- filter, costs nothing per minute, while processPumps, which could not, cost 56 ms.
-        --
-        -- `kinds` marks the entry as carrying the full set. Without it a pass cannot tell "not a pump"
-        -- from "registered before this was recorded", and a save from an older build would have its
-        -- pumps quietly filtered out of existence. See reconcilePipeKinds.
+        -- The WHOLE kind goes into the registry, not just the router flag: it is all already known, and passing
+        -- only `router` meant every periodic pass wanting pumps or emitters had to rediscover them by asking
+        -- the world about every pipe in the base -- which is why processRouters costs nothing per minute and
+        -- processPumps cost 56 ms.
+        -- `kinds` marks the entry as carrying the full set. Without it a pass cannot tell "not a pump" from
+        -- "registered before this was recorded", and an older save would have its pumps filtered out of existence.
         WaterPipes.System.registerPipeAt(square:getX(), square:getY(), square:getZ(), {
             kinds = true,
             router = opts.router and true or nil,
@@ -407,12 +396,11 @@ local function hasStructureAbove(square)
     return ok and floor ~= nil
 end
 
--- The purifier is a 2x2 multi-tile tank. The engine validates EVERY footprint tile and requires ALL
--- of them to pass, so the router requirement must apply to exactly ONE tile -- the anchor -- not to all
--- four (otherwise the player would need a router under every tile). The anchor is the cursor/origin tile
--- (grid 0,0), which draws the top/back quadrant sprite (_36); it is where OnCreate tags the purifier and
--- where the runtime pairs router<->purifier on the SAME square. The other three tiles only need to be
--- clear, which the engine already checks -- for them we just return true.
+-- The purifier is a 2x2 multi-tile tank, and the engine requires EVERY footprint tile to validate -- so
+-- the router requirement must apply to exactly ONE tile, the anchor, or the player would need a router
+-- under all four. The anchor is the cursor/origin tile (grid 0,0), where OnCreate tags the purifier and
+-- where the runtime pairs router with purifier on the same square. The other three only need to be
+-- clear, which the engine already checks.
 function Build.purifierContainerOnIsValid(params)
     local square = params and params.square
     if not square then
@@ -452,14 +440,12 @@ end
 Build.pumpOnIsValid = Build.floorOnIsValid
 Build.sprinklerOnIsValid = Build.floorOnIsValid
 
--- The drip emitter is deliberately NOT gated on being clear of crops: it is meant to be laid down
--- the furrow, on top of what it waters. floorOnIsValid only refuses a second floor pipe on the tile,
--- which is exactly the rule we want here too -- so this is an alias for intent, not for behaviour.
+-- The drip emitter is deliberately NOT gated on being clear of crops: it is meant to be laid down the
+-- furrow, on top of what it waters. An alias for intent, not for behaviour.
 Build.dripOnIsValid = Build.floorOnIsValid
 
--- The gauge is a dial that sits on a pipe at floor level -- it reads the network but never carries
--- fluid, so it never registers and never affects the graph. It needs a pipe under it to read, and
--- there is room for only one per tile.
+-- The gauge is a dial that sits on a pipe at floor level: it reads the network but never carries fluid,
+-- so it never registers and never affects the graph. One per tile, and it needs a pipe under it.
 function Build.gaugeOnIsValid(params)
     local square = params and params.square
     return squareHasFloorPipe(square) and not squareHasGauge(square)

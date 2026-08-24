@@ -77,11 +77,10 @@ local function isExcludedWorldObject(worldObject)
     return modData and modData[Constants.ADAPTER_SOURCE_MODDATA_KEY] == true or false
 end
 
--- Water appliances (washing machines) hold a FluidContainer inherited from IsoObject, so the
--- duck-typed detection below would adopt them as network STORAGE and rebalanceSummary would overwrite
--- their water every tick -- so they could never reach the level they need to run. They are consumers,
--- not vessels: EndpointObjects recognises the same class list as plumbable endpoints instead. Here we
--- just keep them out of the storage path. Constants.WATER_APPLIANCE_CLASSES is the shared source.
+-- Water appliances (washing machines) hold a FluidContainer inherited from IsoObject, so the duck-typed
+-- detection below would adopt them as network STORAGE and rebalanceSummary would overwrite their water
+-- every tick, so they could never reach the level they need to run. They are consumers, not vessels:
+-- EndpointObjects recognises the same class list as plumbable endpoints instead.
 local function isExcludedAppliance(worldObject)
     if not worldObject or not instanceof then
         return false
@@ -141,9 +140,9 @@ local function getRawWorldFluidAmount(worldObject)
         or 0
 end
 
--- Tainted water in this game is (usually) the plain "Water" fluid carrying a tainted flag -- it is set
--- via setTaintedWater() -- so getFluidTypeString() reports "Water" and the taint is invisible unless we
--- ALSO read the flag. The flag can live on the world object, its FluidContainer, or the primary fluid.
+-- Tainted water is (usually) the plain "Water" fluid carrying a tainted flag, set via setTaintedWater(),
+-- so getFluidTypeString() reports "Water" and the taint is invisible unless the flag is read too. It can
+-- live on the world object, its FluidContainer, or the primary fluid.
 local function isTaintedFlagSet(worldObject, fluidContainer, primaryFluid)
     if readBoolean(worldObject, "isTaintedWater") == true then return true end
     if readBoolean(fluidContainer, "isTaintedWater") == true then return true end
@@ -383,21 +382,17 @@ function Adapter.readWorldFluidType(worldObject)
     return nil
 end
 
--- Notify EXTERNAL listeners that a world container we wrote to changed its amount, so mods keying off
--- OnWaterAmountChange refresh (e.g. Useful Barrels' fill-level sprite, vanilla rain collectors). The
--- vanilla FluidContainer write does not raise this event, so without it those mods never see our
--- network moving their water. Guarded by WaterPipes._suppressWaterEvent: our OWN handler early-returns
--- on the echo, so this resets no stagnation clock and re-reconciles no endpoint -- it is purely an
--- outward signal. Save/restore (not true/false) stays correct if a listener re-enters; pcall keeps the
--- flag clean if one errors. Fired only on a real change, and only for a real IsoObject.
+-- Notify EXTERNAL listeners that a world container we wrote to changed, so mods keying off
+-- OnWaterAmountChange refresh (Useful Barrels' fill-level sprite, vanilla rain collectors). The vanilla
+-- FluidContainer write does not raise this event. Guarded by WaterPipes._suppressWaterEvent so our own
+-- handler early-returns on the echo: it is purely an outward signal. Save/restore rather than
+-- true/false stays correct if a listener re-enters; pcall keeps the flag clean if one errors.
+
 -- The head field cares WHETHER a vessel holds water, never how much: a barrel with a litre in it
--- supplies exactly the head a full one does. So the field only goes stale when a vessel crosses
--- between empty and not, and that crossing is the ONLY thing about water movement it needs told.
---
--- This is what replaces dropping the whole field once a minute on the chance that something somewhere
--- ran dry. A farm whose barrels stay wet now never invalidates at all; one that runs dry invalidates
--- once, at the moment it matters.
---
+-- supplies exactly the head a full one does. So it only goes stale when a vessel crosses between empty
+-- and not, and that crossing is the only thing about water movement it needs told.
+-- This is what replaces dropping the whole field once a minute on the chance something ran dry. A farm
+-- whose barrels stay wet never invalidates at all; one that runs dry invalidates once.
 -- Scoped to the tile, so a barrel emptying on one network leaves every other network's field standing.
 local function noteEmptinessCrossing(worldObject, prevAmount, newAmount)
     local wasEmpty = (prevAmount or 0) <= 0
@@ -411,9 +406,9 @@ local function noteEmptinessCrossing(worldObject, prevAmount, newAmount)
         return
     end
 
-    -- The SUPPLY form, not the general one. Water moving cannot have moved a pipe, so the zone keeps
-    -- its shape and only has to be re-priced -- which skips the world walk entirely. That matters
-    -- because this is the common invalidation by a wide margin: 211 of 215 in a measured window.
+    -- The SUPPLY form, not the general one. Water moving cannot have moved a pipe, so the zone keeps its
+    -- shape and only has to be re-priced, which skips the world walk entirely. This is the common
+    -- invalidation by a wide margin: 211 of 215 in a measured window.
     local invalidate = Hydraulics.invalidateSupplyAroundSquare or Hydraulics.invalidateAroundSquare
     if not invalidate then
         return
@@ -569,13 +564,11 @@ function Adapter.writeWaterAmount(container, waterAmount)
     return false
 end
 
--- The purifier's clean OUT buffer, written as an ordinary network container (see
--- addPurifierOutletDescriptors in NetworkAccess). It is a modData number rather than a
--- FluidContainer, so it is written by hand here.
---
--- Only ever holds clean Water: the outlet descriptor is left out of any network that already carries
--- tainted water, so a rebalance can never arrive here with anything else. Refusing loudly rather than
--- silently storing it, because a wrong answer at this point is water conjured or destroyed.
+-- The purifier's clean OUT buffer, written as an ordinary network container. It is a modData number
+-- rather than a FluidContainer, so it is written by hand here.
+-- Only ever holds clean Water: the outlet descriptor is left out of any network already carrying
+-- tainted water, so a rebalance can never arrive with anything else. Refused loudly rather than stored
+-- silently, because a wrong answer here is water conjured or destroyed.
 local function writePurifierOutAmount(purifierObject, fluidAmount, fluidTypeName)
     if not purifierObject or not purifierObject.getModData then
         return false
@@ -598,13 +591,10 @@ local function writePurifierOutAmount(purifierObject, fluidAmount, fluidTypeName
     return true
 end
 
--- Would writing `fluidAmount` of `fluidTypeName` to this descriptor change anything a player could
--- see? Descriptors carry the amount and type read when the summary was built, so this is answered
--- without touching the world.
---
--- The TYPE half is not optional. Stagnation and rain contamination write the SAME amount back with a
--- new type (see NetworkAccess.taintNetworkAt); comparing litres alone would silently skip those and
--- leave half a network clean that should have turned.
+-- Would writing `fluidAmount` of `fluidTypeName` change anything a player could see? Descriptors carry
+-- the amount and type read when the summary was built, so this is answered without touching the world.
+-- The TYPE half is not optional: stagnation and rain contamination write the SAME amount back with a
+-- new type, and comparing litres alone would silently skip those.
 local function writeIsNoOp(descriptor, fluidAmount, fluidTypeName)
     local current = descriptor.waterAmount
     if not current then
@@ -625,22 +615,18 @@ local function writeIsNoOp(descriptor, fluidAmount, fluidTypeName)
 end
 
 -- Returns (ok, touchedTheWorld).
---
--- The second value is what lets a caller keep its books straight. `ok` means "the vessel is in the
--- state you asked for", which is ALSO true when the request was close enough to what it already held
--- that writing was not worth it -- and in that case the vessel still holds its old amount, not the
--- requested one. A caller doing conservation arithmetic (rebalanceSummary) has to know the
--- difference, or it would credit itself litres that never moved.
--- `force` overrides the no-op guard. A consumer that must actually move SOMETHING -- a draw that has
--- already promised its caller the litres -- passes it for the vessel it settles on, so a request too
--- small to clear the epsilon still lands instead of silently doing nothing forever.
+-- The second value is what lets a caller keep its books straight. `ok` means "the vessel is in the state
+-- you asked for", which is ALSO true when the request was close enough that writing was not worth it --
+-- and then the vessel still holds its old amount. A caller doing conservation arithmetic has to know
+-- the difference, or it credits itself litres that never moved.
+-- `force` overrides the no-op guard, for a draw that has already promised its caller the litres.
 function Adapter.writeDescriptorWaterAmount(descriptor, fluidAmount, fluidTypeName, force)
     if not descriptor then
         return false, false
     end
 
-    -- Nothing worth doing. Reported as success because the vessel is already in the requested state
-    -- to within a hundredth of a litre; the caller carries the remainder to the next vessel.
+    -- Nothing worth doing. Reported as success because the vessel is already in the requested state to
+    -- within a hundredth of a litre; the caller carries the remainder to the next vessel.
     if not force and writeIsNoOp(descriptor, fluidAmount, fluidTypeName) then
         return true, false
     end
@@ -666,9 +652,8 @@ function Adapter.writeDescriptorWaterAmount(descriptor, fluidAmount, fluidTypeNa
     return false, false
 end
 
--- Compat (Take A Bath And Shower): its "TubFluidContainer" is a special fluid container the network
--- must NEVER manage -- doing so causes unstable behaviour. Matched by getName() on the object or on
--- the fluid container, per the mod author. No-op for everything else.
+-- Compat (Take A Bath And Shower): its "TubFluidContainer" must NEVER be managed by the network --
+-- doing so causes unstable behaviour. Matched by getName(), per the mod author.
 local EXCLUDED_CONTAINER_NAMES = { TubFluidContainer = true }
 
 local function isExcludedByName(namedThing)
@@ -716,23 +701,15 @@ function Adapter.isWaterCandidate(container)
 end
 
 -- ===== Per-frame vessel memo =====
---
--- Deciding whether one IsoObject is network storage is the single most repeated question in the mod.
--- Answering it costs roughly twenty pcall'd Java calls -- isEndpointCandidate alone runs three
--- instanceof checks for the washer classes and pulls the sprite's property list -- and it is asked
--- about EVERY object on EVERY pipe tile, on every network summary. A farm with 32 sprinklers on a
--- 200-tile network asked it about a million times in a single frame, which is exactly the stall a
--- player reports as "the mod lags".
---
--- The answer only changes when an object appears on or leaves the tile, and both raise events. So it
--- is memoised -- but ONLY the classification: which objects are vessels, their capacity, their index
--- and their key. The AMOUNT and the FLUID TYPE are re-read on every single call, because those are
--- what the network arithmetic is made of and a stale one would conjure or destroy water.
---
--- Descriptors themselves are deliberately NOT cached, and that is not an oversight. The callers
--- decorate them per query -- collectStorageDescriptors writes pipeHops and pressureChain, the
--- pressure gate writes pressure -- and all three are measured FROM the consumer. Handing two
--- consumers the same table would have the second silently overwrite the first's hop count.
+-- Deciding whether one IsoObject is network storage is the most repeated question in the mod, and it
+-- costs roughly twenty pcall'd Java calls -- isEndpointCandidate alone runs three instanceof checks and
+-- pulls the sprite's property list. It is asked about EVERY object on EVERY pipe tile, on every network
+-- summary: a farm with 32 sprinklers on a 200-tile network asked it about a million times in a frame.
+-- The answer only changes when an object appears on or leaves the tile, and both raise events. So the
+-- CLASSIFICATION is memoised -- which objects are vessels, their capacity, index and key -- while the
+-- AMOUNT and FLUID TYPE are re-read on every call, because those are what the arithmetic is made of.
+-- Descriptors themselves are deliberately NOT cached: callers decorate them per query with hop counts
+-- measured from their own tile, so sharing one would have the second caller overwrite the first's.
 local vesselMemo = {}
 
 local function vesselMemoKey(square)
@@ -749,8 +726,8 @@ function Adapter.invalidateSquareVessels(square)
     end
 end
 
--- The expensive half, run once per square per frame. Returns a list of the fixed facts about each
--- vessel found; never the fluid it holds.
+-- The expensive half, run once per square per frame. Returns the fixed facts about each vessel found;
+-- never the fluid it holds.
 local function classifySquareVessels(square)
     local vessels = {}
 
@@ -792,7 +769,7 @@ end
 
 -- The memo is keyed on the square and the object INDEX is part of every descriptor key, so anything
 -- that renumbers the tile's object list has to drop it. Add/remove do exactly that and both raise an
--- event; the per-frame clear is the backstop, bounding any path we have not thought of at one frame.
+-- event; the per-frame clear is the backstop for any path not thought of.
 local function classifySquareVesselsCached(square)
     local key = vesselMemoKey(square)
     local cached = vesselMemo[key]
@@ -803,24 +780,16 @@ local function classifySquareVesselsCached(square)
     return cached
 end
 
--- (Defined here, below classifySquareVessels, and not beside the other invalidation helpers:
--- it closes over that local, and a function compiled above it would bind the name to a nil
--- GLOBAL instead -- silently, since that is valid Lua and luac -p cannot see it. Third time
--- this shape has bitten in this file's history; test_container_cache.lua now calls it.)
+-- (Defined here, below classifySquareVessels, and not beside the other invalidation helpers: it closes
+-- over that local, and a function compiled above it would bind the name to a nil GLOBAL instead --
+-- silently, since that is valid Lua and luac -p cannot see it. test_container_cache.lua now calls it.)
 -- Recompute ONE tile and compare it against what was remembered. True when they agree.
---
--- This replaces the periodic wholesale drop, and the difference is the point. The drop assumed the
--- memo was wrong and paid to rebuild every tile of every network -- measured at ~190 ms of client
--- work per in-game minute, landing in one frame. This assumes the memo is RIGHT, checks a few tiles
--- to see, and says so when it is not.
---
--- The memo is left holding the fresh answer either way, so a disagreement is also a repair.
---
--- A disagreement means an object left a tile without OnObjectAboutToBeRemoved firing, which is the
--- one thing that could justify the old drop and which nobody has ever observed. If this never fires
--- across enough play, the check goes away and takes the last periodic rescan with it. If it does
--- fire, the log names the tile and the path can be hooked properly. Either way it is evidence
--- instead of nerve -- see docs/removal-events.md.
+-- This replaces the periodic wholesale drop. The drop assumed the memo was wrong and paid to rebuild
+-- every tile of every network -- ~190 ms of client work per in-game minute, in one frame. This assumes
+-- the memo is RIGHT, checks a few tiles, and says so when it is not. The memo is left holding the fresh
+-- answer either way, so a disagreement is also a repair.
+-- A disagreement means an object left a tile without OnObjectAboutToBeRemoved firing, which nobody has
+-- ever observed. Evidence instead of nerve -- see docs/removal-events.md.
 function Adapter.verifySquareVessels(square)
     if not square or not square.getX then
         return true
@@ -840,8 +809,8 @@ function Adapter.verifySquareVessels(square)
         return false
     end
     for index = 1, #fresh do
-        -- Object identity AND position in the list: the index is baked into every descriptor key, so
-        -- a renumber is just as wrong as a substitution even when the same objects are present.
+        -- Object identity AND position in the list: the index is baked into every descriptor key, so a renumber
+        -- is just as wrong as a substitution even when the same objects are present.
         if fresh[index].object ~= remembered[index].object
             or fresh[index].objectIndex ~= remembered[index].objectIndex then
             return false
@@ -849,8 +818,8 @@ function Adapter.verifySquareVessels(square)
     end
     return true
 end
--- Is there any network vessel on this square at all? The router walk asks this per crossing and does
--- not care what is inside, so it never pays for a fluid read.
+-- Is there any network vessel on this square at all? The router walk asks this per crossing and does not
+-- care what is inside, so it never pays for a fluid read.
 function Adapter.hasSquareContainers(square)
     if not square or not square.getObjects then
         return false
@@ -888,24 +857,16 @@ function Adapter.collectSquareContainers(square)
 end
 
 -- The vessel memo's invalidation: an object appearing on or leaving a square renumbers that square's
--- object list, and the index is baked into every descriptor key -- so the affected square is dropped
--- at once, and only that square.
---
--- Note this does NOT need to fire on water moving. Amounts and fluid types are never memoised, so a
--- barrel filling or emptying is seen by the very next query without any invalidation at all. What is
--- remembered is only WHICH objects on a tile are containers.
---
--- There used to be a per-frame clear here as well, and it cost more than everything above it saved.
--- Classifying a tile is the most expensive per-square routine in the mod, and finding the vessels on a
--- zone means classifying every tile of it: measured at 77% of a spray-FX rebuild, which runs three
--- times a second. Throwing the answer away every frame meant paying that over and over for a result
--- that had not changed -- the same mistake the head field shipped with (see
--- NetworkAccess.invalidateTraversalCache).
---
--- What the per-frame clear was really guarding is a square being re-created underneath us by chunk
--- streaming, which leaves the memo holding indices into an object list that no longer exists. That
--- has its own event, so it is hooked directly instead of being swept up sixty times a second, and the
--- per-minute pass drops the lot as a backstop for anything not thought of here.
+-- object list, and the index is baked into every descriptor key -- so that square is dropped at once,
+-- and only that square.
+-- It does NOT need to fire on water moving. Amounts and fluid types are never memoised, so a barrel
+-- filling or emptying is seen by the very next query. What is remembered is only WHICH objects are
+-- containers.
+-- There used to be a per-frame clear here, and it cost more than everything above it saved: classifying
+-- a tile is the most expensive per-square routine in the mod, and finding a zone's vessels means
+-- classifying every tile of it -- 77% of a spray-FX rebuild, three times a second.
+-- What it was really guarding is a square re-created underneath us by chunk streaming, which has its own
+-- event and is hooked directly; the per-minute pass drops the lot as a backstop.
 if Events then
     local function invalidateForObject(object)
         local square = object and object.getSquare and object:getSquare() or nil

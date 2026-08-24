@@ -2,30 +2,19 @@
 # -*- coding: utf-8 -*-
 """Invariants for the performance model itself.
 
-wp_model is a simulator whose numbers get used to justify changes to the mod, and
-it had no tests at all. It produced confident fiction twice:
+wp_model is a simulator whose numbers justify changes to the mod, and it had no tests. It produced
+confident fiction twice: once by counting only bridge calls, so the hydraulic solver's 145x regression
+in pure Lua was reported as free; once by letting caches survive the scenario rebuild run_suite
+performs between pass groups, so a cold spray-FX rescan reported 512 where the truth was 31 478.
 
-  1. It counted only bridge calls, on the premise that pure-Lua work was noise.
-     The hydraulic solver ended that, and the harness reported a 145x regression
-     as free. Fixed by adding a second counter -- and nothing checks the two stay
-     separate.
-
-  2. Caches that legitimately outlived a frame started surviving the scenario
-     rebuild that run_suite performs between the server and client pass groups.
-     The second scenario inherited the first one's answers, and "one cold spray-FX
-     rescan" reported 512 where the truth was 31,478 -- a 60x understatement, read
-     and reported as a 98% improvement.
-
-Neither failure was subtle. Both would have been caught in seconds by asserting
-things that must be true of ANY cost model, regardless of what the mod does:
+Both would have been caught by asserting things that must be true of ANY cost model:
 
   * a measurement must not depend on what was measured before it
   * a cache may change what something COSTS, never what it ANSWERS
   * warm is never more expensive than cold
   * the two counters measure different things and must not bleed
 
-These are those assertions. They are about the harness, not about the mod; the
-mod's own invariants live in tools/conservation.
+These are about the harness. The mod's own invariants live in tools/conservation.
 
     python test_model.py
 """
@@ -131,9 +120,8 @@ cached = M.registry_near("emitters", 10, 10, 0, 18)
 check_equal("the registry returns the same tiles cached or not",
             sorted((e["x"], e["y"], e["z"]) for e in uncached),
             sorted((e["x"], e["y"], e["z"]) for e in cached))
-# The entry carries the coordinates itself now. Assert they AGREE with the square,
-# because the whole saving rests on the caller trusting them instead of asking the
-# engine -- a registry that remembers the wrong tile would be worse than the cost.
+# The entry carries the coordinates itself now. Assert they AGREE with the square, because the whole
+# saving rests on the caller trusting them instead of asking the engine.
 check("the entry's coordinates match its square",
       all(e["x"] == e["square"].x and e["y"] == e["square"].y and e["z"] == e["square"].z
           for e in cached))
@@ -211,17 +199,12 @@ check_equal("the square count is unchanged", len(M.WORLD.squares), before)
 # ---------------------------------------------------------------------------
 # 7. Isolation again, at the granularity the first check missed.
 # ---------------------------------------------------------------------------
-# Check 1 rebuilds the SCENARIO between measurements, and Scenario.__init__ empties
-# every world-derived cache -- so it proves isolation across scenarios and says
-# nothing about isolation across passes within one. That gap was real: three of the
-# four caches had already been given event lifetimes, so measuring 10min/scan right
-# after 1min/routers charged it a warm memo and recorded a seventieth of its true
-# cost. The recorded baseline was a worst case for the first pass of each group and
-# fiction for every pass after it.
-#
-# So: every server pass, measured alone, must cost exactly what it costs after every
-# other server pass has already run. That is what measure()'s cold() is for, and this
-# is the assertion that keeps it there.
+# Check 1 rebuilds the SCENARIO between measurements, and Scenario.__init__ empties every
+# world-derived cache -- so it proves isolation across scenarios and says nothing about isolation
+# across passes within one. That gap was real: measuring 10min/scan right after 1min/routers charged
+# it a warm memo and recorded a seventieth of its true cost.
+# So: every server pass, measured alone, must cost exactly what it costs after every other server
+# pass has already run. That is what measure()'s cold() is for.
 print("")
 print("-- 7. a pass costs the same whatever ran before it --")
 
@@ -249,10 +232,8 @@ for label, fn in reversed(B.SERVER_PASSES):
 # ---------------------------------------------------------------------------
 # 8. A run of minutes costs less per minute than the first one.
 # ---------------------------------------------------------------------------
-# The point of giving the fill topology an event lifetime: minute two must not
-# re-walk what minute one walked. If five minutes ever cost five times one minute,
-# the cache is being dropped by something and the whole change has been undone --
-# which is the failure this codebase has now had four times, always silently.
+# The point of giving the fill topology an event lifetime: minute two must not re-walk what minute one
+# walked. If five minutes ever cost five times one minute, the cache is being dropped by something.
 print("")
 print("-- 8. an event-scoped cache actually survives to the next minute --")
 

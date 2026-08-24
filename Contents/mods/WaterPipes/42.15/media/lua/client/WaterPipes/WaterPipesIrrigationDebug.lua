@@ -10,14 +10,11 @@ local Irrigation = WaterPipes.Irrigation
 local Registry = WaterPipes.TileRegistry
 local IrrigationDebug = WaterPipes.IrrigationDebug
 
--- A debug overlay that makes irrigation visible. While it is on, every crop near the player is tinted
--- by its water level (red = dry, green = full) and every emitter by whether it can water right now
--- (green = active, yellow = has water but not enough pressure or nothing thirsty, red = no supply,
--- magenta = burst drip). Both are read live each refresh, so watering a crop shifts its colour toward
--- green in real time -- click "Run Irrigation Now" to make that happen without waiting an in-game hour.
---
--- Everything here is client-side and reads modData the crop already syncs (waterLvl / state /
--- nbOfGrow), so it needs no farming-system access and works the same in SP and on an MP client.
+-- A debug overlay that makes irrigation visible. Every crop near the player is tinted by its water
+-- level (red = dry, green = full) and every emitter by whether it can water right now (green = active,
+-- yellow = has water but not enough pressure or nothing thirsty, red = no supply, magenta = burst).
+-- Both are read live each refresh.
+-- Client-side, reading modData the crop already syncs, so it needs no farming-system access.
 
 IrrigationDebug.enabled = false
 

@@ -1,17 +1,11 @@
 -- Standing under running water gets you wet (client-only).
 --
 -- A sprinkler waters the 3x3 around it and an open hydrant dumps its main over the same footprint, so
--- walking through either should soak you the way rain does -- and until now you could stand in the
--- middle of a running sprinkler indefinitely and stay bone dry.
---
+-- walking through either should soak you the way rain does.
 -- Paced off REAL elapsed milliseconds rather than a tick count, so the rate does not ride on the
--- player's framerate: roughly a minute from dry to soaked standing still, which means crossing a
--- sprinkler at a walk leaves you damp rather than drenched.
---
--- Only ever RAISES wetness, never lowers it, so it cannot fight the engine's own drying: whichever of
--- the two wants a higher number wins, and once you step out of the water the normal drying takes over.
---
--- Client-side and local-player only, like the spray FX: your own body damage is yours to write.
+-- player's framerate: roughly a minute from dry to soaked standing still.
+-- Only ever RAISES wetness, so it cannot fight the engine's own drying -- whichever wants the higher
+-- number wins, and stepping out of the water lets normal drying take over.
 
 require "WaterPipes/Constants"
 require "WaterPipes/Hydrant"
@@ -45,13 +39,10 @@ local function maxWetness()
     return 100
 end
 
--- The player is in the water when a running emitter sits within its own watering radius of them --
--- the emitter covers the 3x3 around itself, so being within one tile of one is being under it.
---
--- This runs four times a second, so what it asks matters. It used to scan the 3x3 for objects and
--- then ask Irrigation.getEmitterStatus, which walks the whole network -- meaning standing next
--- to a sprinkler cost a full network traversal several times a second for a yes/no. It now reads the tile
--- registry (which remembers where emitters are) and its cached status. See WaterPipesTileRegistry.
+-- The player is in the water when a running emitter sits within its own watering radius -- the emitter
+-- covers the 3x3 around itself, so being within one tile of one is being under it.
+-- This runs four times a second, so what it asks matters: it used to scan the 3x3 and then call
+-- Irrigation.getEmitterStatus, which walks the whole network. It reads the tile registry now.
 local function playerIsInSpray(player)
     local px = math.floor(player:getX())
     local py = math.floor(player:getY())

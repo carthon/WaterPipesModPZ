@@ -1,11 +1,8 @@
--- Water pump status dialog (client UI). Opened from the pump's context menu; also carries the
--- on/off switch, so the player never has to close it to act on what it just told them.
---
--- It is a LIVE readout: the pump object is re-resolved FROM ITS TILE rather than held as a reference
--- (IsoObject references go stale when the engine re-instantiates objects on chunk stream / build
--- finalize), and the reading is refreshed on a timer. The timer matters: reading pressure walks the
--- whole network, which is far too much work to redo every frame -- same reasoning as the router
--- pressure window.
+-- Water pump status dialog (client UI). Opened from the pump's context menu; also carries the on/off
+-- switch, so the player never has to close it to act on what it just told them.
+-- A LIVE readout: the pump object is re-resolved FROM ITS TILE rather than held as a reference
+-- (IsoObject references go stale when the engine re-instantiates objects), and refreshed on a timer --
+-- reading pressure walks the whole network, which is far too much work to redo every frame.
 
 require "ISUI/ISCollapsableWindow"
 require "WaterPipes/Constants"

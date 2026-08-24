@@ -12,11 +12,9 @@ local FluidSource = WaterPipes.EndpointFluidSource
 
 local CONSUME_EPSILON = 0.001
 
--- The plumbed endpoint (sink/tap/shower) keeps its OWN FluidContainer component that
--- mirrors the connected pipe network. Because we use the vanilla "own container" path
--- (usesExternalWaterSource = false), the engine serves Drink/Wash/Fill straight from this
--- container -- no phantom world object is required. Consumption is reconciled back to the
--- network storage containers through NetworkAccess.useFluid.
+-- The plumbed endpoint keeps its OWN FluidContainer component mirroring the connected pipe network.
+-- Using the vanilla "own container" path (usesExternalWaterSource = false) means the engine serves
+-- Drink/Wash/Fill straight from it, and consumption is reconciled back through NetworkAccess.useFluid.
 
 local function isAuthoritative()
     if isServer and isServer() then
@@ -208,12 +206,10 @@ local function writeSnapshot(endpoint, amount, capacity, fluidTypeName)
     return true
 end
 
--- Catch-all reconciliation: any drop of the mirror's amount since the last sync is charged
--- to the network. This covers every drain path -- not only the ones that raise the
--- IsoObject-level OnWaterAmountChange event (Drink/Wash), but also the "Transfer Fluids" UI,
--- which moves liquid at the FluidContainer level (FluidContainer.Transfer) and never fires
--- that event. Because we always reconcile the delta against the recorded last-sync value,
--- it stays idempotent: a drain handled immediately by the event is not charged twice here.
+-- Catch-all reconciliation: any drop of the mirror's amount since the last sync is charged to the
+-- network. This covers every drain path, not only the ones raising OnWaterAmountChange -- the "Transfer
+-- Fluids" UI moves liquid at the FluidContainer level and never fires that event. Reconciling the delta
+-- against the recorded last-sync value keeps it idempotent, so a drain is never charged twice.
 local function reconcileConsumption(endpoint)
     if isSyncing(endpoint) then
         return 0
@@ -257,11 +253,10 @@ function FluidSource.syncForEndpoint(endpoint)
 
     local capacity = math.max(summary.totalCapacity or 0, 0)
     local visibleAmount = math.min(summary.totalAmount or 0, capacity)
-    -- Any single fluid in the network can be drawn from the tap. By default the tap purifies rain
-    -- water: TaintedWater is served as clean Water (the stored water stays tainted; only what comes
-    -- out of the tap is purified). With the "Realistic water purification" sandbox option ON, the tap
-    -- no longer purifies -- tainted water is served as-is and must be cleaned by a purifier tile.
-    -- Every other fluid (Water, Petrol, ...) is always served as-is.
+    -- Any single fluid in the network can be drawn from the tap. By default the tap purifies rain water:
+    -- TaintedWater is served as clean Water, while the stored water stays tainted. With the "Realistic water
+    -- purification" sandbox option ON it is served as-is and must be cleaned by a purifier tile. Every
+    -- other fluid is always served as-is.
     local servedType = summary.fluidTypeName
     if servedType == "TaintedWater" and not realisticPurification() then
         servedType = "Water"

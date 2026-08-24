@@ -66,23 +66,17 @@ function PipeObjectUtils.hasWallCoverOnSquare(square)
     return false
 end
 
--- What a pipe was built from: Constants.PIPE_MATERIAL_CLAY or nil for the metal default. Also
--- returns a short string naming where the answer came from, for the dismantle log.
---
--- The stamp WaterPipesBuild writes at build time is the only source, and a pipe without one reads as
--- metal. That is not a gap worth closing: the clay recipe has never shipped, so the only pipes in
--- existence that predate the stamp are the ones on a developer's own test save, and rebuilding those
--- takes seconds.
---
--- A fallback did live here, reading the item the IsoThumpable was built from -- the save file does
--- carry "Base.MetalPipe" / "Base.ClayPipeSegment" right beside the thump sound, so the record exists.
--- getFullType() is not how you reach it: in game it returned nothing usable and every pre-stamp pipe
--- came back "unknown, assuming metal". It is gone rather than left in place, because a fallback that
--- silently does not work is worse than no fallback -- it makes the log claim a source it never used.
--- The modData read is pcall'd here specifically, unlike everywhere else in this file. This one runs
--- against an object the engine is in the middle of REMOVING, which is the one moment a world object
--- is least likely to answer normally -- and the cost of it throwing is a dismantle that errors out
--- instead of handing the player their pipe back.
+-- What a pipe was built from: Constants.PIPE_MATERIAL_CLAY or nil for the metal default. Also returns
+-- a short string naming where the answer came from, for the dismantle log.
+-- The build-time stamp is the only source, and a pipe without one reads as metal. The clay recipe has
+-- never shipped, so the only pipes predating the stamp are on a developer's test save.
+-- A fallback did live here, reading the item the IsoThumpable was built from. getFullType() is not how
+-- you reach it: in game it returned nothing usable and every pre-stamp pipe came back "unknown". It is
+-- gone rather than left in place -- a fallback that silently does not work makes the log claim a source
+-- it never used.
+-- The modData read is pcall'd here specifically: this runs against an object the engine is in the
+-- middle of REMOVING, and the cost of it throwing is a dismantle that errors out instead of handing
+-- the player their pipe back.
 function PipeObjectUtils.getBuildMaterial(worldObject)
     if not worldObject then
         return nil, "no object"
@@ -103,21 +97,13 @@ function PipeObjectUtils.isClayBuilt(worldObject)
 end
 
 -- ===== Per-frame scan memo =====
---
--- getPipeObjectsOnSquare is the most-called world accessor in the mod by a wide margin: a single
--- network walk asks it about thirteen times per pipe tile -- the router check on the way in, then the
--- pipe check and the router check again inside tryAdd, then the pump lookup, and all of that again
--- from each of the four neighbours the tile is reached from. Every one of those calls walks the
--- square's entire object list and allocates a fresh table.
---
--- The answer cannot change unless an object is added to or removed from the square, or streaming
--- rebuilds the square itself. All three raise events, so it is memoised and dropped on those events --
--- by TILE, not wholesale.
---
+-- getPipeObjectsOnSquare is the most-called world accessor in the mod by a wide margin: a single network
+-- walk asks it about thirteen times per pipe tile, and every call walks the square's entire object list
+-- and allocates a fresh table.
+-- The answer cannot change unless an object joins or leaves the square, or streaming rebuilds the square
+-- itself. All three raise events, so it is memoised and dropped on those events -- by TILE.
 -- It used to be dropped once per frame as well, and that clear undid the invalidation above it: this
--- scan is what classify() calls for every one of the 1,681 tiles the client registry sweeps, and
--- rebuilding it sixty times a second to get the same answer is the same mistake the head field and
--- the vessel classification both shipped with.
+-- scan is what classify() calls for every one of the 1 681 tiles the client registry sweeps.
 local scanMemo = {}
 
 local function memoKey(square)
@@ -129,19 +115,12 @@ function PipeObjectUtils.invalidateScanCache()
 end
 
 -- Recompute ONE tile and compare it against what was remembered. True when they agree.
---
--- This replaces the periodic wholesale drop, and the difference is the point. The drop assumed the
--- memo was wrong and paid to rebuild every tile of every network -- measured at ~190 ms of client
--- work per in-game minute, landing in one frame. This assumes the memo is RIGHT, checks a few tiles
--- to see, and says so when it is not.
---
--- The memo is left holding the fresh answer either way, so a disagreement is also a repair.
---
--- A disagreement means an object left a tile without OnObjectAboutToBeRemoved firing, which is the
--- one thing that could justify the old drop and which nobody has ever observed. If this never fires
--- across enough play, the check goes away and takes the last periodic rescan with it. If it does
--- fire, the log names the tile and the path can be hooked properly. Either way it is evidence
--- instead of nerve -- see docs/removal-events.md.
+-- This replaces the periodic wholesale drop, which assumed the memo was wrong and paid to rebuild every
+-- tile of every network -- ~190 ms of client work per in-game minute, in one frame. This assumes the
+-- memo is RIGHT, checks a few tiles, and says so when it is not. The memo is left holding the fresh
+-- answer either way, so a disagreement is also a repair.
+-- A disagreement means an object left a tile without OnObjectAboutToBeRemoved firing, which nobody has
+-- ever observed. Evidence instead of nerve -- see docs/removal-events.md.
 function PipeObjectUtils.verifySquareScan(square)
     if not square or not square.getObjects then
         return true

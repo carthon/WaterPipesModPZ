@@ -41,11 +41,9 @@ local MASK_SPRITE = {
     [N + E + S + W] = Constants.PIPE_FLOOR_CROSS_SPRITE,
 }
 
--- Connection sprites are purely cosmetic: each client derives them locally from the pipes it can
--- see and they are NEVER transmitted (the server only tracks "is there a pipe on this tile"). So
--- autotiling runs on every side that renders a screen: single-player, a remote client, AND a co-op
--- host. A co-op host is isServer()==true but DOES render its own game, so it must autotile too --
--- the ONLY side we skip is a headless/dedicated server (no local player to render for).
+-- Connection sprites are purely cosmetic: each client derives them locally from the pipes it can see
+-- and they are NEVER transmitted. So autotiling runs on every side that renders a screen -- a co-op
+-- host included, since it renders its own game. The only side skipped is a headless/dedicated server.
 local function isRenderingSide()
     if isServer and isServer() then
         return (isCoopHost and isCoopHost()) == true
@@ -98,10 +96,8 @@ local function isRiser(worldObject)
 end
 
 -- Fixed sprite for the pipe variant that REPLACES its tile art outright: the pump, which is a whole
--- machine rather than a fitting, so there is no pipe left to show under it. It has exactly one E/W and
--- one N/S cell, so the build axis picks it and the neighbour mask is irrelevant. Returns nil for
--- anything else, which then autotiles as usual. Read straight from modData rather than through the
--- device modules, to keep this file free of requires it does not otherwise need.
+-- machine rather than a fitting. One E/W and one N/S cell, so the build axis picks it and the neighbour
+-- mask is irrelevant. Read straight from modData, to keep this file free of requires it does not need.
 local DEVICE_SPRITES = {
     [Constants.PUMP_MODDATA_KEY] = { ew = Constants.PUMP_SPRITE_EW, ns = Constants.PUMP_SPRITE_NS },
 }
@@ -120,10 +116,9 @@ local function deviceSprite(worldObject)
     return nil
 end
 
--- Emitters (drip, sprinkler) are a HEAD that sits ON the pipe, not a replacement for it: the pipe below
--- keeps autotiling to its neighbours and the head rides on top as the engine's overlay sprite -- the
--- same route vanilla paints a sign onto a wall (ISPaintSignAction). Two cells are kept per emitter so a
--- later art drop can give each facing its own head; today both hold the same centred one.
+-- Emitters are a HEAD that sits ON the pipe, not a replacement for it: the pipe below keeps autotiling
+-- and the head rides on top as the engine's overlay sprite, the same route vanilla paints a sign onto a
+-- wall. Two cells per emitter so a later art drop can give each facing its own head.
 local EMITTER_OVERLAYS = {
     [Constants.DRIP_MODDATA_KEY] = { ew = Constants.DRIP_SPRITE_EW, ns = Constants.DRIP_SPRITE_NS },
     [Constants.SPRINKLER_MODDATA_KEY] = { ew = Constants.SPRINKLER_SPRITE_EW, ns = Constants.SPRINKLER_SPRITE_NS },
@@ -155,11 +150,9 @@ local function setSpriteIfChanged(worldObject, sprite)
     end
 end
 
--- Paint (or clear) the emitter head riding on top of a pipe. "Cleared" is our own fully transparent
--- cell rather than a nil sprite: vanilla only ever SETS an overlay from Lua, so passing nil is
--- untested, while the transparent tile is guaranteed to draw nothing. Deliberately NOT folded into
--- setSpriteIfChanged, which early-returns when the pipe shape is unchanged and would then skip the
--- head -- the two have to be decided independently.
+-- Paint (or clear) the emitter head riding on top of a pipe. "Cleared" is our own transparent cell
+-- rather than a nil sprite, which vanilla never passes from Lua. Deliberately NOT folded into
+-- setSpriteIfChanged, which early-returns on an unchanged pipe shape and would then skip the head.
 local function setOverlayIfChanged(worldObject, sprite)
     if not worldObject or not worldObject.setOverlaySprite then
         return
@@ -199,10 +192,9 @@ local function getWallCoverEdgeSet(square)
     return edges
 end
 
--- A PZ wall is the N or W edge of a tile and is SHARED with the neighbour across it, so a
--- wall cover must connect floor pipes on BOTH sides of that wall. Covers on the floor below
--- (risers climbing up) connect to the floor pipe above too. Adds the proper arm bits to
--- `present` for the floor pipe at (x,y,z).
+-- A PZ wall is the N or W edge of a tile and is SHARED with the neighbour across it, so a wall cover
+-- must connect floor pipes on BOTH sides of it. Covers on the floor below (risers climbing up) connect
+-- to the floor pipe above too.
 local function addCoverArms(present, x, y, z)
     local function take(cx, cy, cz, map)
         local edges = getWallCoverEdgeSet(getSquare(cx, cy, cz))
@@ -387,9 +379,8 @@ function PipeAutotile.rehidePipe(pipe)
 end
 
 -- ===== Client-driven triggers =====
--- Each client recomputes pipe sprites from its OWN world view, so synced pipes (built by other
--- players, or streamed in on chunk load) get the right connecting sprite without the shape ever
--- crossing the network.
+-- Each client recomputes pipe sprites from its OWN world view, so synced pipes get the right connecting
+-- sprite without the shape ever crossing the network.
 
 local function squareOf(object)
     return object and object.getSquare and object:getSquare() or nil

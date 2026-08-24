@@ -307,13 +307,11 @@ local function noteEndpointTile(worldObject)
     end
 end
 
--- Plumbing or unplumbing a fixture changes WHAT STANDS on that tile in the only sense the hydraulic
--- field cares about: a plumbed fixture with live town water behind it is an inlet, and the field
--- remembers where its inlets are rather than searching for them on every solve (see classifySites).
---
--- Nothing else announces this. It is a modData change, so no object event fires -- and the periodic
--- passes stopped dropping the field on a timer, which is exactly the trade that makes this call
--- necessary rather than merely tidy.
+-- Plumbing or unplumbing changes WHAT STANDS on that tile in the only sense the hydraulic field cares
+-- about: a plumbed fixture with live town water behind it is an inlet, and the field remembers where
+-- its inlets are rather than searching on every solve.
+-- Nothing else announces it -- a modData change fires no object event, and the periodic passes stopped
+-- dropping the field on a timer.
 local function noteHydraulicChange(worldObject)
     local Hydraulics = WaterPipes.Hydraulics
     if not Hydraulics or not Hydraulics.invalidateAroundSquare then
@@ -417,13 +415,11 @@ function EndpointPlumbing.plumb(worldObject)
     Logger.log("Plumbing diagnostics: " .. describePlumbingDiagnostics(worldObject))
     -- Snapshot the fixture's own fluid state + water-source flags before we take it over.
     FluidSource.captureOriginalState(worldObject)
-    -- canBeWaterPiped=true DISABLES the engine's infinite city-mains water so our network mirror
-    -- serves the fixture (isWaterInfinite() is true only when canBeWaterPiped is nil/false). The town
-    -- water is not lost, though: while the service runs, Mains.lua reads it back off this same
-    -- fixture and feeds it into the network instead. But
-    -- external-water fixtures with NO own container (e.g. Take A Bath And Shower) must stay FALSE:
-    -- that mod reads the same modData as "not connected" (its check is `waterSources==0 and
-    -- canBeWaterPiped`). We still charge the network on use via consumption reconciliation.
+    -- canBeWaterPiped=true DISABLES the engine's infinite city-mains water so our network mirror serves the
+    -- fixture. The town water is not lost: while the service runs, Mains.lua reads it back off this same
+    -- fixture and feeds it into the network.
+    -- External-water fixtures with NO own container (e.g. Take A Bath And Shower) must stay FALSE: that mod
+    -- reads the same modData as "not connected". We still charge the network on use.
     setCanBeWaterPiped(worldObject, desiredCanBeWaterPiped(worldObject))
     setUsesExternalWaterSource(worldObject, false)
     EndpointPlumbing.refreshEndpointSource(worldObject)
