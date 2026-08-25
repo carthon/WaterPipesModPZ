@@ -627,14 +627,27 @@ function System.processMains(square, dt)
     NetworkAccess.fillFluidAtSquare(square, "Water", wanted)
 end
 
+-- Driven by the ENDPOINT index, not the pipe list. An inlet is a plumbed fixture by definition --
+-- Mains.isLiveAt refuses anything without PLUMBED_ENDPOINT_MODDATA_KEY -- so every one of them is
+-- already recorded on the tile registry that refreshPlumbedEndpoints reads, and walking every pipe tile
+-- to rediscover them cost a getSquare and a full object scan each, per minute: 588 ms of a 1451 ms
+-- per-minute pass, 40 % of it, to find at most a handful of fixtures.
+-- The same move the hydrant pass and the endpoint refresh already made; this pass was missed by it.
 function System.processAllMains(dt)
     dt = dt or 1.0
     if dt <= 0 or not Mains.isEnabled() then
         return
     end
-    local state = State.ensure()
-    for _, pipeData in pairs(state.pipes) do
-        local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
+
+    -- The index is this pass's input now, and the per-minute order runs mains BEFORE the endpoint
+    -- refresh that builds it. Without this a save made before the index existed would skip its inlets
+    -- for the first minute after loading. Guarded by the same flag, so it is built once either way.
+    if not State.endpointsIndexed() then
+        System.reindexEndpoints()
+    end
+
+    for _, position in pairs(State.getEndpoints()) do
+        local square = getSquare(position.x, position.y, position.z)
         if square and Mains.findOnSquare(square) then
             System.processMains(square, dt)
         end
