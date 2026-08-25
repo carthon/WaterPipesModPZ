@@ -249,14 +249,20 @@ local function readUsesExternalWaterSource(worldObject)
     return value
 end
 
--- Re-asserted on every refresh because vanilla mains water creeps back otherwise -- and that assertion
--- carried a sendObjectChange, a transmitModData and a sync with it, every minute, to write false over
--- false. Measured at 310 ms of a 381 ms endpoint refresh: 81 % of it, and 13 % of everything the mod did.
--- Guarded the way canBeWaterPiped above already is: compare first, transmit only on a real change.
--- Compared against the ENGINE's flag rather than our own modData, because a drift only the engine side
--- has is exactly what this re-assertion exists to correct -- trusting the mirror would stop correcting it.
--- Both have to agree before the write is skipped, and an object with no getter reads nil and is written
--- unconditionally, as before.
+-- The flag is re-asserted on every refresh, and the assertion used to drag a sendObjectChange, a
+-- transmitModData and a sync along with it -- every minute, to tell clients a value they already had.
+-- Measured at 310 ms of a 381 ms endpoint refresh: 81 % of it, 13 % of everything the mod did.
+--
+-- What is guarded is the ANNOUNCEMENT, not the assertion. The modData write and the engine setter still
+-- run every time: they are a table write and one bridge call, and they are what keeps a fixture from
+-- drifting back to city mains. Skipping THOSE would trade a real behaviour for a saving that is not
+-- theirs -- the cost was always the three network calls.
+--
+-- "Changed" is read off the engine when it answers and off our mirror when it does not. A measured
+-- fixture has getUsesExternalWaterSource present and returning nil: the getter exists, the value is not
+-- readable. On such an object the mirror is the only state there is, and trusting it forfeits no drift
+-- detection that was ever possible -- an unreadable flag cannot be compared however carefully we ask.
+-- Same rule canBeWaterPiped above already follows, for the same reason.
 local function setUsesExternalWaterSource(worldObject, value)
     if not worldObject then
         return
@@ -264,10 +270,15 @@ local function setUsesExternalWaterSource(worldObject, value)
 
     local wanted = value and true or false
     local modData = getModData(worldObject)
+    local live = readUsesExternalWaterSource(worldObject)
 
-    if readUsesExternalWaterSource(worldObject) == wanted
-        and modData ~= nil and modData.usesExternalWaterSource == wanted then
-        return
+    local changed
+    if live ~= nil then
+        changed = live ~= wanted or modData == nil or modData.usesExternalWaterSource ~= wanted
+    elseif modData ~= nil then
+        changed = modData.usesExternalWaterSource ~= wanted
+    else
+        changed = true          -- nothing readable anywhere: say it, as before
     end
 
     if modData then
@@ -278,8 +289,10 @@ local function setUsesExternalWaterSource(worldObject, value)
         pcall(worldObject.setUsesExternalWaterSource, worldObject, wanted)
     end
 
-    sendExternalWaterSourceChange(worldObject, wanted)
-    transmitObjectState(worldObject)
+    if changed then
+        sendExternalWaterSourceChange(worldObject, wanted)
+        transmitObjectState(worldObject)
+    end
 end
 
 local function setCanBeWaterPiped(worldObject, value)
