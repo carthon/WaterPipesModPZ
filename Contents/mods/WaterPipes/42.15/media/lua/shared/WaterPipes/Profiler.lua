@@ -396,9 +396,11 @@ function Profiler.report()
     end
 
     -- The headline: a pass is one instant of simulated time, so it should cost about one re-price.
+    -- Zero solves in a pass leaves no counter at all, and that is the BEST result -- so the row is
+    -- derived from the passes alone and reads 0.0 rather than vanishing.
     local passes = counters["irrigation: passes started"]
-    local duringPass = counters["hydraulics: solves during a pass"]
-    if passes and passes > 0 and duringPass then
+    if passes and passes > 0 then
+        local duringPass = counters["hydraulics: solves during a pass"] or 0
         add(string.format("  %-28s %.1f", "irrigation: solves per pass", duringPass / passes))
     end
 
