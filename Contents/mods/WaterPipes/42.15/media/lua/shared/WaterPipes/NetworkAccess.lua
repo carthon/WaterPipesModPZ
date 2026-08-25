@@ -28,6 +28,30 @@ local Pump = WaterPipes.Pump
 local Purifier = WaterPipes.Purifier
 local Router = WaterPipes.Router
 
+-- Bracket a stretch of work for the profiler, resolved off the global table so this module keeps no
+-- dependency on a debug tool. mark/since rather than Profiler.time, which forwards only two returns.
+local function markPhase()
+    local Profiler = WaterPipes.Profiler
+    return Profiler and Profiler.mark and Profiler.mark() or nil
+end
+
+local function sincePhase(name, mark)
+    if not mark then
+        return
+    end
+    local Profiler = WaterPipes.Profiler
+    if Profiler and Profiler.since then
+        Profiler.since(name, mark)
+    end
+end
+
+local function countPhase(name, amount)
+    local Profiler = WaterPipes.Profiler
+    if Profiler and Profiler.count then
+        Profiler.count(name, amount)
+    end
+end
+
 -- A router with a tank on it (the purifier) is a hard boundary: the two sides must never see each
 -- other. Bare, it is an inline pressure-reducing valve that water passes through.
 local function routerIsHardBoundary(routerSquare)
@@ -602,17 +626,26 @@ local function vesselSquaresOfZone(solution)
         return cached
     end
 
+    -- TEMPORARY attribution. draw/descriptors is 489 ms of a 2701 ms window and its calls are one per
+    -- EMITTER, but this memo dies with the frame -- so a pass spread over frames rebuilds it every few
+    -- emitters, walking every pipe square of the zone. Which half costs is a guess until measured.
+    local mark = markPhase()
     local list = {}
     local seen = {}
+    local walked = 0
     for _, pipeSquare in ipairs(Hydraulics.pipeSquares(solution)) do
         local key = squareKey(pipeSquare)
         if not seen[key] then
             seen[key] = true
+            walked = walked + 1
             if Adapter.hasSquareContainers(pipeSquare) then
                 list[#list + 1] = { square = pipeSquare, key = key }
             end
         end
     end
+    sincePhase("descriptors/zonewalk", mark)
+    countPhase("descriptors: zone walks", 1)
+    countPhase("descriptors: squares walked", walked)
 
     zoneVesselMemo[id] = list
     return list
@@ -621,6 +654,10 @@ end
 local function collectStorageDescriptors(pipeSquares, hops, chains, solution, entry)
     local pooled = solution and vesselSquaresOfZone(solution) or nil
     if pooled then
+        -- The other half: one live re-read of every vessel in the zone, per emitter. The amounts have to
+        -- be live -- an earlier emitter's draw must be visible to the next -- but whether that is worth
+        -- 0.4 ms an emitter is what the counter below answers.
+        local mark = markPhase()
         local descriptors = {}
         for _, entry in ipairs(pooled) do
             local distance = hops and hops[entry.key] or 0
@@ -631,6 +668,8 @@ local function collectStorageDescriptors(pipeSquares, hops, chains, solution, en
                 descriptors[descriptorKey] = descriptor
             end
         end
+        sincePhase("descriptors/vessels", mark)
+        countPhase("descriptors: vessel reads", #pooled)
         return descriptors
     end
 
@@ -761,23 +800,6 @@ local function squaresFromSolution(solution, originSquare)
         -- The RELATIVE utility pressure, not the field's absolute floor: this feeds the lift gate.
         supplyHead = (solution.stats and solution.stats.supplyHead) or 0,
     }
-end
-
--- Bracket a stretch of work for the profiler, resolved off the global table so this module keeps no
--- dependency on a debug tool. mark/since rather than Profiler.time, which forwards only two returns.
-local function markPhase()
-    local Profiler = WaterPipes.Profiler
-    return Profiler and Profiler.mark and Profiler.mark() or nil
-end
-
-local function sincePhase(name, mark)
-    if not mark then
-        return
-    end
-    local Profiler = WaterPipes.Profiler
-    if Profiler and Profiler.since then
-        Profiler.since(name, mark)
-    end
 end
 
 local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, statusOnly)
