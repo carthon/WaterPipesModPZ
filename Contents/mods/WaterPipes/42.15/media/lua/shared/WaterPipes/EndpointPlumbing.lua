@@ -201,6 +201,21 @@ function EndpointPlumbing.dumpDiagnostics(worldObject)
     end
 end
 
+-- Same shape as EndpointObjects.readBoolean: nil unless the method exists AND returns a boolean, so a
+-- missing getter and a false answer never look alike.
+local function readBoolean(methodOwner, methodName)
+    if not methodOwner or not methodOwner[methodName] then
+        return nil
+    end
+
+    local ok, value = pcall(methodOwner[methodName], methodOwner)
+    if ok and type(value) == "boolean" then
+        return value
+    end
+
+    return nil
+end
+
 local function transmitObjectState(worldObject)
     if not worldObject then
         return
@@ -224,21 +239,46 @@ local function sendExternalWaterSourceChange(worldObject, value)
     pcall(worldObject.sendObjectChange, worldObject, changeName, { value = value and true or false })
 end
 
+-- The flag as the ENGINE holds it, which is what EndpointObjects and Mains both read. Our modData is a
+-- mirror of it. nil means the object exposes no getter: unknown, which is not the same as "matches".
+local function readUsesExternalWaterSource(worldObject)
+    local value = readBoolean(worldObject, "isUsesExternalWaterSource")
+    if value == nil then
+        value = readBoolean(worldObject, "getUsesExternalWaterSource")
+    end
+    return value
+end
+
+-- Re-asserted on every refresh because vanilla mains water creeps back otherwise -- and that assertion
+-- carried a sendObjectChange, a transmitModData and a sync with it, every minute, to write false over
+-- false. Measured at 310 ms of a 381 ms endpoint refresh: 81 % of it, and 13 % of everything the mod did.
+-- Guarded the way canBeWaterPiped above already is: compare first, transmit only on a real change.
+-- Compared against the ENGINE's flag rather than our own modData, because a drift only the engine side
+-- has is exactly what this re-assertion exists to correct -- trusting the mirror would stop correcting it.
+-- Both have to agree before the write is skipped, and an object with no getter reads nil and is written
+-- unconditionally, as before.
 local function setUsesExternalWaterSource(worldObject, value)
     if not worldObject then
         return
     end
 
+    local wanted = value and true or false
     local modData = getModData(worldObject)
+
+    if readUsesExternalWaterSource(worldObject) == wanted
+        and modData ~= nil and modData.usesExternalWaterSource == wanted then
+        return
+    end
+
     if modData then
-        modData.usesExternalWaterSource = value and true or false
+        modData.usesExternalWaterSource = wanted
     end
 
     if worldObject.setUsesExternalWaterSource then
-        pcall(worldObject.setUsesExternalWaterSource, worldObject, value and true or false)
+        pcall(worldObject.setUsesExternalWaterSource, worldObject, wanted)
     end
 
-    sendExternalWaterSourceChange(worldObject, value)
+    sendExternalWaterSourceChange(worldObject, wanted)
     transmitObjectState(worldObject)
 end
 
