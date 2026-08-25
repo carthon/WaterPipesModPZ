@@ -40,11 +40,20 @@ local function describeObject(worldObject)
     return tostring(name) .. " sprite=" .. tostring(spriteName) .. " index=" .. tostring(objectIndex) .. " square=" .. squareText
 end
 
+-- "External-water" fixtures (no own FluidContainer, e.g. Take A Bath And Shower) are classified ONCE
+-- at plumb time and remembered in modData. We must NOT re-derive it from live capacity per tick:
+-- those mods add a TEMPORARY water container while the fixture is in use, which would otherwise flip
+-- the classification mid-use and make them report "not connected".
+-- Declared up here rather than beside its readers because the diagnostics below print it, and a local
+-- used above its declaration is a nil GLOBAL in Lua -- silent, and shipped from this repo three times.
+local EXTERNAL_FIXTURE_KEY = "waterpipesExternalFixture"
+
 local function describePlumbingDiagnostics(worldObject)
     if not worldObject then
         return "nil"
     end
 
+    local modData = getModData(worldObject)
     local sprite = worldObject.getSprite and worldObject:getSprite() or nil
     local props = sprite and sprite.getProperties and sprite:getProperties() or nil
     local waterAmountProp = props and props.Val and props:Val("waterAmount") or nil
@@ -110,6 +119,14 @@ local function describePlumbingDiagnostics(worldObject)
         .. tostring(worldObject.hasFluid and select(2, pcall(worldObject.hasFluid, worldObject)) or nil)
         .. ",hasWater="
         .. tostring(worldObject.hasWater and select(2, pcall(worldObject.hasWater, worldObject)) or nil)
+        -- OUR classification, which the rest of this only implied. A fixture stamped external re-queries
+        -- the network for water on every refresh (see desiredCanBeWaterPiped); one that is not returns a
+        -- constant. It is decided once at plumb time, so a fixture plumbed under different conditions --
+        -- or by an older version -- keeps the stamp, and nothing until now printed it.
+        .. "} ours{external="
+        .. tostring(modData ~= nil and modData[EXTERNAL_FIXTURE_KEY] == true)
+        .. ",plumbed="
+        .. tostring(modData ~= nil and modData[Constants.PLUMBED_ENDPOINT_MODDATA_KEY] == true)
         .. "}"
 end
 
@@ -321,12 +338,6 @@ local function endpointHasOwnFluidContainer(worldObject)
     end
     return false
 end
-
--- "External-water" fixtures (no own FluidContainer, e.g. Take A Bath And Shower) are classified ONCE
--- at plumb time and remembered in modData. We must NOT re-derive it from live capacity per tick:
--- those mods add a TEMPORARY water container while the fixture is in use, which would otherwise flip
--- the classification mid-use and make them report "not connected".
-local EXTERNAL_FIXTURE_KEY = "waterpipesExternalFixture"
 
 local function isExternalWaterFixture(worldObject)
     local modData = getModData(worldObject)
