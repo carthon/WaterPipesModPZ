@@ -462,7 +462,7 @@ end
 -- supply and the traversal order is a valid topological order for both sweeps below.
 -- `parents` keeps EVERY neighbour one step closer to supply. That is the whole of the loop handling: a
 -- node on a ring has two parents and splits its draw between them, so each branch carries half.
-local function orderBySupply(nodes, adjacency, routers, supply)
+local function orderBySupply(nodes, adjacency, routers, supply, adjacencyOrder)
     local depth = {}
     local parents = {}
     local queue = {}
@@ -470,9 +470,23 @@ local function orderBySupply(nodes, adjacency, routers, supply)
 
     -- Router crossings are directed edges: water leaves by the OUT side. Indexed by the downstream node.
     local viaRouter = {}
+    -- ...and the same edges from the UPSTREAM side, for the walk below. Built here rather than scanned
+    -- per node: the walk used to look at every router in the zone for each of its nodes. Sorted for the
+    -- same reason the seed below is.
+    local outOf = {}
     for _, router in pairs(routers) do
         viaRouter[router.outKey] = viaRouter[router.outKey] or {}
         viaRouter[router.outKey][router.inKey] = router
+
+        local list = outOf[router.inKey]
+        if not list then
+            list = {}
+            outOf[router.inKey] = list
+        end
+        list[#list + 1] = router.outKey
+    end
+    for _, list in pairs(outOf) do
+        table.sort(list)
     end
 
     -- Sorted, and not for tidiness. The BFS seeded from here decides each node's `parents`, which decides
@@ -518,14 +532,26 @@ local function orderBySupply(nodes, adjacency, routers, supply)
             end
         end
 
-        for neighbourKey in pairs(adjacency[key] or {}) do
-            step(neighbourKey)
-        end
-        -- ...and out through any router this node feeds.
-        for _, router in pairs(routers) do
-            if router.inKey == key then
-                step(router.outKey)
+        -- A FIXED order, for the reason the seed above is sorted and this was missed by: the order
+        -- neighbours are discovered in decides `sequence`, `sequence` decides the order accumulate() sums
+        -- a node's children into its flow, and floating-point addition is not associative. Left to
+        -- `pairs`, one node of a looped network priced 1 ulp differently in about one run of every
+        -- hundred -- rare enough to read as a real regression the day it turned up in a diff.
+        -- The order comes off the topology; a caller without one still walks, just not reproducibly.
+        local neighbours = adjacencyOrder and adjacencyOrder[key]
+        if neighbours then
+            for _, neighbourKey in ipairs(neighbours) do
+                step(neighbourKey)
             end
+        else
+            for neighbourKey in pairs(adjacency[key] or {}) do
+                step(neighbourKey)
+            end
+        end
+
+        -- ...and out through any router this node feeds.
+        for _, outKey in ipairs(outOf[key] or {}) do
+            step(outKey)
         end
     end
 
@@ -773,6 +799,20 @@ end
 -- Cleared only by the global drop, which also bounds it.
 local servableHint = {}
 
+-- Each node's neighbours, sorted. See the walk in orderBySupply for why the ORDER is load-bearing.
+local function sortedAdjacency(nodes, adjacency)
+    local ordered = {}
+    for key in pairs(nodes) do
+        local list = {}
+        for neighbourKey in pairs(adjacency[key] or {}) do
+            list[#list + 1] = neighbourKey
+        end
+        table.sort(list)
+        ordered[key] = list
+    end
+    return ordered
+end
+
 -- ===== Topology, which outlives a supply change =====
 -- What the zone IS -- its nodes, how they connect, which routers sit on the edges -- changes only when
 -- the pipe layout does, and every way that can happen fires an object event. What SUPPLIES it changes
@@ -795,6 +835,11 @@ local function discoverTopology(seedSquare)
         routers = routers,
         purifierOutlets = purifierOutlets,
         feeders = buildFeeders(nodes, adjacency, routers),
+        -- Each node's neighbours in a fixed order. Structural, like the sites below, and for the same
+        -- reason: a re-pricing must not pay to rediscover the shape. Built here, the walk's determinism
+        -- costs the discovery once instead of every solve -- measured at +17 % on a re-price when it was
+        -- sorted per solve, which is the common path.
+        adjacencyOrder = sortedAdjacency(nodes, adjacency),
         -- Where the vessels, inlets, pumps and emitters stand. Structural, so it belongs here rather than being
         -- rediscovered by every re-pricing.
         sites = classifySites(nodes, order),
@@ -817,7 +862,8 @@ local function solveWithTopology(topology, zoneKey)
     sincePhase("solve/supply", mark)
 
     mark = markPhase()
-    local depth, parents, sequence, viaRouter = orderBySupply(nodes, adjacency, routers, supply)
+    local depth, parents, sequence, viaRouter =
+        orderBySupply(nodes, adjacency, routers, supply, topology.adjacencyOrder)
     sincePhase("solve/order", mark)
     if not sequence then
         -- Nothing supplies this zone: every node is dry, which is a real answer and not a failure.
