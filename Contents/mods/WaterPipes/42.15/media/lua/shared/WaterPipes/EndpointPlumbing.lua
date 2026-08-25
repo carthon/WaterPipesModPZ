@@ -289,6 +289,13 @@ local function setUsesExternalWaterSource(worldObject, value)
         pcall(worldObject.setUsesExternalWaterSource, worldObject, wanted)
     end
 
+    -- TEMPORARY: is the guard actually firing? Everything else here is inference, and inference has
+    -- been wrong six times in this investigation. Announced ~= refreshes means it is working.
+    local Prof = WaterPipes.Profiler
+    if Prof and Prof.count then
+        Prof.count(changed and "endpoints: flag announced" or "endpoints: flag stayed quiet", 1)
+    end
+
     if changed then
         sendExternalWaterSourceChange(worldObject, wanted)
         transmitObjectState(worldObject)
@@ -431,12 +438,12 @@ function EndpointPlumbing.refreshEndpointSource(worldObject)
     -- fixtures with no own container (e.g. Take A Bath And Shower) must stay FALSE here too -- that mod
     -- reads the same modData as "connected". See EndpointPlumbing.plumb for the full rationale.
     local flagMark = Prof and Prof.mark and Prof.mark() or nil
-    local wantedPiped = desiredCanBeWaterPiped(worldObject)
+    local wantedPiped = bracket("ep/desired", desiredCanBeWaterPiped, worldObject)
     local currentData = getModData(worldObject)
     local pipedChanged = currentData ~= nil and currentData.canBeWaterPiped ~= wantedPiped
-    setCanBeWaterPiped(worldObject, wantedPiped)
+    bracket("ep/setpiped", setCanBeWaterPiped, worldObject, wantedPiped)
     -- Own-container path: the engine reads water from the endpoint's own FluidContainer.
-    setUsesExternalWaterSource(worldObject, false)
+    bracket("ep/setexternal", setUsesExternalWaterSource, worldObject, false)
     if flagMark and Prof.since then Prof.since("ep/flags", flagMark) end
     -- Push the flip to clients when it actually changes: external mods (e.g. Take A Bath And Shower)
     -- read canBeWaterPiped CLIENT-side to decide if the fixture is usable, so a stale value would
