@@ -146,6 +146,18 @@ function State.markEndpointsIndexed()
     State.ensure().endpointsIndexed = true
 end
 
+-- Has this save had its external-fixture stamps re-derived once? A fixture is classified as
+-- external-water at plumb time and never re-derived after, so one stamped wrongly keeps it forever --
+-- measured on a vanilla sink that had it despite a 2100 L container of its own, and paid a full network
+-- query on every endpoint refresh for it. See System.reclassifyExternalFixtures.
+function State.externalFixturesReclassified()
+    return State.ensure().externalFixturesReclassified == true
+end
+
+function State.markExternalFixturesReclassified()
+    State.ensure().externalFixturesReclassified = true
+end
+
 function State.unregisterPipe(x, y, z)
     local state = State.ensure()
     local key = State.squareKey(x, y, z)

@@ -344,6 +344,40 @@ local function isExternalWaterFixture(worldObject)
     return modData and modData[EXTERNAL_FIXTURE_KEY] == true or false
 end
 
+-- Re-derive the external stamp ONCE, for a save that carries a wrong one. Measured: a vanilla sink
+-- stamped external despite a 2100 L container of its own, which made desiredCanBeWaterPiped query the
+-- whole network on every refresh -- 437 ms of a 531 ms per-minute pass -- and, worse, held
+-- canBeWaterPiped at false whenever the network had water, which is the flag that keeps the engine's
+-- mains water off. Unplumbing and replumbing cleared it, which is what proved the stamp stale rather
+-- than the classifier wrong.
+--
+-- ONLY CLEARS, never sets. Setting is plumb-time work and re-deriving it later is what the note above
+-- forbids: an external fixture's temporary container disappears between uses, so a later look would
+-- stamp one that should not be. Clearing has the mirror-image hazard -- an external fixture examined
+-- WHILE in use shows a temporary container and would be cleared wrongly -- which is why the caller
+-- runs this on the first pass after loading, before anyone has had a chance to use anything, and logs
+-- every fixture it changes.
+--
+-- Returns true when it changed this fixture.
+function EndpointPlumbing.reclassifyExternalFixture(worldObject)
+    if not isExternalWaterFixture(worldObject) then
+        return false
+    end
+    if not endpointHasOwnFluidContainer(worldObject) then
+        return false
+    end
+
+    local modData = getModData(worldObject)
+    if not modData then
+        return false
+    end
+
+    modData[EXTERNAL_FIXTURE_KEY] = nil
+    Logger.log("Endpoint re-classified: had the external-water stamp but owns a fluid container -- "
+        .. describeObject(worldObject))
+    return true
+end
+
 -- The canBeWaterPiped modData the fixture should carry right now:
 --   vanilla sink (own container) -> true: engine mains off, our mirror serves it.
 --   external-water fixture (e.g. Take A Bath And Shower) -> false ONLY while the network actually
