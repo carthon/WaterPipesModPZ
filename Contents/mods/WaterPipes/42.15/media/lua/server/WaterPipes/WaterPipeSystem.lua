@@ -928,34 +928,20 @@ function System.refreshPlumbedEndpoints()
     end
 
     local stale = nil
-    local visited, plumbed = 0, 0
 
     for key, position in pairs(State.getEndpoints()) do
         local square = getSquare(position.x, position.y, position.z)
         if square then
             local found = 0
-            visited = visited + 1
 
-            -- TEMPORARY attribution. This function is 29 % of everything the mod does and the worst frame
-            -- in a measured window was one of its slow minutes. It has three candidate costs -- two full
-            -- getObjects sweeps of the tile, and a network summary per endpoint -- and which one dominates
-            -- is a guess until it is measured. Delete once it has answered.
-            local scanMark = Profiler.mark()
-            local endpointObjects = EndpointObjects.collectOnSquare(square)
-            Profiler.since("ep/collect", scanMark)
-
-            for _, endpointObject in ipairs(endpointObjects) do
+            for _, endpointObject in ipairs(EndpointObjects.collectOnSquare(square)) do
                 if EndpointPlumbing.isPlumbed(endpointObject) then
                     found = found + 1
-                    plumbed = plumbed + 1
-                    local syncMark = Profiler.mark()
                     EndpointPlumbing.refreshEndpointSource(endpointObject)
-                    Profiler.since("ep/sync", syncMark)
                 end
             end
 
             if square.getObjects then
-                local genMark = Profiler.mark()
                 local objects = square:getObjects()
                 for i = 0, objects:size() - 1 do
                     local worldObject = objects:get(i)
@@ -965,7 +951,6 @@ function System.refreshPlumbedEndpoints()
                         GeneratorFuel.refresh(worldObject)
                     end
                 end
-                Profiler.since("ep/generators", genMark)
             end
 
             if found == 0 then
@@ -974,9 +959,6 @@ function System.refreshPlumbedEndpoints()
             end
         end
     end
-
-    Profiler.count("endpoints: tiles visited", visited)
-    Profiler.count("endpoints: plumbed refreshed", plumbed)
 
     for _, key in ipairs(stale or {}) do
         State.getEndpoints()[key] = nil

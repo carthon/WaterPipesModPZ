@@ -236,34 +236,19 @@ function FluidSource.syncForEndpoint(endpoint)
         return false
     end
 
-    -- TEMPORARY attribution, alongside ep/sync in WaterPipeSystem. Delete with it.
-    local Profiler = WaterPipes.Profiler
-    local mark = Profiler and Profiler.mark and Profiler.mark() or nil
-
     -- First settle any water the player already took out (any path), then refresh the mirror.
     reconcileConsumption(endpoint)
 
-    if mark and Profiler.since then Profiler.since("ep/reconcile", mark) end
-    mark = Profiler and Profiler.mark and Profiler.mark() or nil
-
     local summary = NetworkAccess.getSummary(endpoint)
-
-    if mark and Profiler.since then Profiler.since("ep/summary", mark) end
-    mark = Profiler and Profiler.mark and Profiler.mark() or nil
-    -- Everything from here is writeSnapshot on one branch or another; close the accounting.
-    local function snapshotDone(result)
-        if mark and Profiler.since then Profiler.since("ep/snapshot", mark) end
-        return result
-    end
     if not summary or (summary.totalCapacity or 0) <= 0 then
         writeSnapshot(endpoint, 0, 1, nil)
-        return snapshotDone(false)
+        return false
     end
 
     -- Mixed-fluid networks: expose capacity but nothing usable (don't serve a random fluid).
     if summary.isMixed then
         writeSnapshot(endpoint, 0, summary.totalCapacity, nil)
-        return snapshotDone(true)
+        return true
     end
 
     local capacity = math.max(summary.totalCapacity or 0, 0)
@@ -277,7 +262,7 @@ function FluidSource.syncForEndpoint(endpoint)
         servedType = "Water"
     end
     writeSnapshot(endpoint, visibleAmount, capacity, servedType)
-    return snapshotDone(true)
+    return true
 end
 
 local function readContainerState(fluidContainer)
