@@ -1039,11 +1039,12 @@ Hydraulics.counters = { solves = 0, hits = 0, scoped = 0, global = 0, untouched 
                         supplyOnly = 0 }
 
 -- ===== The supply hold =====
--- A pass is ONE instant of simulated time, so the field it drinks from should be priced once. It is
--- priced 42 times: every emitter empties a barrel and the next one re-solves. Between hold and release
--- a SUPPLY invalidation is recorded instead of applied.
--- OBSERVE-ONLY at this commit: zones are recorded and still marked, so the counters measure what a real
--- hold would defer without changing behaviour.
+-- A pass is ONE instant of simulated time, so the field it drinks from should be priced once. It was
+-- priced 45 times: every emitter empties a barrel and the next one re-solves. Measured at 226 of the
+-- session's 237 solves. Between hold and release a SUPPLY invalidation is recorded instead of applied,
+-- and the release marks every zone that asked -- so the field the pass ends on is the field it would
+-- have had, one solve later instead of forty-five.
+-- Only the supply form is held. An object event can be a pipe, and that changes the shape.
 local heldZones = {}
 local holdDepth = 0
 
@@ -1123,9 +1124,10 @@ local function staleSupplyInZone(zoneId)
     if not solution or not solution.topology then
         return false
     end
-    -- Marked anyway while observing. See the hold block.
+    -- Held: record it and leave the field priced. The release applies it.
     if holdDepth > 0 then
         heldZones[zoneId] = true
+        return true
     end
     solution.supplyStale = true
     return true
@@ -1198,7 +1200,7 @@ function Hydraulics.invalidateSupplyAroundSquare(square)
     local counters = Hydraulics.counters
     if marked then
         counters.supplyOnly = counters.supplyOnly + 1
-        -- Temporary: how much of the churn is a pass draining its own barrels.
+        -- How much of the churn is a pass draining its own barrels: still raised, now deferred.
         if holdDepth > 0 then
             countPhase("hydraulics: supply invalidations during a pass", 1)
         end
