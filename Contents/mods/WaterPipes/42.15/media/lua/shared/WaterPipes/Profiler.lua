@@ -395,6 +395,13 @@ function Profiler.report()
         add(string.format("  %-28s %d", name, value))
     end
 
+    -- The headline: a pass is one instant of simulated time, so it should cost about one re-price.
+    local passes = counters["irrigation: passes started"]
+    local duringPass = counters["hydraulics: solves during a pass"]
+    if passes and passes > 0 and duringPass then
+        add(string.format("  %-28s %.1f", "irrigation: solves per pass", duringPass / passes))
+    end
+
     return lines
 end
 

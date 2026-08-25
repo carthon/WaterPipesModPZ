@@ -1038,6 +1038,48 @@ Hydraulics.counters = { solves = 0, hits = 0, scoped = 0, global = 0, untouched 
                         relaxPasses = 0, relaxCalls = 0, repricings = 0, relaxCapped = 0,
                         supplyOnly = 0 }
 
+-- ===== The supply hold =====
+-- A pass is ONE instant of simulated time, so the field it drinks from should be priced once. It is
+-- priced 42 times: every emitter empties a barrel and the next one re-solves. Between hold and release
+-- a SUPPLY invalidation is recorded instead of applied.
+-- OBSERVE-ONLY at this commit: zones are recorded and still marked, so the counters measure what a real
+-- hold would defer without changing behaviour.
+local heldZones = {}
+local holdDepth = 0
+
+-- Nestable: the debug one-frame run can land inside a pass that is already holding.
+function Hydraulics.holdSupplyInvalidation()
+    holdDepth = holdDepth + 1
+end
+
+function Hydraulics.isSupplyHeld()
+    return holdDepth > 0
+end
+
+-- Apply what was deferred and clear it. Only the outermost release applies; returns whether it did.
+function Hydraulics.releaseSupplyInvalidation()
+    if holdDepth <= 0 then
+        return false
+    end
+
+    holdDepth = holdDepth - 1
+    if holdDepth > 0 then
+        return false
+    end
+
+    local applied = false
+    for zoneId in pairs(heldZones) do
+        local solution = solutionCache[zoneId]
+        -- A zone dropped outright while held is simply gone; there is nothing left to mark stale.
+        if solution and solution.topology then
+            solution.supplyStale = true
+            applied = true
+        end
+    end
+    heldZones = {}
+    return applied
+end
+
 -- Every field on the map. For the per-minute pass and for changes not tied to a tile: a pump switched,
 -- a sandbox value, a full network rebuild.
 function Hydraulics.invalidate()
@@ -1046,6 +1088,9 @@ function Hydraulics.invalidate()
     -- The servable hint survives a SCOPED drop, but not this one: a global drop means the shape itself is
     -- in question. It is also what bounds the table.
     servableHint = {}
+    -- Never deferred, and never lifts the hold: a global drop says the SHAPE is in question, which is not
+    -- the claim "supply moved". What was pending named zones that no longer exist.
+    heldZones = {}
     Hydraulics.counters.global = Hydraulics.counters.global + 1
 end
 
@@ -1077,6 +1122,10 @@ local function staleSupplyInZone(zoneId)
     local solution = zoneId and solutionCache[zoneId]
     if not solution or not solution.topology then
         return false
+    end
+    -- Marked anyway while observing. See the hold block.
+    if holdDepth > 0 then
+        heldZones[zoneId] = true
     end
     solution.supplyStale = true
     return true
@@ -1149,6 +1198,10 @@ function Hydraulics.invalidateSupplyAroundSquare(square)
     local counters = Hydraulics.counters
     if marked then
         counters.supplyOnly = counters.supplyOnly + 1
+        -- Temporary: how much of the churn is a pass draining its own barrels.
+        if holdDepth > 0 then
+            countPhase("hydraulics: supply invalidations during a pass", 1)
+        end
     else
         counters.untouched = counters.untouched + 1
     end
@@ -1190,6 +1243,9 @@ function Hydraulics.solveAt(square)
             repriced.id = zoneId
             solutionCache[zoneId] = repriced
             Hydraulics.counters.solves = Hydraulics.counters.solves + 1
+            if holdDepth > 0 then
+                countPhase("hydraulics: solves during a pass", 1)
+            end
             return repriced
         end
         -- The zone no longer solves at all against its own topology. Fall through and rediscover.

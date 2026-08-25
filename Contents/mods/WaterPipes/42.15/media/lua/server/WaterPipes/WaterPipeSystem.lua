@@ -1318,6 +1318,15 @@ local function checkWatchedInputs()
     elseif pumpChanged and Hydraulics and Hydraulics.invalidate then
         Hydraulics.invalidate()                       -- the field only
     end
+
+    -- The irrigation hold crosses frames; one that outlives its pass would freeze the head field. Same
+    -- contract as System.reindexEndpoints: fix it, and say so.
+    if Irrigation and Irrigation.releaseStrandedHold then
+        local ok, released = pcall(Irrigation.releaseStrandedHold)
+        if ok and released then
+            Logger.warn("Irrigation: hold outlived its pass -- released by the per-minute backstop")
+        end
+    end
 end
 
 local function onEveryOneMinute()

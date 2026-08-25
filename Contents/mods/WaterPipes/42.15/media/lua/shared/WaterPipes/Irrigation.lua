@@ -457,8 +457,45 @@ end
 -- lands in moves, by at most a second or two of real time.
 local pendingPass = nil
 
+-- The head field is held for the whole pass, so the hold crosses frames. A pass abandoned without its
+-- release would freeze the field: every exit below releases, and WaterPipeSystem's per-minute backstop
+-- catches what still escapes.
+local passHeld = false
+
+local function takePassHold()
+    if passHeld then
+        return
+    end
+    local Hydraulics = WaterPipes.Hydraulics
+    if Hydraulics and Hydraulics.holdSupplyInvalidation then
+        Hydraulics.holdSupplyInvalidation()
+        passHeld = true
+    end
+end
+
+local function releasePassHold()
+    if not passHeld then
+        return
+    end
+    -- Cleared before the call: a throw inside it must not leave the flag claiming a hold.
+    passHeld = false
+    local Hydraulics = WaterPipes.Hydraulics
+    if Hydraulics and Hydraulics.releaseSupplyInvalidation then
+        Hydraulics.releaseSupplyInvalidation()
+    end
+end
+
 function Irrigation.hasPendingPass()
     return pendingPass ~= nil
+end
+
+-- For the backstop. True when it actually freed one, which the caller logs.
+function Irrigation.releaseStrandedHold()
+    if pendingPass or not passHeld then
+        return false
+    end
+    releasePassHold()
+    return true
 end
 
 -- Start a pass. Any pass still draining is finished off first, so a slow frame can never let two hours'
@@ -478,6 +515,8 @@ function Irrigation.beginPass(dtHours)
     end
 
     pendingPass = { emitters = emitters, index = 1, dtHours = dtHours, spent = 0 }
+    -- After collectEmitters: a pass that never starts must leave no hold behind.
+    takePassHold()
 end
 
 -- Run up to `budget` emitters. Returns true once the pass is done.
@@ -521,6 +560,7 @@ function Irrigation.stepPass(budget, budgetMs)
     pendingPass.index = last + 1
     if pendingPass.index > #emitters then
         pendingPass = nil
+        releasePassHold()
         return true
     end
     return false
@@ -530,15 +570,20 @@ end
 -- rest simply miss this hour.
 function Irrigation.cancelPass()
     pendingPass = nil
+    -- Where a thrown pass lands: drainIrrigationPass pcalls stepPass and cancels on error.
+    releasePassHold()
 end
 
 -- Drain whatever is left of the current pass in this frame. A plain emitter count as the budget -- not
 -- math.huge, which Kahlua would carry through the index arithmetic.
 function Irrigation.finishPass()
     if not pendingPass then
+        releasePassHold()
         return
     end
     Irrigation.stepPass(#pendingPass.emitters)
+    -- stepPass already released on completion. finishPass must never return still holding.
+    releasePassHold()
 end
 
 -- Run a whole pass right now, in this frame, and return the TOTAL LITRES the emitters took out of the
@@ -551,9 +596,27 @@ function Irrigation.run(dtHours)
         return 0
     end
 
-    local spent = 0
-    for _, emitter in ipairs(collectEmitters()) do
-        spent = spent + processEmitter(emitter, dtHours)
+    -- Its OWN hold, not the pass flag: the debug command can call this while a pass is draining, and the
+    -- depth counter is what makes that safe. pcall so a throwing emitter cannot walk out still holding.
+    local Hydraulics = WaterPipes.Hydraulics
+    local holding = Hydraulics and Hydraulics.holdSupplyInvalidation and Hydraulics.releaseSupplyInvalidation
+    if holding then
+        Hydraulics.holdSupplyInvalidation()
+    end
+
+    local ok, spent = pcall(function()
+        local total = 0
+        for _, emitter in ipairs(collectEmitters()) do
+            total = total + processEmitter(emitter, dtHours)
+        end
+        return total
+    end)
+
+    if holding then
+        Hydraulics.releaseSupplyInvalidation()
+    end
+    if not ok then
+        error(spent, 0)
     end
     return spent
 end
