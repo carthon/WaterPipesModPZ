@@ -28,6 +28,10 @@ local frameMs = 0           -- our work in the frame being accumulated, TOP LEVE
 local frames = 0
 local worstFrameMs = 0
 local over5, over10, over20 = 0, 0, 0
+-- What was IN the frame, not just how big it was. "worst frame: 47 ms" names no culprit, and the
+-- first guess at one was wrong. Only top-level rows are collected, for the same reason the totals are.
+local frameRows = {}
+local worstFrameRows = {}
 local startedAtMs = nil
 local totalMs = 0           -- our work over the window, top level only
 local depth = 0             -- how many timings are open right now
@@ -75,6 +79,8 @@ function Profiler.reset()
     frameMs = 0
     frames = 0
     worstFrameMs = 0
+    frameRows = {}
+    worstFrameRows = {}
     over5, over10, over20 = 0, 0, 0
     totalMs = 0
     depth = 0
@@ -143,6 +149,7 @@ function Profiler.record(name, elapsed, openDepth)
     if (openDepth or 0) == 0 then
         frameMs = frameMs + elapsed
         totalMs = totalMs + elapsed
+        frameRows[name] = (frameRows[name] or 0) + elapsed
     end
 end
 
@@ -234,6 +241,11 @@ function Profiler.endFrame()
     frames = frames + 1
     if frameMs > worstFrameMs then
         worstFrameMs = frameMs
+        -- Copied, not aliased: frameRows is cleared below and reused every frame.
+        worstFrameRows = {}
+        for name, ms in pairs(frameRows) do
+            worstFrameRows[name] = ms
+        end
     end
     if frameMs >= 20 then
         over20 = over20 + 1
@@ -243,6 +255,7 @@ function Profiler.endFrame()
         over5 = over5 + 1
     end
     frameMs = 0
+    frameRows = {}
 end
 
 -- ===== Report =====
@@ -316,6 +329,20 @@ function Profiler.report()
 
     add("")
     add(string.format("worst frame: %.1f ms of our work", worstFrameMs))
+
+    -- What was in it. Two cheap passes worth 20 ms each landing together is a different problem from one
+    -- pass worth 40, and the headline number cannot tell them apart.
+    local worstNames = {}
+    for name in pairs(worstFrameRows) do
+        worstNames[#worstNames + 1] = name
+    end
+    table.sort(worstNames, function(left, right)
+        return worstFrameRows[left] > worstFrameRows[right]
+    end)
+    for _, name in ipairs(worstNames) do
+        add(string.format("  %-28s %.1f ms", name, worstFrameRows[name]))
+    end
+
     add(string.format("frames costing 5-10 ms: %d    10-20 ms: %d    20+ ms: %d",
         over5, over10, over20))
     add("A stutter you can see is roughly 16 ms of total frame time, ours plus the game's. If the")
