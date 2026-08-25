@@ -814,10 +814,11 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, st
         return nil
     end
 
-    -- The fill path is split three ways under the profiler so its cost can be located, not guessed at.
-    local descriptorMark = fill and markPhase() or nil
+    -- Split under the profiler so its cost can be located, not guessed at. The DRAW path was left
+    -- untimed and that hid where a tap's summary spends its time -- 7.6 ms of it, once a minute.
+    local descriptorMark = markPhase()
     local descriptorMap = collectStorageDescriptors(pipeSquares, hops, chains, solution, walkEntry)
-    sincePhase("fill/descriptors", descriptorMark)
+    sincePhase(fill and "fill/descriptors" or "draw/descriptors", descriptorMark)
     addPurifierOutletDescriptors(descriptorMap, zone)
     local descriptors = normalizeDescriptorList(descriptorMap)
     if #descriptors == 0 then

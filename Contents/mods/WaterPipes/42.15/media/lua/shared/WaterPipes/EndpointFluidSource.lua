@@ -236,10 +236,19 @@ function FluidSource.syncForEndpoint(endpoint)
         return false
     end
 
+    -- TEMPORARY attribution, alongside ep/sync in WaterPipeSystem. Delete with it.
+    local Profiler = WaterPipes.Profiler
+    local mark = Profiler and Profiler.mark and Profiler.mark() or nil
+
     -- First settle any water the player already took out (any path), then refresh the mirror.
     reconcileConsumption(endpoint)
 
+    if mark and Profiler.since then Profiler.since("ep/reconcile", mark) end
+    mark = Profiler and Profiler.mark and Profiler.mark() or nil
+
     local summary = NetworkAccess.getSummary(endpoint)
+
+    if mark and Profiler.since then Profiler.since("ep/summary", mark) end
     if not summary or (summary.totalCapacity or 0) <= 0 then
         writeSnapshot(endpoint, 0, 1, nil)
         return false
