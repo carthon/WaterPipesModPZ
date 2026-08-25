@@ -1363,6 +1363,31 @@ function Hydraulics.pipeSquares(solution)
     return solution._pipeSquares
 end
 
+-- The zone's tiles that hold a vessel, off the topology's own site list.
+-- classifySites already asked Adapter.hasSquareContainers of every node when the shape was discovered,
+-- and that answer is structural: it moves only when an object appears or leaves, which rebuilds the
+-- topology. NetworkAccess used to re-derive the same list by walking every pipe square of the zone --
+-- 191 squares to find 7 vessels, 1780 squares a second in a measured window -- because its own memo for
+-- it was dropped every frame.
+-- Cached on the SOLUTION rather than the topology so it follows the same lifetime pipeSquares does.
+function Hydraulics.vesselSquares(solution)
+    if not solution then
+        return {}
+    end
+    if not solution._vesselSquares then
+        local list = {}
+        local sites = solution.topology and solution.topology.sites or nil
+        for _, key in ipairs(sites and sites.vessels or {}) do
+            local node = solution.nodes[key]
+            if node and node.square then
+                list[#list + 1] = { square = node.square, key = key }
+            end
+        end
+        solution._vesselSquares = list
+    end
+    return solution._vesselSquares
+end
+
 function Hydraulics.poweredPumps(solution)
     if not solution then
         return {}

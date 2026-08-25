@@ -380,7 +380,6 @@ local TRAVERSAL_CACHE_LIMIT = 64
 NetworkAccess.counters = { walks = 0, hits = 0, scoped = 0, global = 0, untouched = 0, overflow = 0 }
 
 -- Zone id -> the tiles of that zone that hold a vessel.
-local zoneVesselMemo = {}
 
 -- Zone, level and kind -> the summary every consumer there would have built for itself.
 local statusSummaryMemo = {}
@@ -391,13 +390,14 @@ local function traversalKey(square, verticalMode, conduct)
     return squareKey(square) .. "|" .. tostring(verticalMode) .. "|" .. tostring(conduct)
 end
 
--- Three caches, three lifetimes. statusSummaryMemo holds FLUID, so it dies with the frame.
--- zoneVesselMemo is keyed by solve id and follows it.
+-- Two caches, two lifetimes. statusSummaryMemo holds FLUID, so it dies with the frame.
 -- traversalCache holds fill topology and lives until the LAYOUT changes: pipe add/remove by tile,
 -- router direction and ceiling, hydrant open, a vessel landing on a router tile. Pump power is not
 -- cached at all, and the mains clock is watched by supplyClockChanged.
+-- There was a third, remembering which of a zone's tiles hold a vessel. It said it followed the solve id
+-- and was dropped here every frame instead, so it rebuilt constantly -- and it was re-deriving what the
+-- hydraulic topology already records. Hydraulics.vesselSquares reads that directly; the memo is gone.
 local function dropFrameMemos()
-    zoneVesselMemo = {}
     statusSummaryMemo = {}
 end
 
@@ -469,7 +469,6 @@ end
 -- The layout changed wholesale: drop everything.
 function NetworkAccess.invalidateTraversalCache()
     traversalCache = {}
-    zoneVesselMemo = {}
     statusSummaryMemo = {}
     NetworkAccess.counters.global = NetworkAccess.counters.global + 1
     if Hydraulics and Hydraulics.invalidate then
@@ -612,52 +611,20 @@ local function collectStorageDescriptorsByWalk(pipeSquares, hops, chains, entry)
     return descriptors
 end
 
--- The tiles of a zone that hold a vessel, found once per zone per frame.
--- Safe to key by zone because squaresFromSolution hands back the tile set BY REFERENCE; only the hop
--- counts are measured from the asking tile. Only the discovery is pooled, the pricing stays private.
-local function vesselSquaresOfZone(solution)
-    local id = solution and solution.id
-    if not id then
-        return nil
-    end
-
-    local cached = zoneVesselMemo[id]
-    if cached then
-        return cached
-    end
-
-    -- TEMPORARY attribution. draw/descriptors is 489 ms of a 2701 ms window and its calls are one per
-    -- EMITTER, but this memo dies with the frame -- so a pass spread over frames rebuilds it every few
-    -- emitters, walking every pipe square of the zone. Which half costs is a guess until measured.
-    local mark = markPhase()
-    local list = {}
-    local seen = {}
-    local walked = 0
-    for _, pipeSquare in ipairs(Hydraulics.pipeSquares(solution)) do
-        local key = squareKey(pipeSquare)
-        if not seen[key] then
-            seen[key] = true
-            walked = walked + 1
-            if Adapter.hasSquareContainers(pipeSquare) then
-                list[#list + 1] = { square = pipeSquare, key = key }
-            end
-        end
-    end
-    sincePhase("descriptors/zonewalk", mark)
-    countPhase("descriptors: zone walks", 1)
-    countPhase("descriptors: squares walked", walked)
-
-    zoneVesselMemo[id] = list
-    return list
-end
+-- The tiles of a zone that hold a vessel.
+-- Read off the hydraulic topology, which classified exactly this when the shape was discovered and keeps
+-- it for as long as the shape lasts. This used to be a walk of every pipe square of the zone behind a
+-- memo dropped every frame: measured at 591 rebuilds, 191 squares each, 112,881 square scans in 63
+-- seconds -- to find seven vessels. The answer was already sitting on the solution.
+-- Safe to take by reference: only the hop counts are measured from the asking tile, and those are
+-- stamped onto the descriptors below, never onto this list.
 
 local function collectStorageDescriptors(pipeSquares, hops, chains, solution, entry)
-    local pooled = solution and vesselSquaresOfZone(solution) or nil
+    local pooled = solution and Hydraulics.vesselSquares(solution) or nil
     if pooled then
-        -- The other half: one live re-read of every vessel in the zone, per emitter. The amounts have to
-        -- be live -- an earlier emitter's draw must be visible to the next -- but whether that is worth
-        -- 0.4 ms an emitter is what the counter below answers.
-        local mark = markPhase()
+        -- The amounts stay live, per emitter, on purpose: an earlier emitter's draw has to be visible to
+        -- the next one, and that is what makes the summary a live view rather than a snapshot. Measured
+        -- at 0.092 ms an emitter, against the 1.042 ms the discovery above used to cost.
         local descriptors = {}
         for _, entry in ipairs(pooled) do
             local distance = hops and hops[entry.key] or 0
@@ -668,8 +635,6 @@ local function collectStorageDescriptors(pipeSquares, hops, chains, solution, en
                 descriptors[descriptorKey] = descriptor
             end
         end
-        sincePhase("descriptors/vessels", mark)
-        countPhase("descriptors: vessel reads", #pooled)
         return descriptors
     end
 
