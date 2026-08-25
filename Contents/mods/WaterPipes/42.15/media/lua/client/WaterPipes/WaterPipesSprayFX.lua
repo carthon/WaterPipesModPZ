@@ -26,7 +26,16 @@ local FX = WaterPipes.SprayFX
 -- ===== Tunables =====
 local FRAMES = 16            -- loop length (frame canvas size is per-effect, see KIND.cell)
 local HOLD = 2               -- UI draws per animation frame (advance every HOLD draws)
-local DRAW_RADIUS = 18       -- tiles from the player we scan/draw within (matches the sound modules)
+-- Tiles from the player we scan and draw within. Was 18, which is inside the visible screen: a farm you
+-- were looking at drew nothing until you walked into it, and emitters that ARE watering read as
+-- disconnected -- the failure the effect exists to rule out.
+-- Raising it is cheap because the rescan costs per EMITTER IN RANGE, not per tile: Registry.near walks
+-- the emitter registry, and the whole rebuild is throttled to RESCAN_MS. Measured on a 48-emitter farm,
+-- radius 18 already had 39.5 of them in range, so the ceiling this raises the cost to is +21 % of a
+-- bucket worth 3.6 ms/s. A base with emitters spread wider pays more, still bounded by how many it has.
+-- Not tied to the sound modules despite what this line used to claim -- they scan 14 and 15. Audible
+-- range and screen range are different questions.
+local DRAW_RADIUS = 30
 -- Milliseconds, not ticks: a frame count measures how FAST THE MACHINE IS, not how much time has
 -- passed. At 127 fps -- ordinary on a decent PC -- 45 ticks is 0.35 s, so a better machine paid for
 -- this rebuild twice as often as intended. The cost of a mod should not scale with the framerate.
