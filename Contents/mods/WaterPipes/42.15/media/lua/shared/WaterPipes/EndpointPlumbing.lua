@@ -353,10 +353,19 @@ function EndpointPlumbing.refreshEndpointSource(worldObject)
         modData[Constants.PLUMBED_ENDPOINT_SOURCE_MODDATA_KEY] = nil
     end
 
-    -- Legacy cleanup: remove the hidden adapter object created by older mod versions.
-    AdapterSource.removeForEndpoint(worldObject, "migrateToFluidSource")
+    -- TEMPORARY attribution, alongside ep/sync. Delete with it.
+    local Prof = WaterPipes.Profiler
+    local function bracket(name, fn, ...)
+        local mark = Prof and Prof.mark and Prof.mark() or nil
+        local a, b = fn(...)
+        if mark and Prof.since then Prof.since(name, mark) end
+        return a, b
+    end
 
-    if not EndpointPlumbing.hasPipeOnEndpointSquare(worldObject) then
+    -- Legacy cleanup: remove the hidden adapter object created by older mod versions.
+    bracket("ep/legacy", AdapterSource.removeForEndpoint, worldObject, "migrateToFluidSource")
+
+    if not bracket("ep/pipecheck", EndpointPlumbing.hasPipeOnEndpointSquare, worldObject) then
         -- Hybrid disconnect: losing the pipe on the fixture's OWN tile fully unplumbs it and
         -- restores its original fluid state. (A break further down the chain, while a pipe is still
         -- on this tile, instead leaves it connected-but-dry below and reconnects automatically.)
@@ -368,12 +377,14 @@ function EndpointPlumbing.refreshEndpointSource(worldObject)
     -- network mirror; re-asserted every tick (mains water would creep back otherwise). External-water
     -- fixtures with no own container (e.g. Take A Bath And Shower) must stay FALSE here too -- that mod
     -- reads the same modData as "connected". See EndpointPlumbing.plumb for the full rationale.
+    local flagMark = Prof and Prof.mark and Prof.mark() or nil
     local wantedPiped = desiredCanBeWaterPiped(worldObject)
     local currentData = getModData(worldObject)
     local pipedChanged = currentData ~= nil and currentData.canBeWaterPiped ~= wantedPiped
     setCanBeWaterPiped(worldObject, wantedPiped)
     -- Own-container path: the engine reads water from the endpoint's own FluidContainer.
     setUsesExternalWaterSource(worldObject, false)
+    if flagMark and Prof.since then Prof.since("ep/flags", flagMark) end
     -- Push the flip to clients when it actually changes: external mods (e.g. Take A Bath And Shower)
     -- read canBeWaterPiped CLIENT-side to decide if the fixture is usable, so a stale value would
     -- otherwise let/deny use incorrectly in multiplayer. Only on change -> no per-tick spam.

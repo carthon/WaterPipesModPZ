@@ -249,15 +249,21 @@ function FluidSource.syncForEndpoint(endpoint)
     local summary = NetworkAccess.getSummary(endpoint)
 
     if mark and Profiler.since then Profiler.since("ep/summary", mark) end
+    mark = Profiler and Profiler.mark and Profiler.mark() or nil
+    -- Everything from here is writeSnapshot on one branch or another; close the accounting.
+    local function snapshotDone(result)
+        if mark and Profiler.since then Profiler.since("ep/snapshot", mark) end
+        return result
+    end
     if not summary or (summary.totalCapacity or 0) <= 0 then
         writeSnapshot(endpoint, 0, 1, nil)
-        return false
+        return snapshotDone(false)
     end
 
     -- Mixed-fluid networks: expose capacity but nothing usable (don't serve a random fluid).
     if summary.isMixed then
         writeSnapshot(endpoint, 0, summary.totalCapacity, nil)
-        return true
+        return snapshotDone(true)
     end
 
     local capacity = math.max(summary.totalCapacity or 0, 0)
@@ -271,7 +277,7 @@ function FluidSource.syncForEndpoint(endpoint)
         servedType = "Water"
     end
     writeSnapshot(endpoint, visibleAmount, capacity, servedType)
-    return true
+    return snapshotDone(true)
 end
 
 local function readContainerState(fluidContainer)
