@@ -992,8 +992,15 @@ end
 -- Even the stored water out across the network without adding or removing any; returns litres moved.
 -- The purifier needs it: a network otherwise settles only when something draws from it or fills it,
 -- so a purifier feeding barrels nobody drinks from would stall at a full buffer.
+-- A settle is a FILL-shaped question -- where can water sitting here GO -- and the arguments have to say
+-- so. This read `(originSquare, nil, true)` against a signature of
+-- (originSquare, verticalMode, kind, fill, statusOnly): one short, so `true` landed in `kind` and the
+-- level-out was answered as a CONSUMER DRAW. The gate that comes with a draw asks each vessel whether it
+-- could push water UP to the origin, so a barrel below the purifier's outlet was struck off the list and
+-- the buffer had nothing left to even out against. Harmless until the shared head field made that gate
+-- all-or-nothing; after it, the purifier's clean side simply stopped draining.
 function NetworkAccess.settleAtSquare(originSquare)
-    local summary = buildSummaryFromSquare(originSquare, nil, true)
+    local summary = buildSummaryFromSquare(originSquare, "both", nil, true)
     if not summary or summary.isMixed or (summary.totalAmount or 0) <= 0 then
         return 0
     end
