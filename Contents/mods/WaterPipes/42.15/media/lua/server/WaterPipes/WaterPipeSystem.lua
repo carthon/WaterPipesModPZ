@@ -148,19 +148,41 @@ function System.scanContainersAroundPipes()
 
             -- Reconcile the purifier registry and fill in a missing `kind` while standing on the tile anyway: a
             -- save made before either existed carries devices nobody recorded, and the answer is on the object.
-            -- Only router tiles are asked. One pass over ten in-game minutes fills the whole base.
-            local metadata = pipeData.metadata
-            if not metadata or not metadata.kinds then
-                metadata = metadata or {}
-                for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
-                    if Router.isRouter(worldObject) then metadata.router = true end
-                    if Pump.isPump(worldObject) then metadata.pump = true end
-                    if Irrigation.isDrip(worldObject) then metadata.drip = true end
-                    if Irrigation.isSprinkler(worldObject) then metadata.sprinkler = true end
+            --
+            -- DERIVED EVERY PASS, AND ONLY EVER ADDED TO. It used to stamp `kinds` once and never look again,
+            -- and every one of these predicates reads MODDATA -- which in MP arrives after the square does.
+            -- A scan that landed in that window recorded "not a router" permanently. Pumps and emitters
+            -- survived it, because they are only skipped on a POSITIVE "not a pump"; routers were iterated on
+            -- `metadata.router == true` with no world probe behind it, so a router caught by that window was
+            -- dead until the player dismantled and rebuilt it. Which is what was reported.
+            --
+            -- Re-deriving is what makes the stamp self-healing: the flag appears on the first pass that can
+            -- actually read it, so an existing save repairs itself without a migration. Never cleared, so a
+            -- momentarily unreadable modData cannot switch a working router off for a tick either. A flag left
+            -- on a tile that is no longer a router costs one findOnSquare a minute and nothing else.
+            -- The four keys read off ONE modData fetch rather than through the four module predicates, which
+            -- would each fetch it again. Same test each of them makes (`modData[KEY] == true`); four bridge
+            -- calls per object become one, which is what makes re-deriving every pass affordable.
+            local metadata = pipeData.metadata or {}
+            for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+                local okMod, modData = pcall(worldObject.getModData, worldObject)
+                if okMod and modData then
+                    if not metadata.router and modData[Constants.ROUTER_MODDATA_KEY] == true then
+                        if metadata.kinds then
+                            Logger.warn(string.format(
+                                "ROUTER NOT REGISTERED: the tile at %d:%d:%d holds a router the registry "
+                                .. "had recorded as something else, so it was never processed. Repaired.",
+                                pipeData.x, pipeData.y, pipeData.z))
+                        end
+                        metadata.router = true
+                    end
+                    if modData[Constants.PUMP_MODDATA_KEY] == true then metadata.pump = true end
+                    if modData[Constants.DRIP_MODDATA_KEY] == true then metadata.drip = true end
+                    if modData[Constants.SPRINKLER_MODDATA_KEY] == true then metadata.sprinkler = true end
                 end
-                metadata.kinds = true
-                pipeData.metadata = metadata
             end
+            metadata.kinds = true
+            pipeData.metadata = metadata
 
             if pipeData.metadata and pipeData.metadata.router == true then
                 local purifier = Purifier.findForRouterSquare(square)
@@ -451,7 +473,11 @@ function System.processRouters(dt)
     end
     local state = State.ensure()
     for _, pipeData in pairs(state.pipes) do
-        if pipeData.metadata and pipeData.metadata.router == true then
+        -- Skip only what we KNOW is not a router, which is the rule the pump pass already follows. Requiring
+        -- `router == true` made the registry the sole authority on a flag derived from modData that can be
+        -- read too early, and a tile it got wrong stayed switched off for the life of the save.
+        local metadata = pipeData.metadata
+        if not (metadata and metadata.kinds and not metadata.router) then
             local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
             local router = square and Router.findOnSquare(square)
             if router then

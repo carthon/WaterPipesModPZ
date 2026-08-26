@@ -1029,6 +1029,12 @@ def pass_scanContainersAroundPipes(sc):
         sq = getGridSquare(x, y, z)
         if sq:
             collectSquareContainers(sq)
+            # The device-kind derivation, re-run every pass rather than stamped once: the stamp was a
+            # modData read that MP can answer too early, and a router it got wrong stayed switched off.
+            # Four predicates per pipe object, each a getModData behind a pcall. The object list itself
+            # comes off the memo, so only the modData reads are charged here.
+            for _ in getPipeObjectsOnSquare(sq):
+                bc("getModData", 1)
 
 
 def pass_rebuildGraph(sc):
