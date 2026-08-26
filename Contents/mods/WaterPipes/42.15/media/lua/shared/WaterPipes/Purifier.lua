@@ -275,6 +275,7 @@ end
 -- and the router then wrongly runs as a plain passthrough. The footprint extends +x/+y from the anchor
 -- and the router sits on the anchor, so scan that block.
 local PURIFIER_FOOTPRINT_OFFSETS = { { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 } }
+Purifier.FOOTPRINT_OFFSETS = PURIFIER_FOOTPRINT_OFFSETS
 function Purifier.findForRouterSquare(square)
     if not square then
         return nil
@@ -292,6 +293,46 @@ function Purifier.findForRouterSquare(square)
         end
     end
     return nil
+end
+
+-- ===== Removal =====
+
+local function spriteNameOf(worldObject)
+    if not worldObject or not worldObject.getSprite then
+        return nil
+    end
+    local ok, sprite = pcall(worldObject.getSprite, worldObject)
+    if not ok or not sprite or not sprite.getName then
+        return nil
+    end
+    local okName, name = pcall(sprite.getName, sprite)
+    return okName and name or nil
+end
+
+-- Is this object one of the four quadrants of a purifier tank? Answered by SPRITE, not by modData: only
+-- ONE quadrant carries the modData, and the removal path has to recognise the other three -- they are
+-- what would otherwise be left standing on the tile as a tank that no longer exists.
+function Purifier.isTankPart(worldObject)
+    if Purifier.isPurifier(worldObject) then
+        return true
+    end
+    local name = spriteNameOf(worldObject)
+    return name ~= nil and Constants.PURIFIER_TANK_ANCHOR_OFFSETS[name] ~= nil
+end
+
+-- Where the anchor (footprint 0,0) of the tank this quadrant belongs to stands. nil for anything that
+-- is not a quadrant -- including a legacy purifier from a save that predates the 2x2 tank art, which
+-- has no footprint to speak of and is its own anchor.
+function Purifier.anchorCoordsForPart(worldObject)
+    local square = worldObject and worldObject.getSquare and worldObject:getSquare() or nil
+    if not square then
+        return nil
+    end
+    local offset = Constants.PURIFIER_TANK_ANCHOR_OFFSETS[spriteNameOf(worldObject)]
+    if not offset then
+        return nil
+    end
+    return square:getX() + offset.dx, square:getY() + offset.dy, square:getZ()
 end
 
 return Purifier

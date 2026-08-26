@@ -230,6 +230,25 @@ Constants.PURIFIER_TANK_LEFT_SPRITE = "waterpipes_01_39"   -- industry 72, tile 
 Constants.PURIFIER_TANK_BODY_SPRITE = "waterpipes_01_38"   -- industry 73, front tile (1,1)
 -- The anchor/front body sprite doubles as the purifier's identity sprite.
 Constants.PURIFIER_ELECTRIC_SPRITE = Constants.PURIFIER_TANK_BODY_SPRITE
+-- Where the ANCHOR of a tank sits relative to each of its quadrants. Removing one quadrant has to take
+-- the other three with it, and only one of the four carries the purifier modData, so the quadrant's own
+-- SPRITE is what says which corner of the footprint it is. Exact even for two tanks standing side by
+-- side, which a "scan the neighbours" answer is not.
+Constants.PURIFIER_TANK_ANCHOR_OFFSETS = {
+    [Constants.PURIFIER_TANK_TOP_SPRITE] = { dx = 0, dy = 0 },
+    [Constants.PURIFIER_TANK_RIGHT_SPRITE] = { dx = -1, dy = 0 },
+    [Constants.PURIFIER_TANK_LEFT_SPRITE] = { dx = 0, dy = -1 },
+    [Constants.PURIFIER_TANK_BODY_SPRITE] = { dx = -1, dy = -1 },
+}
+-- What a DISMANTLED tank hands back, rolled per item on the tile it stood on. Destroying it (sledge,
+-- zombie, fire) returns nothing, as with pipes. Deliberately short of the build recipe: the blow torch
+-- cuts the welds it does not undo them, so the battery, the charcoal and the rags are spent for good.
+Constants.PURIFIER_DISMANTLE_RETURNS = {
+    { itemType = "Base.SheetMetal", count = 1, chance = 80 },
+    { itemType = "Base.MetalPipe", count = 2, chance = 80 },
+    { itemType = "Base.ElectronicsScrap", count = 1, chance = 60 },
+    { itemType = "Base.Wire", count = 1, chance = 60 },
+}
 -- Fluid router: a directional floor pipe that BOUNDS two separate networks (IN and OUT never merge),
 -- bridged only through a container on its tile. The IN->OUT direction is set from the context menu.
 Constants.ROUTER_MODDATA_KEY = "waterpipesRouter"
