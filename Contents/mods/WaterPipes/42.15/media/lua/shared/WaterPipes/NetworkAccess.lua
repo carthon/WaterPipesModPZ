@@ -755,6 +755,9 @@ local function squaresFromSolution(solution, originSquare)
     }
 end
 
+-- The `fill` value that means "gate this like a fill, but treat every router as a wall".
+local SEALED = "sealed"
+
 local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, statusOnly)
     if not originSquare then
         return nil
@@ -762,9 +765,17 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, st
 
     -- Which way the water is travelling, which decides how a bare router may be crossed.
     -- Visualization asks for neither and keeps every router solid.
+    --
+    -- `fill` has THREE states, not two:
+    --   nil/false   a draw (or visualization): crosses a bare router only OUT -> IN.
+    --   true        a fill: crosses IN -> OUT, which is where water pushed in actually goes.
+    --   "sealed"    a level-out: gated exactly like a fill, but every router is a wall.
+    -- The third exists because a settle is a body of water finding its own level, and a body of water
+    -- ENDS at a valve. Levelling across one moved water at no rate at all -- straight past the router's
+    -- own ROUTER_TRANSFER_RATE and the head that throttles it -- which is a hole nothing metered.
     local conduct = nil
     if fill then
-        conduct = "fill"
+        conduct = fill ~= SEALED and "fill" or nil
     elseif kind then
         conduct = "draw"
     end
@@ -1008,7 +1019,7 @@ end
 -- the buffer had nothing left to even out against. Harmless until the shared head field made that gate
 -- all-or-nothing; after it, the purifier's clean side simply stopped draining.
 function NetworkAccess.settleAtSquare(originSquare)
-    local summary = buildSummaryFromSquare(originSquare, "both", nil, true)
+    local summary = buildSummaryFromSquare(originSquare, "both", nil, SEALED)
     if not summary or summary.isMixed or (summary.totalAmount or 0) <= 0 then
         return 0
     end
