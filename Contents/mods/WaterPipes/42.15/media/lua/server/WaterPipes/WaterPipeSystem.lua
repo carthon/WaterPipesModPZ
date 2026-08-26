@@ -1196,9 +1196,184 @@ local function schedulePipeRemoval(object, returnsMaterial)
     end
 end
 
+-- ===== Purifier removal =====
+--
+-- The tank is a 2x2 entity whose four quadrants are four separate objects, and only ONE of them carries
+-- the purifier modData. Whichever quadrant a removal takes, the other three would be left standing:
+-- a tank that draws nothing, cleans nothing and cannot be rebuilt because its own footprint is still
+-- occupied. So a removal anywhere on the footprint takes the whole footprint down.
+--
+-- Same next-tick shape as the pipe path above, and for the same reason: OnObjectAboutToBeRemoved fires
+-- BEFORE the object leaves, so whether it really went is a question that can only be answered later.
+local pendingPurifierRemovals = {}
+local pendingPurifierScheduled = false
+-- Anchors whose footprint we are dismantling RIGHT NOW. Removing the other three quadrants raises the
+-- very events that brought us here; without this the tank would re-queue itself and pay out again.
+local purifiersComingDown = {}
+
+local function squareHoldsObject(square, object)
+    local objects = square and square.getObjects and square:getObjects() or nil
+    if not objects then
+        return false
+    end
+    for index = 0, objects:size() - 1 do
+        if objects:get(index) == object then
+            return true
+        end
+    end
+    return false
+end
+
+-- Take every tank quadrant off a square. Returns how many went.
+local function removeTankPartsOn(square)
+    if not square or not square.getObjects then
+        return 0
+    end
+    local objects = square:getObjects()
+    local doomed = {}
+    for index = 0, objects:size() - 1 do
+        local object = objects:get(index)
+        if Purifier.isTankPart(object) then
+            doomed[#doomed + 1] = object
+        end
+    end
+    for _, object in ipairs(doomed) do
+        -- Mirrors what vanilla's own scrap does, so a dedicated server and its clients agree.
+        if isClient and isClient() then
+            pcall(square.transmitRemoveItemFromSquare, square, object)
+        end
+        if isServer and isServer() then
+            pcall(square.transmitRemoveItemFromSquareOnClients, square, object)
+        end
+        pcall(square.RemoveTileObject, square, object)
+    end
+    if #doomed > 0 then
+        pcall(square.RecalcProperties, square)
+        pcall(square.RecalcAllWithNeighbours, square, true)
+    end
+    return #doomed
+end
+
+-- How much of a tank is still standing on the footprint anchored here. Asked at SCHEDULE time, while
+-- the object being removed is still on its square: a second event for a tank that already came down
+-- answers 0, and that is what stops a sledgehammered tank from being paid for as a dismantle when the
+-- two events it raises land in different ticks.
+local function tankPartsStandingAt(x, y, z)
+    local standing = 0
+    for _, offset in ipairs(Purifier.FOOTPRINT_OFFSETS) do
+        local square = getSquare(x + offset[1], y + offset[2], z)
+        local objects = square and square.getObjects and square:getObjects() or nil
+        for index = 0, (objects and objects:size() or 0) - 1 do
+            if Purifier.isTankPart(objects:get(index)) then
+                standing = standing + 1
+            end
+        end
+    end
+    return standing
+end
+
+local function dropDismantleReturns(square)
+    if not square or not square.AddWorldInventoryItem or not ZombRand then
+        return
+    end
+    for _, entry in ipairs(Constants.PURIFIER_DISMANTLE_RETURNS) do
+        for _ = 1, (entry.count or 1) do
+            if ZombRand(100) < (entry.chance or 100) then
+                pcall(square.AddWorldInventoryItem, square, entry.itemType, 0.5, 0.5, 0.0)
+            end
+        end
+    end
+end
+
+local function processPendingPurifierRemovals()
+    pendingPurifierScheduled = false
+    if Events and Events.OnTick then
+        Events.OnTick.Remove(processPendingPurifierRemovals)
+    end
+
+    local toProcess = pendingPurifierRemovals
+    pendingPurifierRemovals = {}
+
+    for key, entry in pairs(toProcess) do
+        local origin = getSquare(entry.ox, entry.oy, entry.oz)
+        -- A removal event is not proof the object left: a cancelled dismantle raises it too, and taking
+        -- the rest of the tank down over one would destroy a purifier nobody removed.
+        if origin and not squareHoldsObject(origin, entry.object) then
+            purifiersComingDown[key] = true
+            local removed = 0
+            for _, offset in ipairs(Purifier.FOOTPRINT_OFFSETS) do
+                local square = getSquare(entry.x + offset[1], entry.y + offset[2], entry.z)
+                if square then
+                    removed = removed + removeTankPartsOn(square)
+                    State.unregisterPurifier(square:getX(), square:getY(), square:getZ())
+                end
+            end
+            purifiersComingDown[key] = nil
+
+            if entry.returnsMaterial then
+                dropDismantleReturns(getSquare(entry.x, entry.y, entry.z) or origin)
+            end
+            Logger.log(string.format("purifier removed at %d:%d:%d -> %d leftover quadrant(s) cleared, %s",
+                entry.x, entry.y, entry.z, removed,
+                entry.returnsMaterial and "dismantled (returns paid)" or "destroyed (returns nothing)"))
+        end
+    end
+end
+
+-- `returnsMaterial` is false for destruction and true for a dismantle, and once one path has said false
+-- for a tank the other cannot talk it back up: a sledgehammer raises BOTH events for the same object.
+local function schedulePurifierRemoval(object, returnsMaterial)
+    if not object or not Purifier.isTankPart(object) then
+        return
+    end
+    local square = object.getSquare and object:getSquare() or nil
+    if not square then
+        return
+    end
+
+    local x, y, z = Purifier.anchorCoordsForPart(object)
+    if not x then
+        -- A purifier with no tank sprite: pre-2x2 save, or art another mod replaced. It is its own
+        -- footprint, and the sweep below simply finds nothing at the other three offsets.
+        x, y, z = square:getX(), square:getY(), square:getZ()
+    end
+
+    local key = tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)
+    if purifiersComingDown[key] then
+        return   -- our own sweep, raising the events it was triggered by
+    end
+    if tankPartsStandingAt(x, y, z) == 0 then
+        return   -- this tank is already down: a late second event for it, not a removal
+    end
+
+    local existing = pendingPurifierRemovals[key]
+    if existing then
+        existing.returnsMaterial = existing.returnsMaterial and returnsMaterial
+        return
+    end
+    pendingPurifierRemovals[key] = {
+        x = x, y = y, z = z,
+        ox = square:getX(), oy = square:getY(), oz = square:getZ(),
+        object = object, returnsMaterial = returnsMaterial and true or false,
+    }
+
+    if not pendingPurifierScheduled and Events and Events.OnTick then
+        pendingPurifierScheduled = true
+        Events.OnTick.Add(processPendingPurifierRemovals)
+    elseif not (Events and Events.OnTick) then
+        processPendingPurifierRemovals()
+    end
+end
+
+-- Exposed for tools/conservation/test_purifier_removal.lua. The sweep is the only thing standing
+-- between one removed quadrant and three orphans, and no other seam reaches it.
+System.schedulePurifierRemoval = schedulePurifierRemoval
+System.processPurifierRemovals = processPendingPurifierRemovals
+
 local function onDestroyIsoThumpable(thump, player)
     -- Sledgehammer: destruction, not dismantling -- nothing comes back, as before.
     schedulePipeRemoval(thump, false)
+    schedulePurifierRemoval(thump, false)
 end
 
 -- Fires for moveable "Pick Up" and other lua-driven removals; without it a removed pipe would stay
@@ -1206,6 +1381,7 @@ end
 -- path hands the build material back.
 local function onObjectAboutToBeRemoved(object)
     schedulePipeRemoval(object, true)
+    schedulePurifierRemoval(object, true)
 end
 
 -- Rotates through state.pipes a few tiles at a time, so every tile is checked eventually and no

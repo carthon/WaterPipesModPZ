@@ -1,6 +1,7 @@
 -- Water pipes are B42 entities and are intentionally NOT moveable "pick up" items: moving an entity
 -- through the moveable system corrupts MP sync. They are removed via the vanilla "Disassemble" option,
--- driven by the tiles' Material -- CanScrap + Material = "WaterPipesScrap" -- which this registers.
+-- driven by the tiles' Material -- CanScrap + Material -- which this registers. Two materials: the
+-- pipes come apart with a hammer, the welded purifier tank with a blow torch and a welding mask.
 --
 -- ===== Why there is a zero-chance return item =====
 --
@@ -25,6 +26,15 @@ require "Moveables/ISMoveableDefinitions"
 -- once from our removal hook) and hands a metal pipe back for a clay one.
 local NEVER_ROLLED = 0
 
+-- Must match the Material stamped on tank cells 36-39 by tools/texturepack/edit_tiles.py.
+local PURIFIER_MATERIAL = "WaterPipesPurifierScrap"
+
+-- Bonus added to the dismantle chance vanilla SHOWS the player (10 + MetalWelding*10 + this, capped at
+-- 100). Pinned to certainty on purpose: that number only ever scales the loot roll -- the object comes
+-- off the tile either way -- so anything below 100 would advertise a failure that cannot happen. What
+-- the tank actually pays out is rolled per item by the removal hook.
+local ALWAYS_SUCCEEDS = 90
+
 local function registerWaterPipeScrap()
     local defs = moveableDefinitions
     if not defs and ISMoveableDefinitions and ISMoveableDefinitions.getInstance then
@@ -36,6 +46,20 @@ local function registerWaterPipeScrap()
 
     defs.addScrapDefinition("WaterPipesScrap", { "Base.Hammer" }, {}, Perks.Woodwork, 75, "Hammering", true)
     defs.addScrapItem("WaterPipesScrap", "Base.MetalPipe", 1, NEVER_ROLLED)
+
+    -- The purifier tank. Tools mirror the vanilla metal appliances it is cropped from: a blow torch
+    -- with fuel left in it, plus a welding mask (worn or carried; the tag covers modded ones).
+    --
+    -- Zero-chance again, and for a SECOND reason on top of the one above: the tank is a 2x2 object, and
+    -- vanilla pays a multi-sprite scrap once per footprint tile, which would refund it four times over.
+    -- The real payout is WaterPipeSystem's purifier removal hook, once per tank, whichever quadrant the
+    -- player clicked. UnusableMetal is the one thing vanilla itself hands over: it only appears when
+    -- nothing else rolled, which here is always, and without it a dismantle that produces literally
+    -- nothing is reported to the player as having FAILED.
+    defs.addScrapDefinition(PURIFIER_MATERIAL, { "Base.BlowTorch" },
+        { "Tag.WeldingMask", "Base.WeldingMask" }, Perks.MetalWelding, 1000, "BlowTorch", true,
+        ALWAYS_SUCCEEDS, "Base.UnusableMetal")
+    defs.addScrapItem(PURIFIER_MATERIAL, "Base.SheetMetal", 1, NEVER_ROLLED)
 end
 
 if Events and Events.OnGameBoot then
