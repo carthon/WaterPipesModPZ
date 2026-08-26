@@ -1121,6 +1121,15 @@ local function processPendingPipeRemovals()
 
     -- Material returns first, one per dismantled OBJECT: a cancelled removal drops nothing, and a
     -- multi-pipe square pays for exactly the pipe that was taken down.
+    --
+    -- ONE side pays. A co-op host runs a client Lua state and a server Lua state over the SAME world, so
+    -- this file is loaded twice, both states saw the removal and both spawned a pipe -- two items for one
+    -- dismantle. A dedicated server's clients never load lua/server, which is why only the host saw it.
+    -- The server side pays; SP is neither client nor server and pays as before.
+    if isClient and isClient() then
+        drops = {}
+    end
+
     for _, drop in ipairs(drops) do
         local square = getSquare(drop.x, drop.y, drop.z)
         if square and square.getObjects then
@@ -1274,6 +1283,10 @@ end
 
 local function dropDismantleReturns(square)
     if not square or not square.AddWorldInventoryItem or not ZombRand then
+        return
+    end
+    -- Same one-side rule as the pipe payout above: a co-op host would otherwise salvage the tank twice.
+    if isClient and isClient() then
         return
     end
     for _, entry in ipairs(Constants.PURIFIER_DISMANTLE_RETURNS) do
