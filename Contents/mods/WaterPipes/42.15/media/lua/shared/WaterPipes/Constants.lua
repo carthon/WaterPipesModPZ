@@ -256,6 +256,14 @@ Constants.ROUTER_DIRECTION_KEY = "waterpipesRouterDir"   -- "N"/"E"/"S"/"W" = th
 Constants.ROUTER_SPRITE = "waterpipes_01_13"             -- placeholder until the arrow art is packed
 Constants.ROUTER_DEFAULT_DIRECTION = "N"
 Constants.ROUTER_TRANSFER_RATE = 30                      -- max fluid units moved IN->OUT per minute tick
+
+-- Several routers off ONE source: a queue, or parallel taps?
+--   true  -> a queue. The first fills its network, and the next gets a turn only when that one refuses
+--            more. What a one-way valve implies, and what was asked for.
+--   false -> every router draws in the same tick, so the source empties at the SUM of their rates.
+-- The cost of `true` is throughput: three destinations drain a tank at one router's rate, not three.
+-- Flip it here if a base with many parallel routers feels stalled rather than orderly.
+Constants.ROUTER_FILL_SEQUENTIAL = true
 Constants.ADAPTER_SOURCE_SPRITE = "carpentry_02_54"
 Constants.ADAPTER_SOURCE_HIDDEN_SPRITE = "waterpipes_01_20"
 Constants.MAX_FINITE_FLUID_CAPACITY = 9999

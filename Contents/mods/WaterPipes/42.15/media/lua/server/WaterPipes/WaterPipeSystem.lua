@@ -344,27 +344,71 @@ end
 
 -- No purifier on the tile: one-way passthrough of the IN network's single fluid into the OUT network.
 -- `dt` is the elapsed in-game minutes for this sub-step; rates are per-minute and scaled by it.
+-- Why a router moved nothing, said ONCE per router per stall rather than every minute. "It stopped and
+-- the source still had water" is the report this exists to answer, and it has four possible causes that
+-- look identical from outside the pipe: nothing to pull, nowhere to put it, a head too low to matter, or
+-- a fluid the destination refuses. Guessing between them from a screenshot is not possible.
+local routerStallReason = {}
+
+local function noteRouterStall(inSquare, reason, detail)
+    if not inSquare or not inSquare.getX then
+        return
+    end
+    local key = State.squareKey(inSquare:getX(), inSquare:getY(), inSquare:getZ())
+    if routerStallReason[key] == reason then
+        return
+    end
+    routerStallReason[key] = reason
+    Logger.log(string.format("router at %d:%d:%d moved nothing: %s%s",
+        inSquare:getX(), inSquare:getY(), inSquare:getZ(), reason, detail or ""))
+end
+
+local function noteRouterRunning(inSquare)
+    if not inSquare or not inSquare.getX then
+        return
+    end
+    local key = State.squareKey(inSquare:getX(), inSquare:getY(), inSquare:getZ())
+    if routerStallReason[key] then
+        routerStallReason[key] = nil
+        Logger.log(string.format("router at %d:%d:%d moving again.",
+            inSquare:getX(), inSquare:getY(), inSquare:getZ()))
+    end
+end
+
 local function processPassthroughRouter(inSquare, outSquare, dt)
     local avail, fluidType, pressure = NetworkAccess.availableToPull(inSquare)
     if not fluidType or avail <= 0 then
+        -- A MIXED source reads exactly like an empty one here, and is the likelier of the two when the
+        -- player can see water in the tank: availableToPull refuses a network holding two fluids.
+        noteRouterStall(inSquare, "nothing to pull",
+            string.format(" (available %.2f, fluid %s)", avail or 0, tostring(fluidType)))
         return false
     end
     local headroom = NetworkAccess.availableToPush(outSquare, fluidType)
     if headroom <= 0 then
+        noteRouterStall(inSquare, "destination full or refusing this fluid",
+            string.format(" (%s, %.2f available to send)", tostring(fluidType), avail))
         return false
     end
     -- The rate is what the IN side can actually deliver to the router tile, not a flat ceiling: the head
     -- was already solved for this square and until now was read only as a pass/fail gate. Free to use.
-    local rate = Constants.ROUTER_TRANSFER_RATE * dt * Pressure.flowFactor(pressure)
+    local factor = Pressure.flowFactor(pressure)
+    local rate = Constants.ROUTER_TRANSFER_RATE * dt * factor
     local transfer = math.min(rate, avail, headroom)
     if transfer <= 0 then
+        noteRouterStall(inSquare, "no head to move it with",
+            string.format(" (pressure %s, flow factor %.3f)",
+                pressure and string.format("%.2f", pressure) or "nil", factor))
         return false
     end
     local drawn = NetworkAccess.drawFluidAtSquare(inSquare, fluidType, transfer)
     if drawn and drawn > 0 then
         NetworkAccess.fillFluidAtSquare(outSquare, fluidType, drawn)
+        noteRouterRunning(inSquare)
         return true
     end
+    noteRouterStall(inSquare, "the draw returned nothing",
+        string.format(" (wanted %.2f of %s from %.2f available)", transfer, tostring(fluidType), avail))
     return false
 end
 
@@ -510,7 +554,8 @@ function System.processRouters(dt)
         if router then
             local out = Router.getOutOffset(router)
             local inSquare = out and getSquare(pipeData.x - out.dx, pipeData.y - out.dy, pipeData.z)
-            local sourceId = inSquare and NetworkAccess.getDrawSourceId(inSquare) or nil
+            local sourceId = Constants.ROUTER_FILL_SEQUENTIAL
+                and inSquare and NetworkAccess.getDrawSourceId(inSquare) or nil
             if not sourceId or not servedSource[sourceId] then
                 if System.processRouter(router, pipeData.x, pipeData.y, pipeData.z, dt) and sourceId then
                     servedSource[sourceId] = true
