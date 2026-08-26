@@ -29,6 +29,8 @@ require "WaterPipes/WaterPipesPumpWindow"
 require "WaterPipes/WaterPipesPurifierSound"
 require "WaterPipes/ISRepairWaterPurifier"
 require "WaterPipes/ISOpenWaterPurifier"
+require "WaterPipes/Profiler"
+require "WaterPipes/RemovalAudit"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.ContextMenu = WaterPipes.ContextMenu or {}
@@ -121,10 +123,9 @@ end
 
 -- ===== Purifier tiles (status readout + filter-cartridge replacement) =====
 
--- The purifier is a 2x2 tank whose modData lives only on the ANCHOR (min-corner / back) tile, but the
--- player will often right-click the visible body (a non-anchor tile). The footprint extends +x/+y from
--- the anchor, so from any of the four tiles the anchor sits within the 2x2 block up-and-left of it --
--- scan that block so "Open Purifier" shows from anywhere on the tank.
+-- The purifier is a 2x2 tank whose modData lives only on the ANCHOR (min-corner) tile, but the player
+-- will often right-click the visible body. The footprint extends +x/+y from the anchor, so from any of
+-- the four tiles the anchor sits within the 2x2 block up-and-left of it.
 local PURIFIER_BLOCK_OFFSETS = { { 0, 0 }, { -1, 0 }, { 0, -1 }, { -1, -1 } }
 
 local function findPurifierInWorldObjects(worldobjects)
@@ -154,12 +155,9 @@ local function findPurifierInWorldObjects(worldobjects)
 end
 
 -- The anchor of a purifier's 2x2 footprint: the router tile the SERVER processes the tank on, and
--- therefore the only object whose modData holds its real state -- buffers, filter condition, whether
--- it is busy. The other three tiles carry a purifier object with empty modData, so anything reading
--- state has to come through here first or it silently reads defaults.
---
--- Resolved exactly the way the server does it (findForRouterSquare on the router square), so client
--- and server always agree on which object they are talking about.
+-- therefore the only object whose modData holds its real state. The other three carry a purifier object
+-- with empty modData, so anything reading state comes through here or silently reads defaults.
+-- Resolved exactly the way the server does it, so client and server agree on which object they mean.
 local function resolvePurifierAnchor(purifierObject)
     local square = purifierObject and purifierObject.getSquare and purifierObject:getSquare() or nil
     local cell = getCell and getCell() or nil
@@ -518,10 +516,9 @@ function ContextMenu.dumpAdapterDiagnostics(playerObj, endpointObject)
     end
 end
 
--- Debug pressure readout. Unlike the gauge, this works on ANY square -- no fixture, no pipe needed --
--- and shows every term that produced the number rather than just the number, so a wrong reading can
--- be traced to the source, hop count, pump or router ceiling behind it. Debug strings stay English,
--- like the rest of this menu.
+-- Debug pressure readout. Unlike the gauge this works on ANY square -- no fixture, no pipe needed --
+-- and shows every term that produced the number, so a wrong reading can be traced to the source, hop
+-- count, pump or router ceiling behind it. Debug strings stay English, like the rest of this menu.
 local function describePressureReport(report, square)
     local lines = {}
     local function add(fmt, ...)
@@ -549,31 +546,49 @@ local function describePressureReport(report, square)
     add("Hydrants: %d pressurising, supply floor %.1f",
         report.hydrantCount or 0, report.supplyHead or 0)
 
+    add("Load: %d emitter(s), %d starved, %.2f of %.2f L/h served",
+        report.emitterCount or 0, report.starvedCount or 0,
+        report.servedDemand or 0, report.totalDemand or 0)
+    add("Flow through this tile: %.2f L/h   (demand scale %.0f%%)",
+        report.flow or 0, (report.demandScale or 1) * 100)
+
     add(" ")
-    add("Head by consumer (best source, after ceiling):")
+    add("Head by consumer (at this tile, under the current load):")
     for _, kind in ipairs({ Constants.PRESSURE_KIND_TAP, Constants.PRESSURE_KIND_DRIP,
         Constants.PRESSURE_KIND_SPRINKLER }) do
         local entry = report.kinds[kind]
         if entry then
+            -- "SHARED OUT" rather than "NOT ENOUGH": the head on this tile is fine, and saying otherwise next to a
+            -- comfortable number would read as a bug. What is missing is room on the line.
+            local verdict = "OK"
+            if not entry.ok then
+                verdict = report.starvedHere and "SHARED OUT" or "NOT ENOUGH"
+                -- "SHARED OUT" says the search dropped it. Whether it HAD to is a different question, and the one that
+                -- decides whether this is a fact about the plumbing or a fault in the search.
+                if report.couldServeHere == true then
+                    verdict = verdict .. "  <-- but it COULD be served; the search gave up early"
+                elseif report.couldServeHere == false and report.serveBlockedBy then
+                    verdict = verdict .. "  (adding it would starve " .. tostring(report.serveBlockedBy) .. ")"
+                end
+            end
             add("  %-9s %6.2f  (needs %.1f, friction %.3f/tile)  %s",
-                kind, entry.head or 0, entry.minimum, entry.friction,
-                entry.ok and "OK" or "NOT ENOUGH")
+                kind, entry.head or 0, entry.minimum, entry.friction, verdict)
         end
     end
 
     add(" ")
-    add("Sources (head delivered here at tap flow):")
+    -- Head is a property of the TILE now, not of each (source, consumer) pair. What is still worth listing
+    -- per source is what it holds and whether it sits high enough to help at all.
+    add("Sources (gravity only -> pressurised, pumps included):")
     if #report.sources == 0 then
         add("  none")
     end
     for _, source in ipairs(report.sources) do
-        -- A source reached through a regulator shows the ceiling that capped it, so a surprising
-        -- head can be traced to the router responsible.
-        add("  z=%d hops=%d  %.1f/%.1f %s  %s->  %6.2f",
-            source.z or 0, source.hops or 0, source.amount or 0, source.capacity or 0,
-            tostring(source.fluidType),
-            source.ceiling and string.format("[cap %.1f] ", source.ceiling) or "",
-            source.head or 0)
+        add("  z=%d hops=%s  %.1f/%.1f %s  ->  %6.2f -> %6.2f",
+            source.z or 0, source.hops and tostring(source.hops) or "-",
+            source.amount or 0, source.capacity or 0,
+            tostring(source.fluidType), source.staticHead or 0,
+            source.supplyHead or source.staticHead or 0)
     end
 
     return lines
@@ -611,6 +626,96 @@ local function buildPressureDebugTooltip(square)
     tooltip:setName("Inspect Pressure")
     tooltip.description = table.concat(describePressureReport(report, square), " <LINE> ")
     return tooltip
+end
+
+-- Real milliseconds, on this machine, for this mod's periodic work. Turning it on resets the window,
+-- so the numbers describe what happened since you asked rather than since the save loaded.
+function ContextMenu.toggleProfiler(playerObj)
+    if not isDebugActive() then
+        return
+    end
+    WaterPipes.Profiler.toggle()
+end
+
+function ContextMenu.dumpProfile(playerObj)
+    if not isDebugActive() then
+        return
+    end
+    WaterPipes.Profiler.dump()
+end
+
+-- One log line per removal this mod would care about, naming what left and which of the mod's tables
+-- claimed its tile. See docs/removal-events.md.
+
+-- ===== Destruction tools, for docs/removal-events.md =====
+-- The open question there is whether the engine ever removes an object WITHOUT raising
+-- OnObjectAboutToBeRemoved, since three periodic safety nets exist solely for that doubt.
+-- Every call below is wrapped and logged rather than trusted: these are engine entry points whose
+-- signatures move between builds, and a debug tool that crashes the session it is meant to observe is
+-- worse than none. If a name is wrong here, the log says so and the game keeps running.
+local function tryCall(label, fn, ...)
+    if type(fn) ~= "function" then
+        WaterPipes.Logger.warn("debug tool: " .. label .. " is not available in this build")
+        return false
+    end
+    local ok, err = pcall(fn, ...)
+    if not ok then
+        WaterPipes.Logger.warn("debug tool: " .. label .. " failed -- " .. tostring(err))
+        return false
+    end
+    WaterPipes.Logger.log("debug tool: " .. label .. " ok")
+    return true
+end
+
+-- A zombie next to the pipes, so it can be led into whatever is standing on them.
+function ContextMenu.spawnZombieHere(playerObj, square)
+    if not isDebugActive() or not square then
+        return
+    end
+
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    WaterPipes.Logger.log(("debug tool: spawning a zombie at %d:%d:%d"):format(x, y, z))
+
+    -- Two spellings, because which one exists depends on the build. The first that works wins.
+    if tryCall("addZombiesInOutfit", _G.addZombiesInOutfit, x, y, z, 1, nil, 0) then
+        return
+    end
+    tryCall("createHorde", _G.createHorde, x, y, x + 1, y + 1, z, 1, false)
+end
+
+-- Fire ON the tile. This is the interesting case: a barrel standing on a pipe tile is destructible,
+-- and whether its removal raises the event is exactly what is unproven.
+function ContextMenu.startFireHere(playerObj, square)
+    if not isDebugActive() or not square then
+        return
+    end
+
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    WaterPipes.Logger.log(("debug tool: starting a fire at %d:%d:%d"):format(x, y, z))
+    WaterPipes.Logger.log("debug tool: turn the Removal Audit ON first, then watch for a REMOVAL line "
+        .. "for whatever burns. No line means the event never fired -- see docs/removal-events.md.")
+
+    local manager = _G.IsoFireManager
+    if not manager then
+        WaterPipes.Logger.warn("debug tool: IsoFireManager is not available in this build")
+        return
+    end
+
+    local cell = getCell and getCell() or nil
+    -- StartFire's arity has changed across builds; try the long form first, then the short.
+    if tryCall("IsoFireManager.StartFire(cell, sq, spread, life)",
+        manager.StartFire, cell, square, true, 100) then
+        return
+    end
+    tryCall("IsoFireManager.StartFire(cell, sq, spread, life, intensity)",
+        manager.StartFire, cell, square, true, 100, 10)
+end
+
+function ContextMenu.toggleRemovalAudit(playerObj)
+    if not isDebugActive() then
+        return
+    end
+    WaterPipes.RemovalAudit.toggle()
 end
 
 function ContextMenu.toggleIrrigationOverlay(playerObj)
@@ -659,6 +764,18 @@ local function addDebugMenu(context, subMenu, playerObj, endpointObject, square)
         and "Irrigation Overlay: ON" or "Irrigation Overlay: OFF"
     debugSubMenu:addOption(overlayName, playerObj, ContextMenu.toggleIrrigationOverlay)
     debugSubMenu:addOption("Run Irrigation Now (+2h)", playerObj, ContextMenu.runIrrigationNow)
+    local profilerName = WaterPipes.Profiler.isEnabled() and "Profiler: ON" or "Profiler: OFF"
+    debugSubMenu:addOption(profilerName, playerObj, ContextMenu.toggleProfiler)
+    debugSubMenu:addOption("Dump Performance Profile", playerObj, ContextMenu.dumpProfile)
+    local auditName = WaterPipes.RemovalAudit.isEnabled()
+        and "Removal Audit: ON" or "Removal Audit: OFF"
+    debugSubMenu:addOption(auditName, playerObj, ContextMenu.toggleRemovalAudit)
+    if square then
+        debugSubMenu:addOption("Spawn Zombie Here", playerObj, ContextMenu.spawnZombieHere, square)
+        debugSubMenu:addOption("Start Fire Here", playerObj, ContextMenu.startFireHere, square)
+    end
+    debugSubMenu:addOption("Check Irrigation Conservation (+2h)", playerObj,
+        ContextMenu.checkIrrigationConservation)
     if endpointObject then
         debugSubMenu:addOption("Dump Plumbing Diagnostics", playerObj, ContextMenu.dumpPlumbingDiagnostics, endpointObject)
         debugSubMenu:addOption("Dump Adapter Diagnostics", playerObj, ContextMenu.dumpAdapterDiagnostics, endpointObject)
@@ -769,10 +886,9 @@ local function resolveFixtureName(worldObject)
     return getText("IGUI_WaterPipesFixture")
 end
 
--- Sinks: connecting uses the VANILLA "Plumb <name>" option (intercepted by onVanillaPlumbItem so
--- it joins our network). Once plumbed, the engine often KEEPS showing that "Plumb" option, so we
--- turn it in-place into our "Unplumb <name>" (no add/remove -> no menu glitches). If the engine
--- shows none, we add our own Unplumb (vanilla provides no unplumb).
+-- Sinks connect through the VANILLA "Plumb <name>" option (intercepted by onVanillaPlumbItem so it
+-- joins our network). Once plumbed the engine often KEEPS showing it, so it is turned in place into our
+-- "Unplumb <name>" -- no add/remove, no menu glitches. If the engine shows none, we add our own.
 local function addTopLevelUnplumbOption(context, playerObj, endpointObject)
     if not endpointObject or not playerHasPipeWrench(playerObj) or not EndpointPlumbing.canUnplumb(endpointObject) then
         return
@@ -820,6 +936,46 @@ local function addModPlumbOption(context, playerObj, endpointObject, worldobject
     applyPlumbOptionIcon(context:addOption(optionName, worldobjects, ISWorldObjectContextMenu.onPlumbItem, playerObj:getPlayerNum(), endpointObject))
 end
 
+-- The conservation check's verdict, in one line for the halo and a few for console.txt. Kept here so
+-- the single-player path and the multiplayer reply render identically.
+local function reportConservation(playerObj, report)
+    if not report then
+        return
+    end
+    local headline = string.format("Water Pipes: conservation %s (error %+.4f L)",
+        report.ok and "OK" or "MISMATCH", report.error or 0)
+    if HaloTextHelper then
+        if report.ok then
+            HaloTextHelper.addGoodText(playerObj, headline)
+        elseif HaloTextHelper.addBadText then
+            HaloTextHelper.addBadText(playerObj, headline)
+        else
+            HaloTextHelper.addText(playerObj, headline)
+        end
+    end
+    Logger.log(string.format(
+        "[conservation] dt=%.2fh over %d vessel(s): before %.4f L, after %.4f L",
+        report.dtHours or 0, report.vessels or 0, report.before or 0, report.after or 0))
+    Logger.log(string.format(
+        "[conservation] network is missing %.4f L, emitters spent %.4f L, error %+.4f L -> %s",
+        report.missing or 0, report.spent or 0, report.error or 0,
+        report.ok and "OK" or "MISMATCH -- water was conjured or destroyed"))
+end
+
+-- Run an irrigation pass and check that the water the emitters spent is exactly the water the network
+-- lost. Server-owned -- the farming system and the network state both live there -- and routed through
+-- a command in single-player too, so there is one path to test rather than two.
+function ContextMenu.checkIrrigationConservation(playerObj)
+    if not isDebugActive() or not playerObj then
+        return
+    end
+
+    sendClientCommand(playerObj, "WaterPipes", "checkIrrigationConservation", { dt = 2.0 })
+    if HaloTextHelper then
+        HaloTextHelper.addText(playerObj, "Water Pipes: checking conservation...")
+    end
+end
+
 local function onServerCommand(module, command, args)
     if module ~= "WaterPipes" then
         return
@@ -836,14 +992,18 @@ local function onServerCommand(module, command, args)
     elseif command == "debugNetworkTickApplied" then
         HaloTextHelper.addGoodText(playerObj, "Water Pipes: network tick updated")
         Logger.log("Debug network tick applied")
+    elseif command == "debugIrrigationConservation" then
+        reportConservation(playerObj, args)
     end
 end
 
--- An entry may accept several interchangeable items (either charcoal), so the requirement is shown
--- as "A / B" rather than pinning the player to the one they happen not to have.
+-- An entry may accept several interchangeable items, so the requirement reads "A / B" rather than
+-- pinning the player to the one they happen not to have. A tag-only entry names its displayType
+-- instead: the tag has no name a player would recognise, and listing every item carrying it would grow
+-- with each mod installed.
 local function describeRepairEntry(entry)
     local names = {}
-    for _, itemType in ipairs(Constants.repairTypes(entry)) do
+    for _, itemType in ipairs(Constants.repairLabelTypes(entry)) do
         names[#names + 1] = getItemNameFromFullType(itemType) or itemType
     end
     return "  " .. (entry.count or 1) .. " x " .. table.concat(names, " / ")
@@ -968,9 +1128,9 @@ end
 
 -- ===== Water pump: switch + status =====
 
--- Flipping the switch is a physical act, so the character walks over to the machine first and the
--- state only changes when the timed action completes (ISTogglePump, which is where the world change
--- is made server-authoritatively). No tool: it is a switch, not plumbing.
+-- Flipping the switch is a physical act, so the character walks over first and the state only changes
+-- when the timed action completes (ISTogglePump, where the world change is made
+-- server-authoritatively). No tool: it is a switch, not plumbing.
 function ContextMenu.togglePump(playerObj, pump, enable)
     if not playerObj or not pump then
         return
@@ -993,13 +1153,10 @@ function ContextMenu.openPump(playerObj, pump)
     end
 end
 
--- The pump gets a submenu of its own, titled with the machine's name, because it now has more than
--- one thing you can do to it. The switch entry is labelled with what clicking will DO, not with what
--- the pump currently is, so there is never any doubt which way it is about to go.
---
--- The name is its own IGUI key rather than the recipe's bare "WaterPump" entry: that one lives in
--- Recipes.json for the crafting UI, and a getText miss there would put the raw key on screen. The
--- text is identical in all three locales, so this still reads like the build menu.
+-- The pump gets a submenu of its own, titled with the machine's name. The switch entry is labelled with
+-- what clicking will DO, not with what the pump currently is, so there is no doubt which way it goes.
+-- The name is its own IGUI key rather than the recipe's bare "WaterPump" entry, which lives in
+-- Recipes.json for the crafting UI: a getText miss there would put the raw key on screen.
 local function addPumpMenu(context, playerObj, pump)
     local rootOption = context:addOption(getText("IGUI_WaterPipesPumpName"), nil, nil)
     local subMenu = ISContextMenu:getNew(context)
@@ -1027,13 +1184,10 @@ local function formatHead(value)
     return string.format("%.1f", value or 0)
 end
 
--- The gauge is a readout, not a machine: everything it knows fits in a tooltip, so it needs no
--- window of its own. Pressure is otherwise an invisible number -- this is where the player sees it.
---
--- It reports the pressure and nothing else. It used to also advise on sprinklers and drip emitters,
--- but a gauge cannot know what is downstream of it: it read the pressure on ITS tile and then talked
--- about crops that might be twenty tiles and a regulator away. Emitters answer for themselves now --
--- see buildEmitterTooltip.
+-- The gauge is a readout, not a machine: everything it knows fits in a tooltip, so it needs no window.
+-- It reports the pressure and nothing else. It used to advise on sprinklers and drips too, but a gauge
+-- cannot know what is downstream of it -- it read the pressure on ITS tile and then talked about crops
+-- twenty tiles and a regulator away. Emitters answer for themselves; see buildEmitterTooltip.
 local function buildGaugeTooltip(square)
     local tooltip = ISWorldObjectContextMenu.addToolTip()
     tooltip:setName(getText("ContextMenu_WaterPipesReadGauge"))
@@ -1051,9 +1205,9 @@ local function buildGaugeTooltip(square)
     return tooltip
 end
 
--- Emitters diagnose themselves. The pressure that decides whether a drip or a sprinkler runs is the
--- pressure ON ITS OWN TILE at ITS OWN flow rate -- a sprinkler loses head four times faster than a
--- tap, so a gauge reading taken elsewhere never answered the question the player was actually asking.
+-- Emitters diagnose themselves. What decides whether a drip or a sprinkler runs is the pressure ON ITS
+-- OWN TILE at ITS OWN flow rate -- a sprinkler loses head four times faster than a tap -- so a gauge
+-- reading taken elsewhere never answered the question the player was asking.
 local function buildEmitterTooltip(emitterObject)
     local tooltip = ISWorldObjectContextMenu.addToolTip()
     tooltip:setName(getText("ContextMenu_WaterPipesCheckEmitter"))
@@ -1067,22 +1221,56 @@ local function buildEmitterTooltip(emitterObject)
         -- A burst emitter is a plumbing fault, not a pressure reading: say so and stop.
         lines[#lines + 1] = getText("IGUI_WaterPipesEmitterBurst")
     else
-        lines[#lines + 1] = status.pressure
-            and getText("IGUI_WaterPipesEmitterPressure", formatHead(status.pressure))
-            or getText("IGUI_WaterPipesEmitterNoSupply")
+        -- The head shown is the one this emitter would have WHILE RUNNING. The solved field excludes the draw
+        -- of an emitter the line cannot carry, so it reads high precisely because the emitter is off -- which
+        -- showed a sprinkler 37 above the line "needs 20". Re-pricing the zone costs a relaxation, so it
+        -- happens HERE and nowhere else: a tooltip is opened deliberately, one emitter at a time, while the
+        -- spray FX asks about every emitter in sight and keeps using the cached field.
+        
+        -- WHY it is not watering, and the order of these two questions is not arbitrary. WATER FIRST: with
+        -- nothing in the pipes there is no supply for the field to propagate from, so the pressure gate fails
+        -- for want of water, and asking about pressure first blamed a dry network on its pressure.
+        local head, needed = status.pressure, nil
+        if status.hasWater and not status.reaches and WaterPipes.Hydraulics then
+            local square = emitterObject:getSquare()
+            local solution = WaterPipes.Hydraulics.solveAt(square)
 
-        if not status.reaches then
-            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterLow", formatHead(status.minimum))
-        elseif not status.hasWater then
-            -- Pressure is fine, the pipes are simply empty. Different problem, different fix.
+            local running = WaterPipes.Hydraulics.headIfDrawing(solution, square, status.kind)
+            if running then
+                head = running
+            end
+
+            -- How much more head the LINE needs, which is not how far this tile is below its own minimum. A
+            -- sprinkler reading 30 against a minimum of 20 is short of nothing itself; it is off because switching
+            -- it on would push a different emitter under.
+            needed = WaterPipes.Hydraulics.headNeededToServe(solution, square, status.kind)
+        end
+
+        if head then
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterPressure", formatHead(head))
+        elseif status.hasWater then
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterNoSupply")
+        end
+
+        if not status.hasWater then
+            -- The pipes are empty. Nothing about pressure is worth saying until they are not.
             lines[#lines + 1] = getText("IGUI_WaterPipesEmitterDry")
+        elseif not status.reaches and needed and needed > 0 then
+            -- One sentence, one number: how much more pressure the line needs before this emitter runs. It covers
+            -- both reasons an emitter is off for pressure -- its own head too low, or its draw pushing another
+            -- under -- because in both cases the answer is the same figure, the worst shortfall in the set.
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterShort", formatHead(needed))
+        elseif not status.reaches then
+            -- There is water, and the figure could not be worked out. Nothing to say beyond the
+            -- requirement itself.
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterLow", formatHead(status.minimum))
         else
             lines[#lines + 1] = getText("IGUI_WaterPipesEmitterWatering")
         end
 
         -- Only worth mentioning on a drip, and only while the line is genuinely over the limit.
         local burst = Irrigation.burstPressure()
-        if Irrigation.isDrip(emitterObject) and burst and (status.pressure or 0) > burst then
+        if Irrigation.isDrip(emitterObject) and burst and (head or 0) > burst then
             lines[#lines + 1] = getText("IGUI_WaterPipesEmitterBurstRisk", formatHead(burst))
         end
     end
@@ -1109,9 +1297,9 @@ local function buildHydrantTooltip(hydrant)
     return tooltip
 end
 
--- The ceiling is set in its own little dialog (slider plus a typed field) rather than a menu of
--- fixed steps: the useful values sit against real thresholds -- a drip emitter bursts above 15.0,
--- a sprinkler needs 20.0 -- so the player needs to land on an exact number, not the nearest five.
+-- The ceiling is set in its own little dialog (slider plus a typed field) rather than a menu of fixed
+-- steps: the useful values sit against real thresholds -- a drip bursts above 15.0, a sprinkler needs
+-- 20.0 -- so the player has to land on an exact number, not the nearest five.
 local function addRouterPressureMenu(context, playerObj, router)
     context:addOption(getText("ContextMenu_WaterPipesRouterPressureOpen"), playerObj,
         ContextMenu.openRouterPressure, router)
@@ -1155,10 +1343,9 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     end
 
     local endpointObject = EndpointObjects.findInWorldObjects(worldobjects)
-    -- Sinks/fixtures: connecting normally uses the VANILLA "Plumb" option (intercepted by
-    -- onVanillaPlumbItem so it joins our network). We don't duplicate it. But the engine hides that
-    -- option for fixtures that already use a water source (or have no vanilla source in the room),
-    -- so when it's absent we add our OWN "Plumb" so any piped fixture can still be connected.
+    -- Sinks normally connect through the VANILLA "Plumb" option (intercepted by onVanillaPlumbItem), which
+    -- we do not duplicate. The engine hides it for fixtures that already use a water source, so when it is
+    -- absent we add our own.
     local hasUnplumbOption = endpointObject
         and playerHasPipeWrench(playerObj)
         and EndpointPlumbing.canUnplumb(endpointObject)
@@ -1194,9 +1381,8 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     local gaugeObject = findGaugeInWorldObjects(worldobjects)
     local hasGaugeOption = gaugeObject ~= nil
 
-    -- The pump's switch and readout. Unlike the router regulator these stay available with the
-    -- pressure model off: the switch still stops the intake, and the readout still answers whether
-    -- the machine has power.
+    -- The pump's switch and readout stay available with the pressure model off, unlike the router
+    -- regulator: the switch still stops the intake, and the readout still answers whether it has power.
     local pumpObject = findPumpInWorldObjects(worldobjects)
     local hasPumpOption = pumpObject ~= nil
 
@@ -1253,11 +1439,9 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     if hasPurifierOption then
         addPurifierOptions(context, playerObj, purifierObject)
 
-        -- Ask the ANCHOR, not whichever of the 2x2 tiles happened to be clicked. The filter condition
-        -- lives in the anchor's modData because that is the tile the server processes the tank on, so
-        -- the other three read the default 100 -- and a worn filter offered no repair option at all
-        -- from three quarters of the machine, while the readout window (which resolves the anchor
-        -- properly) sat there showing 13%.
+        -- Ask the ANCHOR, not whichever of the 2x2 tiles happened to be clicked. The filter condition lives in
+        -- the anchor's modData, so the other three read the default 100 -- and a worn filter offered no repair
+        -- option from three quarters of the machine while the readout window showed 13%.
         local anchor = resolvePurifierAnchor(purifierObject) or purifierObject
 
         -- "Repair filter" appears only once the filter has worn below full. Enabled when the player

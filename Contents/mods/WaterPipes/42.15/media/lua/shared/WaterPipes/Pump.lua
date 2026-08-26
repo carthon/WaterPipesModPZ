@@ -93,6 +93,13 @@ function Pump.setEnabled(worldObject, enabled)
     if worldObject.transmitModData then
         pcall(worldObject.transmitModData, worldObject)
     end
+
+    -- A pump is half the head in most zones, so flipping it invalidates the solved field. Resolved off
+    -- the WaterPipes table rather than required at the top: Hydraulics already requires this module.
+    local Hydraulics = WaterPipes.Hydraulics
+    if Hydraulics and Hydraulics.invalidate then
+        Hydraulics.invalidate()
+    end
 end
 
 function Pump.isPowered(worldObject)
@@ -158,10 +165,8 @@ local function isOpenWaterSquare(square)
 end
 
 -- The name of the entity script behind a world object, or nil for a plain scenery tile.
---
--- getEntityScript() is the accessor that answers on a B42 entity object; getScriptName() is the
--- vehicle one and returns the literal string "none" here, which is why asking it alone never matched
--- a well. Both are tried, cheapest-correct first, so this keeps working either way.
+-- getEntityScript() is the accessor that answers on a B42 entity object; getScriptName() is the vehicle
+-- one and returns the literal string "none" here, which is why asking it alone never matched a well.
 local function entityNameOf(worldObject)
     if not worldObject then
         return nil
@@ -335,10 +340,8 @@ end
 -- ===== Readout =====
 
 -- Everything the status dialog and the context menu need, in one call.
---
 -- NetworkAccess is deliberately NOT required at the top of this file: it already requires Pump, and
--- closing that loop would make the pair a recursive require. Anything asking for a status runs long
--- after both modules are loaded, so it is resolved off the WaterPipes table here instead.
+-- closing that loop would make the pair a recursive require.
 function Pump.getStatus(pumpObject)
     if not Pump.isPump(pumpObject) then
         return nil
@@ -360,11 +363,10 @@ function Pump.getStatus(pumpObject)
     status.sourceKind = source and source.kind or nil     -- "well" | "water" | nil
     status.drawing = status.running and source ~= nil
 
-    -- Pressure side. `outlet` is what the line actually holds at this tile right now; `inlet` is what
-    -- it would hold WITHOUT this pump. A zone's lift is max(pump head, municipal supply floor), so a
-    -- pump standing on a mains-fed run can be adding nothing at all -- which is exactly what the
-    -- player is trying to find out. Taking the difference between the two lifts says so honestly,
-    -- where subtracting a nominal 25.0 would invent a contribution the pump is not making.
+    -- Pressure side. `outlet` is what the line holds at this tile right now; `inlet` is what it would hold
+    -- WITHOUT this pump. A zone's lift is max(pump head, municipal supply floor), so a pump on a mains-fed
+    -- run can be adding nothing at all -- which is exactly what the player is trying to find out. Taking
+    -- the difference says so honestly, where subtracting a nominal 25.0 would invent a contribution.
     local NetworkAccess = WaterPipes.NetworkAccess
     local report = NetworkAccess and NetworkAccess.getPressureReport(square) or nil
     if report then

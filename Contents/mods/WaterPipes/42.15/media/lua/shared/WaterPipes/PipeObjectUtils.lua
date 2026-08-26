@@ -66,18 +66,44 @@ function PipeObjectUtils.hasWallCoverOnSquare(square)
     return false
 end
 
+-- What a pipe was built from: Constants.PIPE_MATERIAL_CLAY or nil for the metal default. Also returns
+-- a short string naming where the answer came from, for the dismantle log.
+-- The build-time stamp is the only source, and a pipe without one reads as metal. The clay recipe has
+-- never shipped, so the only pipes predating the stamp are on a developer's test save.
+-- A fallback did live here, reading the item the IsoThumpable was built from. getFullType() is not how
+-- you reach it: in game it returned nothing usable and every pre-stamp pipe came back "unknown". It is
+-- gone rather than left in place -- a fallback that silently does not work makes the log claim a source
+-- it never used.
+-- The modData read is pcall'd here specifically: this runs against an object the engine is in the
+-- middle of REMOVING, and the cost of it throwing is a dismantle that errors out instead of handing
+-- the player their pipe back.
+function PipeObjectUtils.getBuildMaterial(worldObject)
+    if not worldObject then
+        return nil, "no object"
+    end
+
+    local ok, modData = pcall(getPipeModData, worldObject)
+    local stamped = ok and modData and modData[Constants.PIPE_MATERIAL_MODDATA_KEY] or nil
+    if stamped then
+        return stamped, "modData=" .. tostring(stamped)
+    end
+
+    return nil, "no material stamp (built before the stamp existed), assuming metal"
+end
+
+function PipeObjectUtils.isClayBuilt(worldObject)
+    local material, source = PipeObjectUtils.getBuildMaterial(worldObject)
+    return material == Constants.PIPE_MATERIAL_CLAY, source
+end
+
 -- ===== Per-frame scan memo =====
---
--- getPipeObjectsOnSquare is the most-called world accessor in the mod by a wide margin: a single
--- network walk asks it about thirteen times per pipe tile -- the router check on the way in, then the
--- pipe check and the router check again inside tryAdd, then the pump lookup, and all of that again
--- from each of the four neighbours the tile is reached from. Every one of those calls walks the
--- square's entire object list and allocates a fresh table.
---
--- The answer cannot change unless an object is added to or removed from the square, and both raise
--- events. So it is memoised, and the memo is dropped on those events and, as a backstop, once per
--- frame. That bounds staleness at a single frame while letting a whole periodic pass -- which runs
--- inside one frame -- share one scan per tile instead of thirteen.
+-- getPipeObjectsOnSquare is the most-called world accessor in the mod by a wide margin: a single network
+-- walk asks it about thirteen times per pipe tile, and every call walks the square's entire object list
+-- and allocates a fresh table.
+-- The answer cannot change unless an object joins or leaves the square, or streaming rebuilds the square
+-- itself. All three raise events, so it is memoised and dropped on those events -- by TILE.
+-- It used to be dropped once per frame as well, and that clear undid the invalidation above it: this
+-- scan is what classify() calls for every one of the 1 681 tiles the client registry sweeps.
 local scanMemo = {}
 
 local function memoKey(square)
@@ -86,6 +112,38 @@ end
 
 function PipeObjectUtils.invalidateScanCache()
     scanMemo = {}
+end
+
+-- Recompute ONE tile and compare it against what was remembered. True when they agree.
+-- This replaces the periodic wholesale drop, which assumed the memo was wrong and paid to rebuild every
+-- tile of every network -- ~190 ms of client work per in-game minute, in one frame. This assumes the
+-- memo is RIGHT, checks a few tiles, and says so when it is not. The memo is left holding the fresh
+-- answer either way, so a disagreement is also a repair.
+-- A disagreement means an object left a tile without OnObjectAboutToBeRemoved firing, which nobody has
+-- ever observed. Evidence instead of nerve -- see docs/removal-events.md.
+function PipeObjectUtils.verifySquareScan(square)
+    if not square or not square.getObjects then
+        return true
+    end
+
+    local key = memoKey(square)
+    local remembered = scanMemo[key]
+    if not remembered then
+        return true
+    end
+
+    scanMemo[key] = nil
+    local fresh = PipeObjectUtils.getPipeObjectsOnSquare(square)
+
+    if #fresh ~= #remembered then
+        return false
+    end
+    for index = 1, #fresh do
+        if fresh[index] ~= remembered[index] then
+            return false
+        end
+    end
+    return true
 end
 
 function PipeObjectUtils.invalidateSquareScan(square)
@@ -208,9 +266,10 @@ function PipeObjectUtils.getRiserVerticalNeighborCoords(x, y, z)
     return coords
 end
 
--- The scan memo's invalidation. Object add/remove clears the square it happened on; the per-frame
--- clear is the backstop that keeps any path we have not thought of from ever seeing a stale list for
--- longer than one frame.
+-- The scan memo's invalidation. Object add/remove clears the square it happened on; LoadGridsquare
+-- clears a square the world has just rebuilt underneath us, which is the case the per-frame clear was
+-- really guarding and the only one it caught that these do not. The per-minute pass drops the lot as a
+-- backstop for anything not thought of here.
 if Events then
     local function invalidateForObject(object)
         local square = object and object.getSquare and object:getSquare() or nil
@@ -223,7 +282,9 @@ if Events then
 
     if Events.OnObjectAdded then Events.OnObjectAdded.Add(invalidateForObject) end
     if Events.OnObjectAboutToBeRemoved then Events.OnObjectAboutToBeRemoved.Add(invalidateForObject) end
-    if Events.OnTick then Events.OnTick.Add(PipeObjectUtils.invalidateScanCache) end
+    if Events.LoadGridsquare then
+        Events.LoadGridsquare.Add(function(square) pcall(PipeObjectUtils.invalidateSquareScan, square) end)
+    end
 end
 
 function PipeObjectUtils.getSquareFromWorldObjects(worldobjects)

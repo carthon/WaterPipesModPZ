@@ -10,14 +10,11 @@ local Irrigation = WaterPipes.Irrigation
 local Registry = WaterPipes.TileRegistry
 local IrrigationDebug = WaterPipes.IrrigationDebug
 
--- A debug overlay that makes irrigation visible. While it is on, every crop near the player is tinted
--- by its water level (red = dry, green = full) and every emitter by whether it can water right now
--- (green = active, yellow = has water but not enough pressure or nothing thirsty, red = no supply,
--- magenta = burst drip). Both are read live each refresh, so watering a crop shifts its colour toward
--- green in real time -- click "Run Irrigation Now" to make that happen without waiting an in-game hour.
---
--- Everything here is client-side and reads modData the crop already syncs (waterLvl / state /
--- nbOfGrow), so it needs no farming-system access and works the same in SP and on an MP client.
+-- A debug overlay that makes irrigation visible. Every crop near the player is tinted by its water
+-- level (red = dry, green = full) and every emitter by whether it can water right now (green = active,
+-- yellow = has water but not enough pressure or nothing thirsty, red = no supply, magenta = burst).
+-- Both are read live each refresh.
+-- Client-side, reading modData the crop already syncs, so it needs no farming-system access.
 
 IrrigationDebug.enabled = false
 
@@ -85,10 +82,10 @@ local function cropWaterLevel(worldObject)
     return tonumber(modData.waterLvl) or 0
 end
 
-local function colorForEmitter(emitter, square)
+local function colorForEmitter(found, stamp)
     -- Through the registry's cache: the overlay refreshes four times a second and the status is
     -- derived from a full network walk, which only changes when the server's minute pass runs.
-    local status = Registry.emitterStatus(emitter, square)
+    local status = Registry.statusFor(found, stamp)
     if not status then
         return nil
     end
@@ -124,9 +121,10 @@ local function refresh()
 
     -- Emitters first: they are the thing being tested. Taken from the registry, so the overlay no
     -- longer asks every pipe object on 961 tiles whether it happens to be an emitter.
+    local stamp = Registry.stamp()
     for _, found in ipairs(Registry.near("emitters", math.floor(px), math.floor(py),
                                          math.floor(pz), SCAN_RADIUS)) do
-        local color = colorForEmitter(found.object, found.square)
+        local color = colorForEmitter(found, stamp)
         if color then
             tint(found.object, color)
         end

@@ -2,13 +2,10 @@ require "TimedActions/ISBaseTimedAction"
 require "WaterPipes/Constants"
 require "WaterPipes/Pump"
 
--- Flipping a water pump's switch. The character walks to the pump, reaches down to the panel and only
--- then does the state change -- same shape as ISToggleHydrant, except a switch needs no tool, so the
--- option shows with empty hands. The flip itself is server-authoritative (a client command in MP,
--- direct in single-player), so every client agrees on which pumps are running.
---
--- The animation and the LightSwitch sound follow vanilla's ISActivateCarBatteryChargerAction, which is
--- the same gesture on the same kind of machine.
+-- Flipping a water pump's switch. The character walks to the pump and the state changes only when the
+-- action completes -- same shape as ISToggleHydrant, except a switch needs no tool. The flip is
+-- server-authoritative, so every client agrees on which pumps are running.
+-- The animation and LightSwitch sound follow vanilla's ISActivateCarBatteryChargerAction.
 
 ISTogglePump = ISBaseTimedAction:derive("ISTogglePump")
 

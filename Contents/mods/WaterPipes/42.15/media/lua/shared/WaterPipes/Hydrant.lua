@@ -10,13 +10,10 @@ local Mains = WaterPipes.Mains
 local State = WaterPipes.State
 local Hydrant = WaterPipes.Hydrant
 
--- A fire hydrant is a plain vanilla street object (the Mov_FireHydrant decoration) with no water of
--- its own -- its tiledef is empty. This module gives it one: opened with a pipe wrench it feeds the
--- pipe network laid on its tile, mains-fed and bottomless while the town service runs, and holding
--- only a fixed local reserve once the water is cut. See the hydrant block in Constants.lua.
---
--- The identity, the open/closed flag and the reserve live here; the injection pass that actually
--- moves water lives in WaterPipeSystem, next to the pump and mains passes it mirrors.
+-- A fire hydrant is a plain vanilla street object (Mov_FireHydrant) with no water of its own. This
+-- module gives it one: opened with a pipe wrench it feeds the pipe network laid on its tile, mains-fed
+-- and bottomless while the town service runs, and holding only a fixed local reserve once it is cut.
+-- The identity, the open flag and the reserve live here; the injection pass lives in WaterPipeSystem.
 
 local function getModData(worldObject)
     if not worldObject or not worldObject.getModData then

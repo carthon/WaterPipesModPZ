@@ -92,13 +92,11 @@ function Router.getOutOffset(worldObject)
 end
 
 -- ===== Pressure regulation =====
--- A router already stops pressure crossing it, which makes it the one place a player can put a
--- ceiling on a zone. Set it from the context menu; the setting is the head AT THE VALVE OUTLET, and
--- from there the water loses head over distance and height like any other run -- so a branch does not
--- sit at the setting all the way to its far end. The arithmetic is Pressure.atRegulator; this module
--- only stores the number. It can only ever REDUCE: the unregulated head is always one of the terms
--- the consumer takes the minimum of, so setting 25 on a line carrying 10 still gives 10. Pumps
--- BEHIND the valve stay behind it; a pump in front of it re-pressurises its own branch.
+-- A router already stops pressure crossing it, which makes it the one place a player can put a ceiling
+-- on a zone. The setting is the head AT THE VALVE OUTLET; from there the water loses head over distance
+-- and height like any other run, so a branch does not sit at the setting all the way to its far end.
+-- It can only ever REDUCE, and pumps BEHIND the valve stay behind it while one in front re-pressurises
+-- its own branch. The arithmetic is Pressure.atRegulator; this module only stores the number.
 
 function Router.getPressureCeiling(worldObject)
     local modData = getModData(worldObject)

@@ -55,10 +55,9 @@ local function keyFor(sq)
 end
 
 -- Play the machine hum on a WORLD free emitter at the purifier tile. We deliberately do NOT take
--- ownership: the engine's WorldSoundManager then ticks the pooled emitter for us. (An OWNED emitter --
--- and, in practice on this build, an object's own getEmitter() loop -- must be tick()'d by hand every
--- frame or it stays silent; that was the original no-sound bug.) A looping sound keeps the pooled
--- emitter busy so it is not recycled; we re-arm each rescan if it ever stops and re-apply the volume.
+-- ownership: the engine's WorldSoundManager then ticks the pooled emitter for us, where an OWNED one
+-- must be tick()'d by hand every frame or it stays silent. A looping sound keeps the pooled emitter
+-- busy so it is not recycled; each rescan re-arms it if it stopped and re-applies the volume.
 local function ensureLoop(sq, k)
     local entry = Sound.active[k]
     local playing = false

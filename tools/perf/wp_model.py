@@ -13,6 +13,7 @@ Cost model: 1 bridge call (BC) = 0.8 us nominal (range 0.3 - 2.0 us).
 Frame budget at 60 FPS = 16.7 ms. PZ runs Lua on the main thread.
 """
 
+import math
 from collections import defaultdict
 import sys
 
@@ -21,19 +22,41 @@ import sys
 # ----------------------------------------------------------------------------
 BC = defaultdict(int)          # bridge calls, by bucket
 CALLS = defaultdict(int)       # function invocation counts
+LUA = defaultdict(int)         # pure-Lua node visits, by bucket
 
 
 def bc(bucket, n=1):
     BC[bucket] += n
 
 
+# Pure-Lua work: table reads, inserts and comparisons that never cross into Java.
+#
+# This bucket did not exist while every hot path was a world walk, and the README said so outright --
+# "pure Lua arithmetic is noise next to [bridge calls]". The hydraulic solver broke that assumption.
+# It trades world access for a servable-set search and a relaxation, both of which are hundreds of
+# table operations per node and cross nothing. Counting only bridge calls reported that change as
+# free, and it was not: it was a real frame cost the harness could not see.
+#
+# Deliberately reported SEPARATELY rather than folded into the bridge total. One Kahlua table read is
+# nowhere near one JNI call, and adding them would invent a exchange rate nobody measured. What this
+# is for is spotting the shape -- work that grows with emitters x network, or per frame instead of per
+# minute -- which is exactly the class of mistake that made this counter necessary.
+def lua(bucket, n=1):
+    LUA[bucket] += n
+
+
 def reset():
     BC.clear()
     CALLS.clear()
+    LUA.clear()
 
 
 def total_bc():
     return sum(BC.values())
+
+
+def total_lua():
+    return sum(LUA.values())
 
 
 # ----------------------------------------------------------------------------
@@ -98,16 +121,47 @@ def isPipeObject(o):
     return True
 
 
-# Both caches live for exactly one frame, matching the Lua: PipeObjectUtils drops its
-# scan memo and NetworkAccess drops its traversal cache on OnTick, plus explicitly
-# whenever the pipe layout changes. frame_reset() is that boundary.
+# PipeObjectUtils' scan memo and NetworkAccess' traversal cache. Neither is dropped
+# by a frame any more: both are invalidated by tile on object add/remove and on
+# LoadGridsquare, and explicitly whenever the layout changes. frame_reset() below is
+# the frame boundary, and what remains under it is only what genuinely holds fluid.
 PIPE_SCAN_MEMO = {}
 TRAVERSAL_CACHE = {}
+# ContainerAdapter's vessel memo: which objects on a square are network storage, and
+# their capacity. Same one-frame lifetime and the same invalidation events. Only the
+# classification is remembered -- the amount and the fluid type are read fresh on
+# every call, which is why collectSquareContainers still costs something on a hit.
+VESSEL_MEMO = {}
+
+
+HYDRAULIC_CACHE = {}
+ZONE_OF_NODE = {}
 
 
 def frame_reset():
-    PIPE_SCAN_MEMO.clear()
-    TRAVERSAL_CACHE.clear()
+    # NOT the pipe-object scan. Which pipe objects sit on a tile changes only when
+    # one joins or leaves it, or when streaming rebuilds the square -- all three have
+    # events, none of them is a frame boundary. Third cache in this mod to have had a
+    # per-frame clear quietly undoing its own event invalidation.
+    #
+    # NOT the traversal cache either, which is the fourth and last of them. Since the
+    # draw path moved onto the hydraulic solve it serves fills and the overlay only,
+    # and a fill runs once a minute per pump -- so a frame-scoped entry was never once
+    # read warm and every headroom query walked the whole network cold. What it
+    # depends on is layout, router direction, what stands on a router tile, and the
+    # mains shutoff clock: three evented, one watched per minute. See the lifetime
+    # note above NetworkAccess.dropFrameMemos.
+    ZONE_VESSEL_MEMO.clear()
+    # NOT the vessel classification. Which objects on a tile are containers changes
+    # only when one joins or leaves it, or when streaming rebuilds the square --
+    # all three have events, and none of them is a frame boundary. Dropping it here
+    # meant reclassifying every tile of a zone on every spray-FX rebuild, three
+    # times a second, which measured at 77% of that rebuild.
+    # NOT the head field either -- see the note on invalidateTraversalCache.
+    # NOT the head field. It is dropped by the per-minute pass and by layout /
+    # pump / valve changes, never by a frame boundary -- see the note on
+    # NetworkAccess.invalidateTraversalCache. Clearing it here is what the Lua
+    # used to do, and it cost a full servable-set search every single frame.
 
 
 def getPipeObjectsOnSquare(sq):
@@ -203,21 +257,54 @@ def getDirectWorldFluidKind(o):
     return "worldFluid"
 
 
-def collectSquareContainers(sq):
-    """The single most expensive per-square routine in the mod."""
-    CALLS["collectSquareContainers"] += 1
-    if sq is None:
-        return {}
+def classifySquareVessels(sq):
+    """Adapter.classifySquareVessels: the expensive half, memoised per frame.
+
+    This used to be the single most expensive per-square routine in the mod, and it
+    ran on every network summary. The classification cannot change unless an object
+    joins or leaves the tile, and both raise events -- so it is remembered.
+    """
+    CALLS["classifySquareVessels"] += 1
     bc("getObjects", 1)
-    res = {}
+    out = []
     for i, o in enumerate(sq.objects):
         bc("getObjects", 1)
         if isEndpointCandidate(o):
             continue
         bc("isExcludedByName", 1)      # pcall getName
         if getDirectWorldFluidKind(o):
-            bc("descriptor", 4)        # capacity + amount + fluid type reads
-            res[(sq.x, sq.y, sq.z, i)] = {"z": sq.z, "obj": o}
+            bc("descriptor", 1)        # capacity read (fixed, so it is memoised too)
+            out.append((i, o))
+    return out
+
+
+def classifySquareVesselsCached(sq):
+    k = (sq.x, sq.y, sq.z)
+    hit = VESSEL_MEMO.get(k)
+    if hit is not None:
+        CALLS["vesselMemoHit"] += 1
+        return hit
+    out = classifySquareVessels(sq)
+    VESSEL_MEMO[k] = out
+    return out
+
+
+def hasSquareContainers(sq):
+    """Adapter.hasSquareContainers: classification only, no fluid read."""
+    if sq is None:
+        return False
+    return bool(classifySquareVesselsCached(sq))
+
+
+def collectSquareContainers(sq):
+    CALLS["collectSquareContainers"] += 1
+    if sq is None:
+        return {}
+    res = {}
+    for i, o in classifySquareVesselsCached(sq):
+        # Read fresh every time, memo or no memo: a stale amount would conjure water.
+        bc("descriptor", 3)            # amount + fluid type reads
+        res[(sq.x, sq.y, sq.z, i)] = {"z": sq.z, "obj": o}
     return res
 
 
@@ -353,7 +440,8 @@ CARDINAL = ((1, 0), (-1, 0), (0, 1), (0, -1))
 def routerIsHardBoundary(sq):
     if Purifier_findForRouterSquare(sq):
         return True
-    return bool(collectSquareContainers(sq))
+    # Only needs a yes/no, so it asks the classification and never reads a fluid.
+    return hasSquareContainers(sq)
 
 
 def collectPipeSquaresFromSquare(origin, conduct=False):
@@ -410,14 +498,80 @@ def collectPipeSquaresFromSquare(origin, conduct=False):
     return pipe_squares, hops
 
 
-def collectStorageDescriptors(pipe_squares):
-    scanned = set()
-    desc = {}
+# Zone id -> the tiles of that zone that hold a vessel. Frame-scoped, like the
+# traversal cache: see NetworkAccess.vesselSquaresOfZone.
+ZONE_VESSEL_MEMO = {}
+
+
+def vesselSquaresOfZone(solution):
+    """Where a zone keeps its water, found once per zone per frame.
+
+    The saving here is invisible to bc(): every square this skips had no vessel on
+    it, so it was already costing zero bridge calls. What it cost was the ITERATION
+    -- a key string built and a dedup set probed, per square, per consumer -- and
+    on 47 emitters over 180 tiles that is the single biggest pure-Lua term in the
+    mod. Counting it is the only reason this change is measurable at all.
+    """
+    zid = solution["id"]
+    cached = ZONE_VESSEL_MEMO.get(zid)
+    if cached is not None:
+        CALLS["zoneVesselHit"] += 1
+        return cached
+    out = []
+    for sq in solution["order"]:
+        lua("descriptors/discover", 3)          # key build + seen probe + insert
+        if classifySquareVesselsCached(sq):
+            out.append(sq)
+    ZONE_VESSEL_MEMO[zid] = out
+    return out
+
+
+def vesselSquaresOfWalk(entry, pipe_squares):
+    """NetworkAccess.vesselSquaresOfWalk: which tiles of a cached walk hold a vessel.
+
+    The fill side used to iterate every tile of the network on every query -- 200
+    tiles to rediscover the same twenty barrels, on every headroom question. The
+    draw side stopped doing that when vesselSquaresOfZone landed; the fill side had
+    no zone id to key on and was left behind.
+
+    It has something better now: the walk itself is cached with an event lifetime,
+    so the discovery lives ON the walk. Which tiles carry a vessel changes only when
+    an object joins or leaves one of them, and that already drops the whole entry.
+    """
+    if entry is not None and entry.get("vessels") is not None:
+        return entry["vessels"]
+
+    out = []
+    seen = set()
     for sq in pipe_squares:
+        lua("vessels/walk", 2)
         k = (sq.x, sq.y, sq.z)
-        if k in scanned:
+        if k in seen:
             continue
-        scanned.add(k)
+        seen.add(k)
+        if hasSquareContainers(sq):
+            out.append(sq)
+    if entry is not None:
+        entry["vessels"] = out
+    return out
+
+
+def collectStorageDescriptors(pipe_squares, solution=None, entry=None):
+    # DRAW: the tile set belongs to the zone, so the discovery is shared and only
+    # the vessel-bearing tiles are visited per consumer.
+    if solution is not None:
+        desc = {}
+        for sq in vesselSquaresOfZone(solution):
+            lua("descriptors/price", 3)         # hop lookup + chain lookup + write
+            desc.update(collectSquareContainers(sq))
+        return desc
+
+    # FILL / visualization: no solve to key a zone off, so the discovery is pooled
+    # onto the cached walk instead. Same rule as the draw side -- share the
+    # discovery, never the descriptors, which carry per-origin hop counts.
+    desc = {}
+    for sq in vesselSquaresOfWalk(entry, pipe_squares):
+        lua("descriptors/price", 3)
         desc.update(collectSquareContainers(sq))
     return desc
 
@@ -427,17 +581,116 @@ def collectPipeSquaresCached(origin, conduct=False):
 
     Keyed per ORIGIN, not per network: hop counts and regulator chains are measured
     from the consumer, so two consumers on the same network cannot share a walk.
+
+    Returns (pipe_squares, hops, entry). The entry is the cache record itself, so a
+    caller can hang a derived answer off it with the walk's own lifetime -- which is
+    what the pooled vessel discovery above uses.
     """
     if origin is None:
-        return [], {}
+        return [], {}, None
     k = ((origin.x, origin.y, origin.z), conduct)
     hit = TRAVERSAL_CACHE.get(k)
     if hit is not None:
         CALLS["traversalCacheHit"] += 1
-        return hit
-    result = collectPipeSquaresFromSquare(origin, conduct)
-    TRAVERSAL_CACHE[k] = result
-    return result
+        return hit["pipeSquares"], hit["hops"], hit
+    squares, hops = collectPipeSquaresFromSquare(origin, conduct)
+    entry = {"pipeSquares": squares, "hops": hops, "vessels": None}
+    TRAVERSAL_CACHE[k] = entry
+    return squares, hops, entry
+
+
+# ----------------------------------------------------------------------------
+# Hydraulics: the per-ZONE head field
+# ----------------------------------------------------------------------------
+# The point of the module, in cost terms: the walk below is the same shape as
+# collectPipeSquaresFromSquare, but it is keyed by ZONE instead of by origin, so
+# every consumer standing on a network shares one of them. The sweeps that follow
+# it (demand accumulation, head propagation, the starvation iterations) are pure
+# Lua over tables already in hand and cost no bridge calls at all -- which is why
+# HYDRAULIC_ITERATIONS does not appear in this model.
+def hydraulics_discover(seed):
+    """Port of Hydraulics.discover: undirected, purifier routers are walls."""
+    CALLS["hydraulicBFS"] += 1
+    seen = set()
+    queue = [seed]
+    seen.add((seed.x, seed.y, seed.z))
+    order = []
+
+    def consider(sq, _from):
+        if sq is None:
+            return
+        if Router_hasRouterOnSquare(sq):         # pipe scan on every neighbour
+            Router_findOnSquare(sq)
+            if routerIsHardBoundary(sq):
+                Purifier_findForRouterSquare(sq)
+                return
+            # Both sides of a bare regulator join the same zone: the valve prices
+            # the crossing, it does not sever it. Two lookups, whatever its axis.
+            for nb in (getGridSquare(sq.x + 1, sq.y, sq.z),
+                       getGridSquare(sq.x - 1, sq.y, sq.z)):
+                if nb is not None and getPipeOnSquare(nb) is not None:
+                    k = (nb.x, nb.y, nb.z)
+                    if k not in seen:
+                        seen.add(k)
+                        queue.append(nb)
+            return
+        if getPipeOnSquare(sq) is None:          # hasPipeOnSquare -> full pipe scan
+            return
+        k = (sq.x, sq.y, sq.z)
+        if k not in seen:
+            seen.add(k)
+            queue.append(sq)
+
+    i = 0
+    while i < len(queue):
+        cur = queue[i]
+        i += 1
+        order.append(cur)
+        for dx, dy in CARDINAL:
+            consider(getGridSquare(cur.x + dx, cur.y + dy, cur.z), cur)
+        for (cx, cy, cz) in getRiserVerticalNeighborCoords(cur.x, cur.y, cur.z):
+            consider(getGridSquare(cx, cy, cz), cur)
+    return order
+
+
+def hydraulics_solveAt(origin):
+    """Port of Hydraulics.solveAt -- cached per ZONE, not per origin."""
+    if origin is None:
+        return None
+    k = (origin.x, origin.y, origin.z)
+    zone = ZONE_OF_NODE.get(k)
+    if zone is not None and zone in HYDRAULIC_CACHE:
+        CALLS["hydraulicCacheHit"] += 1
+        return HYDRAULIC_CACHE[zone]
+
+    order = hydraulics_discover(origin)
+    # collectSupplyAndDemand: one pass, every object question asked once per node.
+    emitters = 0
+    for sq in order:
+        collectSquareContainers(sq)              # sources + their live amounts
+        Mains_findOnSquare(sq)
+        Hydrant_findOnSquare(sq)
+        Pump_findOnSquare(sq)
+        getPipeObjectsOnSquare(sq)               # emitter demand lookup
+        if getattr(sq, "emitter", False):
+            emitters += 1
+
+    # buildFeeders: once per solve, ~4 links a node.
+    lua("hydraulic/feeders", len(order) * 4)
+
+    # The servable-set search: about log2(emitters) probes, each an accumulate
+    # (one pass) plus a relaxation (converges in ~3 alternating sweeps), plus the
+    # final re-price. All pure Lua over tables already in hand.
+    probes = max(1, int(math.log2(emitters)) + 2) if emitters else 1
+    sweeps = 3
+    lua("hydraulic/solve", probes * len(order) * (1 + sweeps * 5))
+
+    solution = {"order": order, "id": k}
+    HYDRAULIC_CACHE[k] = solution
+    for sq in order:
+        ZONE_OF_NODE[(sq.x, sq.y, sq.z)] = k
+    ZONE_OF_NODE[k] = k
+    return solution
 
 
 def buildSummaryFromSquare(origin, kind=None, fill=False):
@@ -445,21 +698,54 @@ def buildSummaryFromSquare(origin, kind=None, fill=False):
     # Matches the Lua: nil / "draw" / "fill". A fill walk now crosses bare routers
     # too (downstream), which also means it pays the hard-boundary check.
     conduct = "fill" if fill else ("draw" if kind else None)
-    pipe_squares, hops = collectPipeSquaresCached(origin, conduct)
+    if kind and not fill:
+        # DRAW: topology comes from the shared solve. distancesFrom is a BFS over
+        # the solved adjacency -- pure Lua, no world access -- so it costs nothing
+        # here by construction.
+        solution = hydraulics_solveAt(origin)
+        if solution is None:
+            return None
+        pipe_squares = solution["order"]        # by reference, not rebuilt
+        # distancesFrom: one BFS over the solved feeder lists, memoised per origin
+        # for the life of the solve.
+        seen_from = solution.setdefault("_distances", set())
+        k = (origin.x, origin.y, origin.z)
+        if k not in seen_from:
+            seen_from.add(k)
+            lua("hydraulic/distances", len(pipe_squares) * 5)
+        walk_entry = None
+    else:
+        pipe_squares, hops, walk_entry = collectPipeSquaresCached(origin, conduct)
     if not pipe_squares:
         return None
     # Deliberately NOT cached: the fluid amounts have to be read fresh every time,
     # or a draw and the fill after it would disagree about how much is in the pipes.
-    desc = collectStorageDescriptors(pipe_squares)
+    desc = collectStorageDescriptors(
+        pipe_squares, solution if (kind and not fill) else None, walk_entry)
     if not desc:
         return None
     return {"descriptors": desc, "pipeSquares": pipe_squares}
 
 
+# One vessel write: resolveFluidTarget (sprite-grid scan) + emptyFluid + addFluid
+# + sync + transmitModData + fireExternalWaterChange (read + triggerEvent).
+WRITE_BC = 8
+
+
 def rebalanceSummary(summary):
-    # one write per descriptor: emptyFluid + addFluid + sync + transmitModData
-    # + fireExternalWaterChange (read + triggerEvent)
-    bc("fluidWrite", 8 * len(summary["descriptors"]))
+    """Fills still level the whole network: every vessel takes a share."""
+    bc("fluidWrite", WRITE_BC * len(summary["descriptors"]))
+
+
+def drawFromSummary(summary):
+    """Draws empty the nearest vessels instead of re-levelling everything.
+
+    This is what stops the vessel count being a performance setting. A sprinkler
+    taking its 1.8 L used to rewrite every barrel on the line; it now writes one.
+    """
+    if not summary["descriptors"]:
+        return
+    bc("fluidWrite", WRITE_BC)
 
 
 def availableToPull(sq):
@@ -473,7 +759,7 @@ def availableToPush(sq):
 def drawFluidAtSquare(sq):
     s = buildSummaryFromSquare(sq, kind="tap")
     if s:
-        rebalanceSummary(s)
+        drawFromSummary(s)
     return s
 
 
@@ -489,8 +775,8 @@ def getPressureAtSquare(sq, kind):
 
 
 def getNetworkFromSquare(sq):
-    ps, hops = collectPipeSquaresFromSquare(sq, False)
-    collectStorageDescriptors(ps)
+    ps, hops, entry = collectPipeSquaresCached(sq, False)
+    collectStorageDescriptors(ps, None, entry)
     return ps
 
 
@@ -506,6 +792,20 @@ class Scenario:
         global WORLD, MAINS_PROBE_CACHE
         WORLD = World(filler_objects=filler)
         MAINS_PROBE_CACHE = {}
+
+        # Every cache derived from the world, dropped because the world is being
+        # replaced. In the game this never happens -- there is one world and these
+        # live until their events fire -- but the bench builds a fresh scenario per
+        # size, on the same coordinates. While they were frame-scoped, frame_reset
+        # hid this; once they legitimately started outliving a frame, a scenario
+        # inherited the previous one's answers and the numbers became fiction.
+        PIPE_SCAN_MEMO.clear()
+        VESSEL_MEMO.clear()
+        ZONE_VESSEL_MEMO.clear()
+        TRAVERSAL_CACHE.clear()
+        HYDRAULIC_CACHE.clear()
+        ZONE_OF_NODE.clear()
+        RESOLVED.clear()
         self.pipe_coords = []
         self.z = z
 
@@ -578,44 +878,70 @@ class Scenario:
 # The mod's periodic passes
 # ----------------------------------------------------------------------------
 def pass_refreshPlumbedEndpoints(sc):
-    """WaterPipeSystem.refreshPlumbedEndpoints -- runs EVERY in-game minute
-    AND again inside System.tick every ten minutes."""
+    """WaterPipeSystem.refreshPlumbedEndpoints -- runs EVERY in-game minute.
+
+    It used to FIND its work: sweep every pipe tile and its six neighbours --
+    about 700 distinct tiles on a 200-pipe farm -- lift each square and scan its
+    object list twice, looking for fixtures and generators that are plumbed.
+    Measured in game at 15.3 ms a minute, 63% of the whole per-minute pass, to
+    rediscover a handful of sinks that had not moved since the player plumbed
+    them.
+
+    A fixture becomes plumbed exactly one way: somebody calls plumb(). So it is
+    recorded then, and this iterates what it was told. The full sweep survives as
+    pass_reindexEndpoints, at a tenth of the cadence, and it REPORTS what it
+    finds -- see System.reindexEndpoints.
+    """
+    stale = []
+    for (x, y, z) in sc.endpoints + sc.mains:
+        sq = getGridSquare(x, y, z)
+        if sq is None:
+            continue                            # unloaded: the claim survives
+        found = 0
+        for ep in collectOnSquare_endpoints(sq):
+            bc("getModData", 1)                 # isPlumbed
+            if ep.plumbed:
+                found += 1
+                refreshEndpointSource(ep, sq)
+        # The generator scan on the same tile. No scenario places a generator, so this
+        # is the cost of looking and finding nothing -- which is the honest cost, since
+        # a base with a plumbed generator has one, not two hundred.
+        bc("getObjects", 1)
+        for _o in sq.objects:
+            bc("isGenerator", 2)
+        if found == 0:
+            stale.append((x, y, z))
+    return stale
+
+
+def pass_reindexEndpoints(sc):
+    """System.reindexEndpoints -- the ten-minute backstop, and the old per-minute
+    search. Kept because it is the only thing that can answer whether plumb() is
+    enough on its own: it says out loud when it finds a plumbed fixture the index
+    did not know about."""
+    seen_coords = set()
     coords = []
     for (x, y, z) in sc.pipe_coords:
-        coords.append((x, y, z))
-        for dx, dy, dz in ((1,0,0), (-1,0,0), (0,1,0), (0,-1,0), (0,0,1), (0,0,-1)):
-            coords.append((x + dx, y + dy, z + dz))
+        for dx, dy, dz in ((0,0,0), (1,0,0), (-1,0,0), (0,1,0), (0,-1,0), (0,0,1), (0,0,-1)):
+            k = (x + dx, y + dy, z + dz)
+            if k not in seen_coords:
+                seen_coords.add(k)
+                coords.append(k)
 
-    # refreshPlumbedEndpointsNearCoordinates. The `visited` set DOES stop the
-    # endpoint from being re-synced, but it is consulted only AFTER the
-    # expensive collectOnSquare scan -- so the scan itself still runs once per
-    # duplicate coordinate (and the list has no dedup).
-    visited = set()
     for (x, y, z) in coords:
         sq = getGridSquare(x, y, z)
         if sq is None:
             continue
-        for i, ep in enumerate(collectOnSquare_endpoints(sq)):
-            key = (x, y, z, i)
-            if key in visited:
-                continue
-            bc("getModData", 1)                # isPlumbed
+        plumbed = False
+        for ep in collectOnSquare_endpoints(sq):
+            bc("getModData", 1)
             if ep.plumbed:
-                visited.add(key)
-                refreshEndpointSource(ep, sq)
-
-    # refreshPlumbedGeneratorsNearCoordinates -- the whole list AGAIN
-    for (x, y, z) in coords:
-        sq = getGridSquare(x, y, z)
-        if sq is None:
-            continue
-        bc("getObjects", 1)
-        for o in sq.objects:
+                plumbed = True
+                break
+        if not plumbed:
             bc("getObjects", 1)
-            bc("isGenerator", 2)
-
-
-SEEN_ENDPOINT = set()
+            for _o in sq.objects:
+                bc("isGenerator", 2)
 
 
 def refreshEndpointSource(ep, sq):
@@ -654,7 +980,14 @@ def pass_processRouters(sc):
 
 
 def pass_processPumps(sc):
+    known_pumps = set(sc.pumps)
     for (x, y, z) in sc.pipe_coords:
+        # state.pipes records what each pipe IS, so a pass that wants pumps skips the
+        # rest without touching the world. This is why processRouters, which could
+        # already filter on its metadata, measured at 0.00 ms while this measured 56.
+        lua("pumps/filter", 2)
+        if (x, y, z) not in known_pumps:
+            continue
         sq = getGridSquare(x, y, z)
         pump = Pump_findOnSquare(sq)
         if not pump:
@@ -715,13 +1048,27 @@ def pass_redistributeWater(sc):
 
 
 def pass_irrigation(sc):
+    """Irrigation.run: one summary per emitter, and one vessel write per draw.
+
+    Each emitter used to build three identical summaries -- pressure, availability,
+    draw -- and then re-level every vessel on the network. It now builds one and
+    empties the nearest vessel.
+
+    The real pass is handed out a few emitters per frame (Irrigation.beginPass), so
+    this total is spread over IRRIGATION_EMITTERS_PER_TICK-sized slices rather than
+    landing in one. The work is the same; only the frame it lands in moves.
+    """
+    known_emitters = set(sc.emitters)
     for (x, y, z) in sc.pipe_coords:
+        lua("irrigation/filter", 2)
+        if (x, y, z) not in known_emitters:
+            continue
         sq = getGridSquare(x, y, z)
         d = Irrigation_findDripOnSquare(sq)
         if d:
-            getPressureAtSquare(sq, "drip")     # BFS 1
-            availableToPull(sq)                 # BFS 2
-            drawFluidAtSquare(sq)               # BFS 3
+            s = buildSummaryFromSquare(sq, kind="drip")   # the only BFS
+            if s:
+                drawFromSummary(s)
         Irrigation_findSprinklerOnSquare(sq)
 
 
@@ -745,6 +1092,7 @@ _FINDERS = {
 
 
 def registry_reset():
+    RESOLVED.clear()
     REGISTRY["emitters"] = set()
     REGISTRY["hydrants"] = set()
     REGISTRY["purifiers"] = set()
@@ -782,56 +1130,104 @@ def pass_registry_sweep(sc, radius=20, px=10, py=10, pz=0):
             Purifier_findOnSquare(sq)
 
 
+# (kind, coord) -> the square and object that tile resolved to. Kept until the
+# tile changes, not per frame: see Registry.entryFor / Registry.forgetResolved.
+RESOLVED = {}
+
+
 def registry_near(kind, px, py, pz, radius):
-    """Registry.near: iterate the remembered tiles, re-validate each."""
+    """Registry.near: iterate the remembered tiles, using what each resolved to.
+
+    Re-validating every tile on every read is what this used to do, and five
+    client modules call it several times a second -- a getGridSquare plus a full
+    object scan per remembered tile, per caller. The references are now held on
+    the entry and dropped by the events that can invalidate them.
+    """
     finder = _FINDERS[kind]
     out = []
     for (x, y, z) in REGISTRY[kind]:
+        lua("registry/near", 4)                  # z test + two range tests + branch
         if z != pz or abs(x - px) > radius or abs(y - py) > radius:
             continue
-        sq = getGridSquare(x, y, z)
-        if sq is None:
-            continue
-        obj = finder(sq)
+        hit = RESOLVED.get((kind, (x, y, z)))
+        if hit is None:
+            sq = getGridSquare(x, y, z)
+            if sq is None:
+                continue
+            obj = finder(sq)
+            RESOLVED[(kind, (x, y, z))] = (sq, obj)
+            hit = (sq, obj)
+        else:
+            CALLS["registryResolvedHit"] += 1
+        sq, obj = hit
         if obj:
-            out.append((sq, obj))
+            # x/y/z and the tile key travel WITH the result, because the registry
+            # already holds them. Callers that had to re-derive them from the
+            # square were paying three bridge calls and a string build apiece.
+            out.append({"square": sq, "object": obj,
+                        "x": x, "y": y, "z": z, "key": (x, y, z)})
     return out
 
 
 def emitter_status(sq):
-    """Registry.emitterStatus: 2 BFS on a miss, free on a hit."""
+    """Registry.emitterStatus: 1 BFS on a miss, free on a hit.
+
+    Pressure and availability are two questions with one answer, so the readout
+    builds a single summary and reads both off it.
+    """
     k = (sq.x, sq.y, sq.z)
     if STATUS_TTL_HITS and k in STATUS_CACHE:
         CALLS["statusCacheHit"] += 1
         return STATUS_CACHE[k]
-    getPressureAtSquare(sq, "drip")     # BFS 1
-    availableToPull(sq)                 # BFS 2
+    buildSummaryFromSquare(sq, kind="drip")
     STATUS_CACHE[k] = True
     return True
 
 
 def pass_sprayfx_rescan(sc, radius=18, px=10, py=10, pz=0):
+    """WaterPipesSprayFX.rescanInner.
+
+    Note what this model could NOT see, and now charges for. Registry.near hands
+    back entries that already carry x/y/z and the tile key -- it stored them --
+    but it used to return only the square, so the Lua asked the engine for those
+    numbers again: NINE bridge calls per emitter per rebuild, plus two string
+    builds, for values sitting in the entry. This model reads `sq.x` as a Python
+    attribute and charged nothing, so it was structurally blind to 66 000 bridge
+    calls a minute. `bc()` counts what crosses into Java; a model that reaches
+    through the fence for free is not counting the same thing the game is.
+
+    The clock is the other half. A cached status read is a table lookup and a
+    subtraction, and it was spending a pcall and a bridge call per emitter to ask
+    what time it was -- same answer for every emitter in the same rebuild. One
+    stamp per pass now.
+    """
     claimed = set()
-    for sq, obj in registry_near("hydrants", px, py, pz, radius):
-        claimed.add((sq.x, sq.y, sq.z))
+    for e in registry_near("hydrants", px, py, pz, radius):
+        claimed.add(e["key"])
         bc("hydrantFlowing", 2)         # isOpen + reserve/serviceLive
-    for sq, obj in registry_near("emitters", px, py, pz, radius):
-        if (sq.x, sq.y, sq.z) in claimed:
+
+    bc("getTimestampMs", 1)             # Registry.stamp(), once for the rebuild
+    for e in registry_near("emitters", px, py, pz, radius):
+        if e["key"] in claimed:
             continue
-        emitter_status(sq)
+        emitter_status(e["square"])
         bc("isSprinkler", 1)
 
 
 def pass_sound_rescan(sc, radius=14, px=10, py=10, pz=0, kind="hydrant"):
     key = "hydrants" if kind == "hydrant" else "purifiers"
-    for sq, obj in registry_near(key, px, py, pz, radius):
+    for e in registry_near(key, px, py, pz, radius):
+        sq, obj = e["square"], e["object"]
         bc("soundState", 2)             # isFlowing / isWorking
 
 
 def pass_wetness(sc, px=10, py=10, pz=0):
-    for sq, obj in registry_near("hydrants", px, py, pz, 1):
+    for e in registry_near("hydrants", px, py, pz, 1):
+        sq, obj = e["square"], e["object"]
         bc("hydrantFlowing", 2)
-    for sq, obj in registry_near("emitters", px, py, pz, 1):
+    bc("getTimestampMs", 1)                 # Registry.stamp(), once for the pass
+    for e in registry_near("emitters", px, py, pz, 1):
+        sq, obj = e["square"], e["object"]
         bc("isSprinkler", 1)
         # A drip waters its own soil and cannot wet a person: only a sprinkler
         # is worth asking about (matches WaterPipesWetness.playerIsInSpray).
@@ -849,9 +1245,38 @@ def ms(n_bc, rate=US_PER_BC_NOM):
     return n_bc * rate / 1000.0
 
 
+def cold():
+    """Every cache derived from the world, emptied.
+
+    frame_reset() used to be this by accident: while all of these were frame-scoped,
+    dropping the frame dropped them. Three of the four have since been given the
+    event lifetimes they always deserved, and the fourth is keyed to a solve -- so a
+    frame boundary no longer means "start over", and anything that wants a cold
+    measurement has to say so.
+
+    Not saying so is how this harness produced fiction the first time: a pass was
+    measured warm because an unrelated pass had run before it, and the difference was
+    read as a 98% improvement. A measurement must not depend on what was measured
+    before it; that invariant is asserted in test_model.py, and this is what makes it
+    true."""
+    PIPE_SCAN_MEMO.clear()
+    VESSEL_MEMO.clear()
+    ZONE_VESSEL_MEMO.clear()
+    TRAVERSAL_CACHE.clear()
+    HYDRAULIC_CACHE.clear()
+    ZONE_OF_NODE.clear()
+    STATUS_CACHE.clear()
+    # The mains liveness probe, too. It is three bridge calls the first time a fixture
+    # is asked and free afterwards, which is small enough to look like rounding and is
+    # exactly why it hid: a pass measured after another had probed the same inlet came
+    # in three calls light, every time, in both directions.
+    MAINS_PROBE_CACHE.clear()
+
+
 def measure(fn, *a, **kw):
-    """One pass, starting from a clean frame -- caches are cold on entry."""
+    """One pass, starting cold: no cache carries in from whatever ran before."""
     reset()
+    cold()
     frame_reset()
     fn(*a, **kw)
     return total_bc(), dict(BC), dict(CALLS)
@@ -859,8 +1284,14 @@ def measure(fn, *a, **kw):
 
 def measure_frame(fns, sc):
     """Several passes inside ONE frame, so they share the caches -- which is what
-    actually happens: all four EveryOneMinute handlers run in the same frame."""
+    actually happens: all four EveryOneMinute handlers run in the same frame.
+
+    Cold on ENTRY, shared within. That is the distinction: the first pass of the
+    minute pays for the walk and the rest ride on it, which is the whole point of
+    giving the traversal cache an event lifetime, and it is only visible if the group
+    starts from a known state."""
     reset()
+    cold()
     frame_reset()
     for fn in fns:
         fn(sc)

@@ -9,10 +9,9 @@ local EndpointObjects = WaterPipes.EndpointObjects
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 
 -- Washing machines run on water but manage it themselves: they only need their own FluidContainer
--- non-empty to start. Recognising them as plumbable consumers (by class, since their waterPiped
--- sprite flag is unreliable) lets a player run a pipe to one and plumb it like a sink -- the endpoint
--- mirror then keeps its tank fed from the network. The matching exclusion in ContainerAdapter keeps
--- them out of the storage path. Constants.WATER_APPLIANCE_CLASSES is the shared source.
+-- non-empty to start. Recognising them as plumbable consumers (by class, since their waterPiped sprite
+-- flag is unreliable) lets a player plumb one like a sink. The matching exclusion in ContainerAdapter
+-- keeps them out of the storage path.
 local function isWaterAppliance(worldObject)
     if not worldObject or not instanceof then
         return false

@@ -199,14 +199,11 @@ function Purifier.setProcessing(worldObject, processing)
 end
 
 -- Room left in the IN buffer for `tainted`-ness of water, or 0 if it cannot take that kind.
---
--- This exists so a pump can feed the purifier directly. Until now the pump asked the NETWORK how
--- much it could take, and that question never crosses a router -- which is exactly what a purifier
--- sits on -- so a lake pump with a barrel on the clean side alone was told "no room" and drew
--- nothing. The tank the purifier already carries is the obvious place for that water to go.
---
--- A buffer that already holds water only accepts more of the SAME kind: addIn keeps the existing
--- taint flag, so letting clean water into a tainted buffer would quietly relabel it.
+-- This exists so a pump can feed the purifier directly. The pump used to ask the NETWORK how much it
+-- could take, and that question never crosses a router -- which is exactly what a purifier sits on --
+-- so a lake pump with a barrel only on the clean side was told "no room" and drew nothing.
+-- A buffer already holding water accepts only more of the SAME kind: addIn keeps the existing taint
+-- flag, so letting clean water into a tainted buffer would quietly relabel it.
 function Purifier.intakeHeadroom(worldObject, tainted)
     if not Purifier.isPurifier(worldObject) then
         return 0
@@ -274,11 +271,9 @@ function Purifier.findOnSquare(square)
 end
 
 -- The purifier whose 2x2 footprint sits on a router tile. The tank's modData lives on ONE footprint
--- tile, which is not necessarily the router/anchor tile the engine registered, so a bare
--- findOnSquare(routerTile) can miss it (and the router then wrongly runs as a plain passthrough). The
--- footprint extends +x/+y from the anchor and the router sits on the anchor, so scan the anchor tile
--- plus its +x/+y block to find the purifier from the router tile no matter which footprint tile holds
--- the modData.
+-- tile, not necessarily the anchor the engine registered, so a bare findOnSquare(routerTile) can miss it
+-- and the router then wrongly runs as a plain passthrough. The footprint extends +x/+y from the anchor
+-- and the router sits on the anchor, so scan that block.
 local PURIFIER_FOOTPRINT_OFFSETS = { { 0, 0 }, { 1, 0 }, { 0, 1 }, { 1, 1 } }
 function Purifier.findForRouterSquare(square)
     if not square then

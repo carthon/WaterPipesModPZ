@@ -3,21 +3,16 @@
 """
 WaterPipes performance harness.
 
-Counts the Lua -> Java bridge calls each periodic pass of the mod makes, for a
-set of fixed scenarios, so an optimisation can be measured instead of guessed at.
+Counts the Lua -> Java bridge calls each periodic pass of the mod makes, for a set of fixed scenarios,
+so an optimisation can be measured instead of guessed at.
 
     python wp_bench.py                 # human-readable report
     python wp_bench.py --save-baseline # record current counts as the baseline
     python wp_bench.py --check         # diff against the baseline, non-zero exit on regression
 
-The model lives in wp_model.py and is a hand transcription of the mod's control
-flow -- it is approximate by design. What it gets right is the SHAPE: how many
-network walks each pass makes, how many object scans each walk makes, and how
-all of that grows with the size of the build. Absolute milliseconds are an
-estimate (see --report notes); relative before/after numbers are the point.
-
-Update the model whenever the traversal or the per-tick passes change, or the
-baseline stops meaning anything.
+The model lives in wp_model.py and is a hand transcription of the mod's control flow, approximate by
+design. What it gets right is the SHAPE: how many walks each pass makes, how many scans each walk
+makes, and how that grows with the size of the build. Use the deltas, not the absolutes.
 """
 
 import argparse
@@ -51,6 +46,7 @@ SERVER_PASSES = [
     ("1min/pumps",     M.pass_processPumps),
     ("1min/mains",     M.pass_processAllMains),
     ("1min/endpoints", M.pass_refreshPlumbedEndpoints),
+    ("10min/reindex",  M.pass_reindexEndpoints),
     ("10min/scan",     M.pass_scanContainersAroundPipes),
     ("10min/graph",    M.pass_rebuildGraph),
     ("10min/redist",   M.pass_redistributeWater),
@@ -128,16 +124,32 @@ def run_suite():
             M.pass_sound_rescan(sc, kind="hydrant")
             M.pass_sound_rescan(sc, kind="purifier")
         row["client/15s steady"] = M.total_bc()
+        row["client/15s steady :lua"] = M.total_lua()
         row["client/15s steady :walks"] = M.CALLS.get("BFS", 0)
 
         # The four EveryOneMinute handlers all run inside ONE frame, so they share the
         # per-frame caches. Summing the individually-measured passes would charge each
         # of them a cold cache and understate the real behaviour.
         sc = build(spec)
-        n, _, calls = M.measure_frame([fn for l, fn in SERVER_PASSES
-                                       if l.startswith("1min/")], sc)
+        minute = [fn for l, fn in SERVER_PASSES if l.startswith("1min/")]
+        n, _, calls = M.measure_frame(minute, sc)
         row["TOTAL 1min"] = n
         row["TOTAL 1min :walks"] = calls.get("BFS", 0)
+
+        # ...and what five consecutive minutes cost, which is a different question and the one the fill path's
+        # cache lifetime actually answers. Every per-pass number above is measured cold on purpose -- a worst
+        # case stays comparable -- but no minute after the first is cold in a real game, and a bench made only
+        # of cold single passes is structurally blind to what an event lifetime buys.
+        # frame_reset between minutes and nothing else: that is exactly the OnTick boundary.
+        sc = build(spec)
+        M.reset()
+        M.cold()
+        for _ in range(5):
+            M.frame_reset()
+            for fn in minute:
+                fn(sc)
+        row["server/5min steady"] = M.total_bc()
+        row["server/5min steady :walks"] = M.CALLS.get("BFS", 0)
 
         out[name] = row
     return out
@@ -149,7 +161,8 @@ def report(results):
     print("WaterPipes -- bridge calls per pass")
     print("=" * 84)
     labels = ([l for l, _ in SERVER_PASSES] + [l for l, _ in CLIENT_PASSES]
-              + ["client/sweep", "client/15s steady", "TOTAL 1min"])
+              + ["client/sweep", "client/15s steady", "TOTAL 1min",
+                 "server/5min steady"])
 
     head = "%-22s" % "pass"
     for spec in SCENARIOS:

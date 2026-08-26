@@ -1,10 +1,7 @@
--- Open-hydrant water sound (client-only). While a hydrant is open and actually flowing it emits a
--- looping water-on-the-ground sound from its tile, so you can hear the one you left running. FMOD
--- handles distance attenuation; we start the loop when a flowing hydrant is near the player and stop
--- it when it is closed, runs dry, is removed, or leaves range. Purely presentational -> client-side.
---
--- Same shape and the same audio budget as WaterPipesPurifierSound (that module owns the ModOptions
--- "WaterPipes" group; we only read it), gated on the mod's SoundEnabled / SoundVolume options.
+-- Open-hydrant water sound (client-only). While a hydrant is open and flowing it emits a looping
+-- water-on-the-ground sound from its tile. FMOD handles distance attenuation; the loop starts when a
+-- flowing hydrant is near the player and stops when it closes, runs dry, is removed or leaves range.
+-- Same shape and audio budget as WaterPipesPurifierSound, which owns the ModOptions group this reads.
 
 require "WaterPipes/Hydrant"
 require "WaterPipes/WaterPipesTileRegistry"

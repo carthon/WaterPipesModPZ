@@ -1,11 +1,8 @@
--- Purifier readout window (client UI). Opened from the purifier's context menu ("Open Purifier").
--- Shows the two internal buffers (IN intake / OUT output) as fluid gauges, the electrical-grid
--- connection, the operating status, and the filtering rate.
---
--- It is a LIVE readout: every frame it re-resolves the purifier object FROM ITS SQUARE (never a cached
--- reference -- IsoObject references go stale when the engine re-instantiates objects on chunk stream /
--- build finalize, which would freeze the gauges) and re-reads its modData (kept in sync by the server
--- via transmitModData). So it needs no events of its own.
+-- Purifier readout window (client UI). Shows the two internal buffers (IN intake / OUT output) as
+-- fluid gauges, the electrical-grid connection, the operating status and the filtering rate.
+-- A LIVE readout: every frame it re-resolves the purifier object FROM ITS SQUARE (never a cached
+-- reference -- those go stale when the engine re-instantiates objects, which would freeze the gauges)
+-- and re-reads its modData, kept in sync by the server. So it needs no events of its own.
 
 require "ISUI/ISCollapsableWindow"
 require "WaterPipes/Constants"

@@ -65,6 +65,17 @@ function GeneratorFuel.plumb(worldObject)
         modData[Constants.GENERATOR_PLUMBED_MODDATA_KEY] = true
     end
 
+    -- Recorded at the moment it becomes true, so the per-minute refresh reads a registry instead of
+    -- sweeping every pipe tile's neighbourhood for generators. Same contract as the fixture side: the
+    -- entry is a claim, and the refresh drops it if the tile turns out to hold nothing plumbed.
+    local State = WaterPipes.State
+    if State and State.registerEndpoint and worldObject.getSquare then
+        local ok, square = pcall(worldObject.getSquare, worldObject)
+        if ok and square and square.getX then
+            pcall(State.registerEndpoint, square:getX(), square:getY(), square:getZ())
+        end
+    end
+
     Logger.log("Generator connected to pipe network.")
     transmit(worldObject)
     GeneratorFuel.refresh(worldObject)
