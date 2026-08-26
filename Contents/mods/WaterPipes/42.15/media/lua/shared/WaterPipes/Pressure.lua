@@ -76,6 +76,39 @@ function Pressure.frictionFor(kind)
     return base * sandboxPercent("PressureFrictionScale", 1)
 end
 
+-- Head at which a throttled transfer reaches its full rate.
+function Pressure.flowReference()
+    return sandboxTenths("PressureFlowReference", Constants.HYDRAULIC_FLOW_REFERENCE_PRESSURE)
+end
+
+-- Fraction of its maximum rate a transfer runs at, given the head (m.c.a.) reaching the consumer's tile.
+--
+-- Q proportional to sqrt(dP) is orifice flow, and the curve is the whole reason to prefer it over a
+-- linear one: at half the reference head a transfer still moves 71%, so an ordinary barrel on the same
+-- floor keeps working instead of crawling. Linear would have cut that same barrel to a third, which is
+-- the opposite of what a player asking for faster transfers wants.
+--
+-- Capped at 1: head above the reference buys nothing. A pump makes a starved line work, it does not
+-- make a healthy one overspeed.
+--
+-- Returns 1 whole when the pressure model is off, so a save with pressure disabled transfers exactly as
+-- it did before this existed -- without it, applyPressureGate's container-base fallback would have
+-- throttled those saves to 58% for no reason the player could see.
+function Pressure.flowFactor(head)
+    if not Pressure.isEnabled() then
+        return 1.0
+    end
+    local reference = Pressure.flowReference()
+    if reference <= 0 then
+        return 1.0
+    end
+    local available = math.max(head or 0, 0)
+    if available >= reference then
+        return 1.0
+    end
+    return math.sqrt(available / reference)
+end
+
 function Pressure.minimumFor(kind)
     if kind == Constants.PRESSURE_KIND_DRIP then
         return Constants.PRESSURE_MIN_DRIP

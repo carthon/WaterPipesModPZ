@@ -321,6 +321,11 @@ Constants.HYDRAULIC_FRICTION_EXPONENT = 1.0
 -- Back-derived the same way: PRESSURE_FRICTION_TAP / HYDRAULIC_FRICTION_K = 0.05 / 0.111.
 Constants.HYDRAULIC_TAP_FLOW = 0.45         -- litres per in-game hour
 
+-- Head at which a pressure-throttled transfer runs at its FULL rate; below it the rate falls off as
+-- sqrt(P / this). 3.0 is one PRESSURE_PER_LEVEL, i.e. a source one storey above the consumer -- the
+-- point at which a gravity-fed line is doing well rather than merely working. See Pressure.flowFactor.
+Constants.HYDRAULIC_FLOW_REFERENCE_PRESSURE = 3.0
+
 -- How much of the SHARED demand an edge is charged for. A real dial, not a fudge:
 --   1.0 -> the edge carries everything flowing through it. Full demand realism.
 --   0.0 -> the edge carries only the single largest consumer downstream, which is precisely the old

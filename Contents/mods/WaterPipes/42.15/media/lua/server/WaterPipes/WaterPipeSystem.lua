@@ -16,6 +16,7 @@ require "WaterPipes/GravityFlow"
 require "WaterPipes/Router"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/Mains"
+require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Hydrant"
 require "WaterPipes/Stagnation"
@@ -41,6 +42,7 @@ local GravityFlow = WaterPipes.GravityFlow
 local Router = WaterPipes.Router
 local NetworkAccess = WaterPipes.NetworkAccess
 local Mains = WaterPipes.Mains
+local Pressure = WaterPipes.Pressure
 local Pump = WaterPipes.Pump
 local Hydrant = WaterPipes.Hydrant
 local Stagnation = WaterPipes.Stagnation
@@ -321,7 +323,7 @@ end
 -- No purifier on the tile: one-way passthrough of the IN network's single fluid into the OUT network.
 -- `dt` is the elapsed in-game minutes for this sub-step; rates are per-minute and scaled by it.
 local function processPassthroughRouter(inSquare, outSquare, dt)
-    local avail, fluidType = NetworkAccess.availableToPull(inSquare)
+    local avail, fluidType, pressure = NetworkAccess.availableToPull(inSquare)
     if not fluidType or avail <= 0 then
         return
     end
@@ -329,7 +331,10 @@ local function processPassthroughRouter(inSquare, outSquare, dt)
     if headroom <= 0 then
         return
     end
-    local transfer = math.min(Constants.ROUTER_TRANSFER_RATE * dt, avail, headroom)
+    -- The rate is what the IN side can actually deliver to the router tile, not a flat ceiling: the head
+    -- was already solved for this square and until now was read only as a pass/fail gate. Free to use.
+    local rate = Constants.ROUTER_TRANSFER_RATE * dt * Pressure.flowFactor(pressure)
+    local transfer = math.min(rate, avail, headroom)
     if transfer <= 0 then
         return
     end

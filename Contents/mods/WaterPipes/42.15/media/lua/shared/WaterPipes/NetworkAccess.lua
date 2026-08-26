@@ -1164,12 +1164,14 @@ end
 
 -- Router intake helper: which single fluid (and how much) can be PULLED from the network reachable
 -- upward from `square` (gravity-consumer view). Returns (amount, fluidTypeName) or (0, nil).
+-- Third return is the head reaching `square`, for a caller that wants to throttle by it: the summary
+-- already carries it, so taking it costs nothing. Existing two-value callers are unaffected.
 function NetworkAccess.availableToPull(square, kind)
     local summary = buildSummaryFromSquare(square, "both", kind or Constants.PRESSURE_KIND_TAP)
     if not summary or summary.isMixed or (summary.totalAmount or 0) <= 0 then
-        return 0, nil
+        return 0, nil, nil
     end
-    return summary.totalAmount, summary.fluidTypeName
+    return summary.totalAmount, summary.fluidTypeName, summary.pressure
 end
 
 -- Router output helper: how much `fluidType` can be PUSHED into the network reachable downward from
@@ -1322,6 +1324,18 @@ function NetworkAccess.drawFluidAtSquare(originSquare, requiredFluidType, amount
     return NetworkAccess.drawFromSummary(
         buildSummaryFromSquare(originSquare, "both", kind or Constants.PRESSURE_KIND_TAP),
         requiredFluidType, amount)
+end
+
+-- As drawFluidAtSquare, but the amount asked for is first scaled by the head reaching this square
+-- (Pressure.flowFactor). ONE summary, the same one the unthrottled draw builds -- the pressure rides on
+-- it already, so this costs no extra walk and no extra bridge call.
+function NetworkAccess.drawFluidAtSquareThrottled(originSquare, requiredFluidType, amount, kind)
+    local summary = NetworkAccess.getDrawSummary(originSquare, kind)
+    if not summary then
+        return 0
+    end
+    local wanted = math.max(amount or 0, 0) * Pressure.flowFactor(summary.pressure)
+    return NetworkAccess.drawFromSummary(summary, requiredFluidType, wanted)
 end
 
 -- Add up to `amount` of `fluidType` into the network reachable from `originSquare`. Only works if
