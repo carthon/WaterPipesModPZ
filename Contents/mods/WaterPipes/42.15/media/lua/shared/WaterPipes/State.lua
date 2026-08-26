@@ -226,6 +226,10 @@ function State.rebuildGraph()
 
         -- Routers are flow boundaries: they never conduct, keeping the IN side and OUT side as two
         -- separate networks. Skip every connection where either endpoint is a router.
+        -- This is the ONLY place that decides that from the registry instead of the world -- Hydraulics and
+        -- NetworkAccess both ask Router.hasRouterOnSquare. So `metadata.router` is load-bearing here, not a
+        -- hint: a flag left on a tile whose router is gone cuts the base in two. It is kept honest by the
+        -- derivation in System.scanContainersAroundPipes, which clears it as well as sets it.
         if not (pipeData.metadata and pipeData.metadata.router == true) then
             -- Same-floor neighbours.
             for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do

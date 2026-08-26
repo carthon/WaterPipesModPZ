@@ -163,25 +163,48 @@ function System.scanContainersAroundPipes()
             -- The four keys read off ONE modData fetch rather than through the four module predicates, which
             -- would each fetch it again. Same test each of them makes (`modData[KEY] == true`); four bridge
             -- calls per object become one, which is what makes re-deriving every pass affordable.
+            --
+            -- AUTHORITY IS THE POINT HERE, in both directions. `metadata.router` is not a hint: State
+            -- .rebuildGraph reads it to decide where a network ENDS -- routers are flow boundaries -- and it
+            -- is the only place that asks the registry rather than the world. So a flag left behind on a
+            -- tile whose router has been dismantled cuts the base in two at a tile that conducts perfectly
+            -- well, which is what a player rebuilding routers hits. Deriving these monotonically, as this
+            -- did for one commit, cannot repair that.
+            --
+            -- What makes clearing safe is knowing when the reading is worth trusting. getPipeObjectsOnSquare
+            -- accepts an object by NAME as well as by modData, so the list alone proves nothing -- but an
+            -- object carrying our own PIPE key has had its modData delivered, and the kind keys are written
+            -- on that same object in the same breath. One such object makes the whole square's answer
+            -- authoritative; none makes it silence, and silence must not overwrite anything. That is the
+            -- MP window the old one-shot stamp fell into, from the other side.
             local metadata = pipeData.metadata or {}
+            local derived = nil
             for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
                 local okMod, modData = pcall(worldObject.getModData, worldObject)
-                if okMod and modData then
-                    if not metadata.router and modData[Constants.ROUTER_MODDATA_KEY] == true then
-                        if metadata.kinds then
-                            Logger.warn(string.format(
-                                "ROUTER NOT REGISTERED: the tile at %d:%d:%d holds a router the registry "
-                                .. "had recorded as something else, so it was never processed. Repaired.",
-                                pipeData.x, pipeData.y, pipeData.z))
-                        end
-                        metadata.router = true
-                    end
-                    if modData[Constants.PUMP_MODDATA_KEY] == true then metadata.pump = true end
-                    if modData[Constants.DRIP_MODDATA_KEY] == true then metadata.drip = true end
-                    if modData[Constants.SPRINKLER_MODDATA_KEY] == true then metadata.sprinkler = true end
+                if okMod and modData and modData[Constants.PIPE_MODDATA_KEY] then
+                    derived = derived or {}
+                    if modData[Constants.ROUTER_MODDATA_KEY] == true then derived.router = true end
+                    if modData[Constants.PUMP_MODDATA_KEY] == true then derived.pump = true end
+                    if modData[Constants.DRIP_MODDATA_KEY] == true then derived.drip = true end
+                    if modData[Constants.SPRINKLER_MODDATA_KEY] == true then derived.sprinkler = true end
                 end
             end
-            metadata.kinds = true
+
+            if derived then
+                if metadata.kinds and (metadata.router or false) ~= (derived.router or false) then
+                    Logger.warn(string.format(
+                        "ROUTER REGISTRY WRONG at %d:%d:%d: recorded as %s, the world says %s. Repaired -- "
+                        .. "a stale flag here splits the network at a tile that conducts.",
+                        pipeData.x, pipeData.y, pipeData.z,
+                        metadata.router and "a router" or "not a router",
+                        derived.router and "a router" or "not a router"))
+                end
+                metadata.router = derived.router
+                metadata.pump = derived.pump
+                metadata.drip = derived.drip
+                metadata.sprinkler = derived.sprinkler
+                metadata.kinds = true
+            end
             pipeData.metadata = metadata
 
             if pipeData.metadata and pipeData.metadata.router == true then
