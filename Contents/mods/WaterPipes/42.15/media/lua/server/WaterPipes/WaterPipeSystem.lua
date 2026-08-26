@@ -1003,6 +1003,9 @@ function System.tick()
         -- Broken out because 10min measured 26 ms a pass and nothing said which third that was. A rebuild drops
         -- the traversal cache and the head field, so it is also what makes the NEXT cold solve happen.
         Profiler.time("10min/rebuild", System.rebuild, false)
+        -- Levelling runs on its own two-minute cadence now (see onEveryOneMinute). Kept here as well so a
+        -- rebuild -- and the debug "force network tick" that calls this -- still leaves the water settled;
+        -- a settle that has nothing to move writes nothing, so the overlap costs a walk and no packets.
         Profiler.time("10min/redist", System.redistributeWater)
         Profiler.time("10min/endpoints", System.refreshPlumbedEndpoints)
     end)
@@ -1575,6 +1578,10 @@ local function checkWatchedInputs()
     end
 end
 
+-- Minutes between levelling passes. See the call site at the end of onEveryOneMinute.
+local REDIST_EVERY_MINUTES = 2
+local redistCounter = 0
+
 local function onEveryOneMinute()
     -- The head field is no longer dropped per frame, so this is what bounds how stale it can get. A minute
     -- is the cadence the water itself moves on, so the field is never reasoning about a supply that has
@@ -1614,6 +1621,20 @@ local function onEveryOneMinute()
     local ok, err = pcall(Profiler.time, "1min/endpoints", System.refreshPlumbedEndpoints)
     if not ok then
         Logger.error("Endpoint plumbing refresh failed: " .. tostring(err))
+    end
+
+    -- Levelling between vessels used to ride the ten-minute tick, which is why a barrel took ten in-game
+    -- minutes to answer for water that had already arrived. GravityFlow.settle is not rate-limited -- one
+    -- pass equalises the whole component -- so the wait was cadence, not flow. Every two minutes instead:
+    -- the pass is the cheapest the mod has (it walks the built component graph, not the world) at ~2.4%
+    -- of a minute's work on a full base, and halving it again would only buy writes nobody can see.
+    redistCounter = redistCounter + 1
+    if redistCounter >= REDIST_EVERY_MINUTES then
+        redistCounter = 0
+        local okRedist, errRedist = pcall(Profiler.time, "2min/redist", System.redistributeWater)
+        if not okRedist then
+            Logger.error("Water redistribution failed: " .. tostring(errRedist))
+        end
     end
 end
 

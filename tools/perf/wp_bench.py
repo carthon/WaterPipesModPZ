@@ -49,7 +49,7 @@ SERVER_PASSES = [
     ("10min/reindex",  M.pass_reindexEndpoints),
     ("10min/scan",     M.pass_scanContainersAroundPipes),
     ("10min/graph",    M.pass_rebuildGraph),
-    ("10min/redist",   M.pass_redistributeWater),
+    ("2min/redist",    M.pass_redistributeWater),
     ("1h/irrigation",  M.pass_irrigation),
 ]
 
