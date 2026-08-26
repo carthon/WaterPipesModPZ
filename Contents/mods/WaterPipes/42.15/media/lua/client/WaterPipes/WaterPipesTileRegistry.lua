@@ -381,10 +381,6 @@ function Registry.invalidate(x, y, z)
     statusCache[keyOf(x, y, z)] = nil
 end
 
-function Registry.invalidateAll()
-    statusCache = {}
-end
-
 -- ===== Wiring =====
 -- Note what is NOT here: LoadGridsquare. It fires too early to classify anything (see the header), and
 -- hooking it would only pay for a scan of every streamed tile to learn nothing.

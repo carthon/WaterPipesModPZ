@@ -1510,14 +1510,6 @@ function Hydraulics.floodFrom(solution, distance, queue)
     return distance
 end
 
--- Distance in tiles from the nearest supply, for the draw ordering and the readouts.
-function Hydraulics.depthAt(solution, square)
-    if not solution or not square then
-        return nil
-    end
-    return solution.depth[squareKey(square)]
-end
-
 -- Litres/hour flowing through the node, for the gauge and the debug overlay. This is the number that
 -- explains a line reading 68 L/h at the pump and 1.8 at its far end.
 function Hydraulics.flowAt(solution, square)

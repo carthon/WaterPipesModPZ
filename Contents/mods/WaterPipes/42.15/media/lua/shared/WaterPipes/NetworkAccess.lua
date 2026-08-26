@@ -132,26 +132,6 @@ local function getHorizontalNeighborSquares(square)
     return neighbors
 end
 
-local function getFluidTypeByName(fluidTypeName)
-    if fluidTypeName == "Water" then
-        return Fluid and Fluid.Water or (FluidType and FluidType.Water)
-    end
-
-    if fluidTypeName == "TaintedWater" then
-        return Fluid and Fluid.TaintedWater or (FluidType and FluidType.TaintedWater)
-    end
-
-    if FluidType and FluidType.FromNameLower then
-        return FluidType.FromNameLower(string.lower(fluidTypeName))
-    end
-
-    if Fluid and Fluid.FromNameLower then
-        return Fluid.FromNameLower(string.lower(fluidTypeName))
-    end
-
-    return nil
-end
-
 local function isWaterTypeName(fluidTypeName)
     return fluidTypeName == "Water" or fluidTypeName == "TaintedWater"
 end
@@ -1388,10 +1368,6 @@ function NetworkAccess.fillFluidAtSquare(originSquare, fluidType, amount)
     return added
 end
 
-function NetworkAccess.isNetworkBackedEndpoint(endpointObject)
-    return buildSummary(endpointObject) ~= nil
-end
-
 -- Any single (non-mixed) fluid is usable at a tap now -- not only water. Taps purify TaintedWater
 -- into Water at the point of use (see EndpointFluidSource), but any other liquid is drawn as-is.
 function NetworkAccess.getUsableWaterSummary(endpointObject)
@@ -1425,21 +1401,6 @@ function NetworkAccess.hasWater(endpointObject)
     return NetworkAccess.hasFluid(endpointObject)
 end
 
-function NetworkAccess.canTransferFluidTo(endpointObject, targetContainer)
-    local summary = NetworkAccess.getUsableWaterSummary(endpointObject)
-    if not summary or not targetContainer or not targetContainer.canAddFluid then
-        return false
-    end
-
-    local fluidType = getFluidTypeByName(summary.fluidTypeName)
-    if not fluidType then
-        return false
-    end
-
-    local ok, canAdd = pcall(targetContainer.canAddFluid, targetContainer, fluidType)
-    return ok and canAdd
-end
-
 function NetworkAccess.useFluid(endpointObject, amount)
     local summary = NetworkAccess.getUsableWaterSummary(endpointObject)
     if not summary then
@@ -1453,104 +1414,6 @@ function NetworkAccess.useFluid(endpointObject, amount)
 
     -- Same nearest-vessel draw a sprinkler uses: one vessel write instead of one per vessel on the line.
     return drawFromSummaryDescriptors(summary, clamped)
-end
-
-function NetworkAccess.restoreFluid(endpointObject, amount, fluidTypeName)
-    local summary = buildSummary(endpointObject)
-    if not summary or not isWaterTypeName(fluidTypeName) then
-        return 0
-    end
-
-    if summary.isMixed then
-        return 0
-    end
-
-    local merged = mergeFluidNames(summary.fluidTypeName, fluidTypeName)
-    if summary.totalAmount > 0 and summary.fluidTypeName and not merged then
-        return 0
-    end
-
-    -- Same rule as fillFluidAtSquare: the purifier's clean buffers step out first.
-    local landing = merged or fluidTypeName
-    if landing ~= "Water" and excludePurifierOutlets(summary) and #summary.descriptors == 0 then
-        return 0
-    end
-
-    local clamped = math.max(amount or 0, 0)
-    local availableCapacity = math.max((summary.totalCapacity or 0) - (summary.totalAmount or 0), 0)
-    local restored = math.min(clamped, availableCapacity)
-    if restored <= 0 then
-        return 0
-    end
-
-    summary.fluidTypeName = landing
-    rebalanceSummary(summary, summary.totalAmount + restored)
-    return restored
-end
-
-function NetworkAccess.transferFluidTo(endpointObject, targetContainer, amount)
-    local summary = NetworkAccess.getUsableWaterSummary(endpointObject)
-    if not summary or not targetContainer or not targetContainer.addFluid then
-        return 0
-    end
-
-    local fluidType = getFluidTypeByName(summary.fluidTypeName)
-    if not fluidType then
-        return 0
-    end
-
-    local requested = math.min(math.max(amount or 0, 0), summary.totalAmount)
-    if requested <= 0 then
-        return 0
-    end
-
-    local beforeAmount = targetContainer.getAmount and targetContainer:getAmount() or 0
-    local ok = pcall(targetContainer.addFluid, targetContainer, fluidType, requested)
-    if not ok then
-        return 0
-    end
-
-    local afterAmount = targetContainer.getAmount and targetContainer:getAmount() or (beforeAmount + requested)
-    local transferred = math.max(afterAmount - beforeAmount, 0)
-    if transferred <= 0 then
-        return 0
-    end
-
-    NetworkAccess.useFluid(endpointObject, transferred)
-    return transferred
-end
-
-function NetworkAccess.moveFluidToTemporaryContainer(endpointObject, amount)
-    local summary = NetworkAccess.getUsableWaterSummary(endpointObject)
-    if not summary or not FluidContainer or not FluidContainer.CreateContainer then
-        return nil
-    end
-
-    local fluidType = getFluidTypeByName(summary.fluidTypeName)
-    if not fluidType then
-        return nil
-    end
-
-    local taken = math.min(math.max(amount or 0, 0), summary.totalAmount)
-    if taken <= 0 then
-        return nil
-    end
-
-    local temporaryContainer = FluidContainer.CreateContainer()
-    if not temporaryContainer then
-        return nil
-    end
-
-    local ok = pcall(temporaryContainer.addFluid, temporaryContainer, fluidType, taken)
-    if not ok then
-        if FluidContainer.DisposeContainer then
-            FluidContainer.DisposeContainer(temporaryContainer)
-        end
-        return nil
-    end
-
-    NetworkAccess.useFluid(endpointObject, taken)
-    return temporaryContainer
 end
 
 -- Anything that changes what the walk would FIND has to drop it. The object events do it by tile;
