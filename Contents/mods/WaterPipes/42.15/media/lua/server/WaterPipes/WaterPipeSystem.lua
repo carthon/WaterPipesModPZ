@@ -314,8 +314,36 @@ function System.checkIrrigationConservation(dtHours)
     return report
 end
 
+-- "The vessels are not sharing water" has exactly two causes and they look identical in game: the
+-- vessels are in different COMPONENTS (something is acting as a flow boundary between them -- a router,
+-- or a tile the registry still thinks holds one), or they are in one component holding TWO FLUIDS, which
+-- the settle refuses. Reported on change rather than every pass, so a working base stays quiet.
+local lastShapeReport = nil
+
 function System.redistributeWater()
     local components = State.getComponents()
+
+    local shape = {}
+    for _, component in ipairs(components) do
+        local vessels = 0
+        for _, node in pairs(component.nodes) do
+            if node.kind == Constants.NODE_KIND_CONTAINER then
+                vessels = vessels + 1
+            end
+        end
+        if vessels > 0 then
+            shape[#shape + 1] = vessels
+        end
+    end
+    table.sort(shape)
+    local signature = table.concat(shape, "+")
+    if signature ~= lastShapeReport then
+        lastShapeReport = signature
+        Logger.log(string.format(
+            "vessel groups that share water: %s (%d group(s) holding vessels, out of %d network(s)). "
+            .. "Vessels in different groups never level against each other.",
+            signature ~= "" and signature or "none", #shape, #components))
+    end
 
     for _, component in ipairs(components) do
         local containers = {}
@@ -360,7 +388,20 @@ function System.redistributeWater()
             -- classic per-pool equalization, so one floor is unchanged.
             GravityFlow.settle(containers, totalWater, networkFluidType)
         elseif fluidTypeCount > 1 then
-            Logger.warn("Skipping mixed-fluid network with " .. tostring(fluidTypeCount) .. " fluid types")
+            -- Naming the fluids and one tile of the group, because the count alone cannot be acted on: the
+            -- player has to know WHICH vessel is holding the odd fluid before they can empty it.
+            local names = {}
+            for fluidTypeName in pairs(totalByFluidType) do
+                names[#names + 1] = tostring(fluidTypeName)
+            end
+            table.sort(names)
+            local where = containers[1]
+            Logger.warn(string.format(
+                "NOT LEVELLING a group of %d vessel(s) near %s: it holds %d fluids (%s). A group has to be "
+                .. "of one mind about what it contains before water will move inside it.",
+                #containers,
+                where and string.format("%d:%d:%d", where.x or 0, where.y or 0, where.z or 0) or "?",
+                fluidTypeCount, table.concat(names, ", ")))
         end
     end
 end
