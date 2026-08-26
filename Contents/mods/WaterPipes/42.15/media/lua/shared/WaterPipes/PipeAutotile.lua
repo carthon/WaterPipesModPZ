@@ -138,6 +138,27 @@ local function emitterOverlay(worldObject)
     return nil
 end
 
+-- The moveables cursor caches the hovered square's object list, sprite name included, and only drops it
+-- when the mouse crosses to another tile (ISMoveableCursor:isValid). It then resolves the clicked object
+-- BY SPRITE NAME (ISMoveableCursor:create -> findOnSquare) and hands the result to ISMoveablesAction
+-- unchecked, so a miss reaches ISMoveablesAction:stop as a nil object and crashes it in "scrap" mode.
+-- Repainting a pipe under a hovering cursor is therefore a crash, not a cosmetic detail: dismantling a
+-- run hits it on every tile, because removing one pipe retiles the next. Dropping the cursor's cache
+-- costs one assignment and it rebuilds on the next frame.
+local function invalidateMoveableCursorCache()
+    local cell = getCell and getCell() or nil
+    if not cell or not cell.getDrag then
+        return
+    end
+    local players = getNumActivePlayers and getNumActivePlayers() or 1
+    for playerNum = 0, math.max(players, 1) - 1 do
+        local ok, drag = pcall(cell.getDrag, cell, playerNum)
+        if ok and drag and drag.Type == "ISMoveableCursor" and drag.clearCache then
+            pcall(drag.clearCache, drag)
+        end
+    end
+end
+
 -- Apply a sprite to a pipe only if it changed (client-cosmetic: never transmitted).
 local function setSpriteIfChanged(worldObject, sprite)
     if not sprite or spriteName(worldObject) == sprite then
@@ -148,6 +169,7 @@ local function setSpriteIfChanged(worldObject, sprite)
     if square and square.RecalcProperties then
         pcall(square.RecalcProperties, square)
     end
+    invalidateMoveableCursorCache()
 end
 
 -- Paint (or clear) the emitter head riding on top of a pipe. "Cleared" is our own transparent cell
