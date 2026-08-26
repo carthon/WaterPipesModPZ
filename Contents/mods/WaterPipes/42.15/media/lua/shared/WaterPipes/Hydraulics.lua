@@ -350,7 +350,7 @@ local function classifySites(nodes, order)
     return sites
 end
 
-local function collectSupplyAndDemand(nodes, order, sites)
+local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets)
     local supply = {}        -- key -> head at that node (m.c.a., absolute)
     local boostable = {}     -- key -> true when a pump may lift this supply (see the end of the pass)
     local demand = {}        -- key -> litres/hour drawn there
@@ -385,6 +385,21 @@ local function collectSupplyAndDemand(nodes, order, sites)
             if (descriptor.waterAmount or 0) > 0 then
                 raise(key, elevation(node.z) + containerBase, true)
             end
+        end
+    end
+
+    -- A purifier's clean buffer is STORED WATER on this zone, exactly like a barrel, and it was the one
+    -- store that supplied no head. That is not a rounding error: a head field with no supply anywhere
+    -- answers "nothing reaches you" to every consumer on it, so a clean side whose only water is the
+    -- buffer -- a purifier with no barrel behind it, which is how most people first build one -- could
+    -- take dirty water in and let nobody draw the clean water out. The comment on the settle even
+    -- promised the opposite: "with no barrels it is a no-op and a tap can still reach it".
+    -- Same base head as a vessel, and boostable for the same reason: a pump lifts stored water.
+    for _, outlet in pairs(purifierOutlets or {}) do
+        local node = outlet.nodeKey and nodes[outlet.nodeKey]
+        if node and Purifier and Purifier.getOutAmount
+            and (Purifier.getOutAmount(outlet.purifier) or 0) > 0 then
+            raise(outlet.nodeKey, elevation(node.z) + containerBase, true)
         end
     end
 
@@ -858,7 +873,7 @@ local function solveWithTopology(topology, zoneKey)
 
     local mark = markPhase()
     local supply, demand, kinds, pumps, sources, supplyFloor, stats =
-        collectSupplyAndDemand(nodes, order, topology.sites)
+        collectSupplyAndDemand(nodes, order, topology.sites, purifierOutlets)
     sincePhase("solve/supply", mark)
 
     mark = markPhase()
