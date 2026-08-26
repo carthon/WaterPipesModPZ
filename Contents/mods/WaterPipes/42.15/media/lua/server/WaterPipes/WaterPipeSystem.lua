@@ -347,23 +347,25 @@ end
 local function processPassthroughRouter(inSquare, outSquare, dt)
     local avail, fluidType, pressure = NetworkAccess.availableToPull(inSquare)
     if not fluidType or avail <= 0 then
-        return
+        return false
     end
     local headroom = NetworkAccess.availableToPush(outSquare, fluidType)
     if headroom <= 0 then
-        return
+        return false
     end
     -- The rate is what the IN side can actually deliver to the router tile, not a flat ceiling: the head
     -- was already solved for this square and until now was read only as a pass/fail gate. Free to use.
     local rate = Constants.ROUTER_TRANSFER_RATE * dt * Pressure.flowFactor(pressure)
     local transfer = math.min(rate, avail, headroom)
     if transfer <= 0 then
-        return
+        return false
     end
     local drawn = NetworkAccess.drawFluidAtSquare(inSquare, fluidType, transfer)
     if drawn and drawn > 0 then
         NetworkAccess.fillFluidAtSquare(outSquare, fluidType, drawn)
+        return true
     end
+    return false
 end
 
 -- Purifier on the tile: IN network -> IN buffer -> convert -> OUT buffer -> OUT network. Intake pulls
@@ -442,17 +444,19 @@ end
 
 -- Fluid routers actively move fluid across their boundary in the OUT direction each server tick. A
 -- purifier-container on the tile purifies in transit; otherwise it is a plain one-way passthrough.
+-- Returns whether it actually moved fluid, which processRouters uses to decide whether the next router
+-- on the same source network gets a turn this tick.
 function System.processRouter(router, rx, ry, rz, dt)
     dt = dt or 1.0
     local out = Router.getOutOffset(router)
     if not out then
-        return
+        return false
     end
 
     local inSquare = getSquare(rx - out.dx, ry - out.dy, rz)
     local outSquare = getSquare(rx + out.dx, ry + out.dy, rz)
     if not inSquare or not outSquare then
-        return
+        return false
     end
 
     -- Scan the whole purifier footprint from the router tile: the tank's modData may live on a footprint
@@ -460,9 +464,12 @@ function System.processRouter(router, rx, ry, rz, dt)
     local purifier = Purifier.findForRouterSquare(getSquare(rx, ry, rz))
     if purifier then
         processPurifierRouter(purifier, inSquare, outSquare, dt)
-    else
-        processPassthroughRouter(inSquare, outSquare, dt)
+        -- A purifier router is never sequenced: it is a hard boundary with its own buffers, not a queue
+        -- position on somebody's tank.
+        return false
     end
+
+    return processPassthroughRouter(inSquare, outSquare, dt)
 end
 
 -- `dt` = elapsed in-game minutes since routers were last processed (defaults to a 1-minute step).
@@ -472,16 +479,42 @@ function System.processRouters(dt)
         return
     end
     local state = State.ensure()
+
+    -- Sorted, because the order decides who fills first and `pairs` does not have one. Two routers off the
+    -- same tank must not swap places between ticks.
+    local candidates = {}
     for _, pipeData in pairs(state.pipes) do
         -- Skip only what we KNOW is not a router, which is the rule the pump pass already follows. Requiring
         -- `router == true` made the registry the sole authority on a flag derived from modData that can be
         -- read too early, and a tile it got wrong stayed switched off for the life of the save.
         local metadata = pipeData.metadata
         if not (metadata and metadata.kinds and not metadata.router) then
-            local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
-            local router = square and Router.findOnSquare(square)
-            if router then
-                System.processRouter(router, pipeData.x, pipeData.y, pipeData.z, dt)
+            candidates[#candidates + 1] = pipeData
+        end
+    end
+    table.sort(candidates, function(left, right)
+        if left.z ~= right.z then return left.z < right.z end
+        if left.x ~= right.x then return left.x < right.x end
+        return left.y < right.y
+    end)
+
+    -- ONE router per source network per tick, in that order. A router is one-way, so several off the same
+    -- tank are not parallel taps on it -- they are a queue: the first fills its network, and only when that
+    -- network refuses more does the next one get a turn. Draining a source through all of them at once is
+    -- what levelling looked like from the outside, and it is not what a valve does.
+    -- Note the cost of the rule: the source now empties at ONE router's rate rather than the sum of them.
+    local servedSource = {}
+    for _, pipeData in ipairs(candidates) do
+        local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
+        local router = square and Router.findOnSquare(square)
+        if router then
+            local out = Router.getOutOffset(router)
+            local inSquare = out and getSquare(pipeData.x - out.dx, pipeData.y - out.dy, pipeData.z)
+            local sourceId = inSquare and NetworkAccess.getDrawSourceId(inSquare) or nil
+            if not sourceId or not servedSource[sourceId] then
+                if System.processRouter(router, pipeData.x, pipeData.y, pipeData.z, dt) and sourceId then
+                    servedSource[sourceId] = true
+                end
             end
         end
     end

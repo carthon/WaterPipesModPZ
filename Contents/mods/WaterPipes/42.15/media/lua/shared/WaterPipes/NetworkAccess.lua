@@ -607,12 +607,18 @@ local function collectStorageDescriptors(pipeSquares, hops, chains, solution, en
         -- at 0.092 ms an emitter, against the 1.042 ms the discovery above used to cost.
         local descriptors = {}
         for _, entry in ipairs(pooled) do
-            local distance = hops and hops[entry.key] or 0
-            local chain = chains and chains[entry.key] or nil
-            for descriptorKey, descriptor in pairs(Adapter.collectSquareContainers(entry.square)) do
-                descriptor.pipeHops = distance
-                descriptor.pressureChain = chain
-                descriptors[descriptorKey] = descriptor
+            -- The pool is the whole ZONE's vessels, and a zone spans a bare router because the head field
+            -- needs it to. `hops` comes from the directional draw walk, so a tile it never reached is one
+            -- this consumer cannot draw from -- water already past a one-way valve. Missing hops used to be
+            -- impossible here (the old walk reached everything) and now carries that meaning.
+            local distance = hops and hops[entry.key]
+            if distance or not hops then
+                local chain = chains and chains[entry.key] or nil
+                for descriptorKey, descriptor in pairs(Adapter.collectSquareContainers(entry.square)) do
+                    descriptor.pipeHops = distance or 0
+                    descriptor.pressureChain = chain
+                    descriptors[descriptorKey] = descriptor
+                end
             end
         end
         return descriptors
@@ -718,12 +724,14 @@ end
 -- Re-shape a solved zone into what the descriptor builders already take: a list of squares, a hop
 -- count per square key, and a `zone` of the pumps and inlets in it. A projection, not a second pass.
 local function squaresFromSolution(solution, originSquare)
-    -- By reference, not rebuilt: these are properties of the zone, identical for every consumer on it.
-    local pipeSquares = Hydraulics.pipeSquares(solution)
-
-    -- Hop counts stay measured FROM THE CONSUMER, which is what nearest-vessel draw order means. Walked
-    -- over the solved adjacency instead of the world: pure Lua, zero bridge calls.
-    local hops = Hydraulics.distancesFrom(solution, originSquare)
+    -- Tiles AND hop counts from one directional walk, both measured FROM THE CONSUMER -- which is what
+    -- nearest-vessel draw order means. Pure Lua over the solved adjacency, zero bridge calls.
+    -- It used to take the tile set from Hydraulics.pipeSquares, which is the WHOLE zone: the head field
+    -- deliberately spans a bare router, so a consumer on the inlet side counted the storage on the outlet
+    -- side as its own. A router that cannot be crossed back is exactly what makes that wrong, and it is
+    -- why two networks joined by one levelled against each other instead of the source emptying into the
+    -- destination.
+    local hops, pipeSquares = Hydraulics.drawReachableFrom(solution, originSquare)
 
     local pumps = Hydraulics.poweredPumps(solution)
 
@@ -1179,6 +1187,17 @@ function NetworkAccess.availableToPull(square, kind)
         return 0, nil, nil
     end
     return summary.totalAmount, summary.fluidTypeName, summary.pressure
+end
+
+-- Identity of the body of water reachable for DRAWING from `square`, or nil if nothing is. Two squares
+-- that can draw from each other share it; one past a router does not. Free -- the walk behind it is the
+-- one every draw summary from this tile already made.
+function NetworkAccess.getDrawSourceId(square)
+    if not square then
+        return nil
+    end
+    local solution = Hydraulics.solveAt(square)
+    return solution and Hydraulics.drawSourceId(solution, square) or nil
 end
 
 -- Router output helper: how much `fluidType` can be PUSHED into the network reachable downward from
