@@ -1,6 +1,7 @@
 WaterPipes = WaterPipes or {}
 WaterPipes.System = WaterPipes.System or {}
 
+require "WaterPipes/Invalidate"
 require "WaterPipes/Constants"
 require "WaterPipes/Logger"
 require "WaterPipes/State"
@@ -27,6 +28,7 @@ require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
 require "WaterPipes/World"
 
+local Invalidate = WaterPipes.Invalidate
 local Adapter = WaterPipes.ContainerAdapter
 local Constants = WaterPipes.Constants
 local AdapterSource = WaterPipes.EndpointAdapterSource
@@ -272,13 +274,15 @@ function System.checkIrrigationConservation(dtHours)
 
     -- Read the world cold: neither measurement may be served from something built earlier by whatever
     -- triggered the check, and none of these caches is frame-scoped any more.
-    Adapter.invalidateVesselCache()
-    NetworkAccess.invalidateTraversalCache()
-    PipeObjectUtils.invalidateScanCache()
+    Invalidate.layoutChanged()
 
     local before, vessels = System.totalNetworkWater()
     local spent = Irrigation.run(dtHours) or 0
 
+    -- Deliberately NOT an Invalidate verb, and deliberately narrower than the drop above. Nothing about
+    -- the world changed between the two measurements -- the audit is forcing one cache to be re-read so
+    -- the second reading cannot be served from something built for the first. Naming an event for that
+    -- would be inventing one that never happens.
     Adapter.invalidateVesselCache()
     local after = System.totalNetworkWater()
 
@@ -1152,8 +1156,7 @@ function System.rebuild(afterLayoutChange)
     if afterLayoutChange ~= false then
         -- Both caches invalidate by tile on object events, but a build and the rebuild it triggers happen in the
         -- same frame -- so without this the refresh that follows would still see the pre-build shape.
-        PipeObjectUtils.invalidateScanCache()
-        NetworkAccess.invalidateTraversalCache()
+        Invalidate.registryRebuilt()
     end
 
     System.scanContainersAroundPipes()
@@ -1605,11 +1608,7 @@ local function verifyCachesAgainstTheWorld()
     -- A disagreement means something else may be stale too, and the verifier only repaired the tiles it
     -- looked at. Falling back to the wholesale drop is the safe response to being wrong about the premise.
     if disagreed > 0 then
-        Adapter.invalidateVesselCache()
-        PipeObjectUtils.invalidateScanCache()
-        if Hydraulics and Hydraulics.invalidate then
-            Hydraulics.invalidate()
-        end
+        Invalidate.worldVerified()
     end
 end
 
@@ -1722,12 +1721,12 @@ local function checkWatchedInputs()
     -- Both, before either drop: a watcher skipped because an earlier one already decided to invalidate
     -- would never record its own state, and would then report a change every single minute.
     local pumpChanged = checkPumpPower()
-    local supplyChanged = NetworkAccess.supplyClockChanged()
+    local supplyChanged = Invalidate.supplyClockChanged()
 
     if supplyChanged then
-        NetworkAccess.invalidateTraversalCache()      -- the walks, and the field with them
-    elseif pumpChanged and Hydraulics and Hydraulics.invalidate then
-        Hydraulics.invalidate()                       -- the field only
+        Invalidate.flowPathChanged()                  -- the walks, and the field with them
+    elseif pumpChanged then
+        Invalidate.pumpStateChanged()                 -- the field only
     end
 
     -- The irrigation hold crosses frames; one that outlives its pass would freeze the head field. Same

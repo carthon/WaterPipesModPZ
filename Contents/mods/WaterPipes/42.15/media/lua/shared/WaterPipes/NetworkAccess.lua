@@ -1424,18 +1424,8 @@ end
 -- Anything that changes what the walk would FIND has to drop it. The object events do it by tile;
 -- router direction, ceilings and hydrant toggles call the global drop directly.
 -- OnTick drops only the two memos that hold fluid or are keyed to a solve.
-if Events then
-    if Events.OnObjectAdded then
-        Events.OnObjectAdded.Add(NetworkAccess.invalidateAroundObject)
-    end
-    if Events.OnObjectAboutToBeRemoved then
-        Events.OnObjectAboutToBeRemoved.Add(NetworkAccess.invalidateAroundObject)
-    end
-    -- A square the engine rebuilt while streaming: its objects were never announced one by one.
-    if Events.LoadGridsquare then
-        Events.LoadGridsquare.Add(NetworkAccess.invalidateAroundSquare)
-    end
-    if Events.OnTick then
-        Events.OnTick.Add(dropFrameMemos)
-    end
+-- The world events that drop these walks are registered in Invalidate, with the other three caches.
+-- OnTick stays here: dropFrameMemos is a frame-scoped memo of this module's own, not invalidation.
+if Events and Events.OnTick then
+    Events.OnTick.Add(dropFrameMemos)
 end

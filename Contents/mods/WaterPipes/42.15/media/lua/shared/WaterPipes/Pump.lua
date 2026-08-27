@@ -1,11 +1,13 @@
 WaterPipes = WaterPipes or {}
 WaterPipes.Pump = WaterPipes.Pump or {}
 
+require "WaterPipes/Invalidate"
 require "WaterPipes/Constants"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Pressure"
 require "WaterPipes/World"
 
+local Invalidate = WaterPipes.Invalidate
 local Constants = WaterPipes.Constants
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Pressure = WaterPipes.Pressure
@@ -98,9 +100,7 @@ function Pump.setEnabled(worldObject, enabled)
     -- A pump is half the head in most zones, so flipping it invalidates the solved field. Resolved off
     -- the WaterPipes table rather than required at the top: Hydraulics already requires this module.
     local Hydraulics = WaterPipes.Hydraulics
-    if Hydraulics and Hydraulics.invalidate then
-        Hydraulics.invalidate()
-    end
+    Invalidate.pumpStateChanged()
 end
 
 function Pump.isPowered(worldObject)

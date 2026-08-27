@@ -1918,15 +1918,8 @@ end
 -- crossing between empty and not, so the per-minute pass drops it as well, bounding staleness at one
 -- in-game minute. No water can be conjured by that: every draw still reads the real vessels through
 -- NetworkAccess.
-if Events then
-    -- Scoped, not global. These fire for every object the world streams in as the player walks, and almost
-    -- none of them are ours; the global drop here meant the per-zone cache never lived long enough to be one.
-    if Events.OnObjectAdded then
-        Events.OnObjectAdded.Add(Hydraulics.invalidateAroundObject)
-    end
-    if Events.OnObjectAboutToBeRemoved then
-        Events.OnObjectAboutToBeRemoved.Add(Hydraulics.invalidateAroundObject)
-    end
-end
+-- The world events that drop this field are registered in Invalidate, with the other three caches.
+-- Scoped, not global: they fire for every object the world streams in as the player walks and almost
+-- none of them are ours, and the global drop meant the per-zone cache never lived long enough to be one.
 
 return Hydraulics

@@ -1,10 +1,12 @@
 WaterPipes = WaterPipes or {}
 WaterPipes.Hydrant = WaterPipes.Hydrant or {}
 
+require "WaterPipes/Invalidate"
 require "WaterPipes/Constants"
 require "WaterPipes/Mains"
 require "WaterPipes/State"
 
+local Invalidate = WaterPipes.Invalidate
 local Constants = WaterPipes.Constants
 local Mains = WaterPipes.Mains
 local State = WaterPipes.State
@@ -84,9 +86,7 @@ function Hydrant.setOpen(worldObject, open)
     -- cached walk still reflects the old valve position. Resolved off the WaterPipes table:
     -- NetworkAccess requires this module, so requiring it back would be a recursive require.
     local NetworkAccess = WaterPipes.NetworkAccess
-    if NetworkAccess and NetworkAccess.invalidateTraversalCache then
-        NetworkAccess.invalidateTraversalCache()
-    end
+    Invalidate.flowPathChanged()
 end
 
 -- ===== Reserve =====

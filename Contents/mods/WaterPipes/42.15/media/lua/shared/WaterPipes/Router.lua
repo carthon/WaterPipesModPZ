@@ -1,9 +1,11 @@
 WaterPipes = WaterPipes or {}
 WaterPipes.Router = WaterPipes.Router or {}
 
+require "WaterPipes/Invalidate"
 require "WaterPipes/Constants"
 require "WaterPipes/PipeObjectUtils"
 
+local Invalidate = WaterPipes.Invalidate
 local Constants = WaterPipes.Constants
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Router = WaterPipes.Router
@@ -126,9 +128,7 @@ function Router.setPressureCeiling(worldObject, value)
     -- prices the old setting. Resolved off the WaterPipes table rather than required at the top:
     -- NetworkAccess already requires this module, and closing that loop is a recursive require.
     local NetworkAccess = WaterPipes.NetworkAccess
-    if NetworkAccess and NetworkAccess.invalidateTraversalCache then
-        NetworkAccess.invalidateTraversalCache()
-    end
+    Invalidate.flowPathChanged()
 end
 
 return Router

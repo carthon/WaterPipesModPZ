@@ -1,12 +1,14 @@
 WaterPipes = WaterPipes or {}
 WaterPipes.Irrigation = WaterPipes.Irrigation or {}
 
+require "WaterPipes/Invalidate"
 require "WaterPipes/Constants"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Pressure"
 require "WaterPipes/World"
 
+local Invalidate = WaterPipes.Invalidate
 local Constants = WaterPipes.Constants
 local Irrigation = WaterPipes.Irrigation
 local NetworkAccess = WaterPipes.NetworkAccess
@@ -458,11 +460,8 @@ local function takePassHold()
     if passHeld then
         return
     end
-    local Hydraulics = WaterPipes.Hydraulics
-    if Hydraulics and Hydraulics.holdSupplyInvalidation then
-        Hydraulics.holdSupplyInvalidation()
-        passHeld = true
-    end
+    Invalidate.holdSupply()
+    passHeld = true
 end
 
 local function releasePassHold()
@@ -471,10 +470,7 @@ local function releasePassHold()
     end
     -- Cleared before the call: a throw inside it must not leave the flag claiming a hold.
     passHeld = false
-    local Hydraulics = WaterPipes.Hydraulics
-    if Hydraulics and Hydraulics.releaseSupplyInvalidation then
-        Hydraulics.releaseSupplyInvalidation()
-    end
+    Invalidate.releaseSupply()
 end
 
 function Irrigation.hasPendingPass()
@@ -590,11 +586,7 @@ function Irrigation.run(dtHours)
 
     -- Its OWN hold, not the pass flag: the debug command can call this while a pass is draining, and the
     -- depth counter is what makes that safe. pcall so a throwing emitter cannot walk out still holding.
-    local Hydraulics = WaterPipes.Hydraulics
-    local holding = Hydraulics and Hydraulics.holdSupplyInvalidation and Hydraulics.releaseSupplyInvalidation
-    if holding then
-        Hydraulics.holdSupplyInvalidation()
-    end
+    Invalidate.holdSupply()
 
     local ok, spent = pcall(function()
         local total = 0
@@ -604,9 +596,7 @@ function Irrigation.run(dtHours)
         return total
     end)
 
-    if holding then
-        Hydraulics.releaseSupplyInvalidation()
-    end
+    Invalidate.releaseSupply()
     if not ok then
         error(spent, 0)
     end
