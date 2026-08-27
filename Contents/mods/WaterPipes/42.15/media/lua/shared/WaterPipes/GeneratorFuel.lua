@@ -149,7 +149,8 @@ function GeneratorFuel.refresh(worldObject)
         return false
     end
 
-    local drawn = NetworkAccess.drawFluidAtSquare(square, Constants.GENERATOR_FUEL_FLUID, need)
+    -- Throttled: a tank at the far end of a long line fills slower than one sitting on the supply.
+    local drawn = NetworkAccess.drawFluidAtSquareThrottled(square, Constants.GENERATOR_FUEL_FLUID, need)
     if drawn and drawn > 0 then
         worldObject:setFuel(fuel + drawn)
         Logger.log(string.format("Generator refueled +%.2f %s from network.", drawn, Constants.GENERATOR_FUEL_FLUID))

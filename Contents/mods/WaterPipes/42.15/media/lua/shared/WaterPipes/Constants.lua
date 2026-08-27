@@ -256,6 +256,14 @@ Constants.ROUTER_DIRECTION_KEY = "waterpipesRouterDir"   -- "N"/"E"/"S"/"W" = th
 Constants.ROUTER_SPRITE = "waterpipes_01_13"             -- placeholder until the arrow art is packed
 Constants.ROUTER_DEFAULT_DIRECTION = "N"
 Constants.ROUTER_TRANSFER_RATE = 30                      -- max fluid units moved IN->OUT per minute tick
+
+-- Several routers off ONE source: a queue, or parallel taps?
+--   true  -> a queue. The first fills its network, and the next gets a turn only when that one refuses
+--            more. What a one-way valve implies, and what was asked for.
+--   false -> every router draws in the same tick, so the source empties at the SUM of their rates.
+-- The cost of `true` is throughput: three destinations drain a tank at one router's rate, not three.
+-- Flip it here if a base with many parallel routers feels stalled rather than orderly.
+Constants.ROUTER_FILL_SEQUENTIAL = true
 Constants.ADAPTER_SOURCE_SPRITE = "carpentry_02_54"
 Constants.ADAPTER_SOURCE_HIDDEN_SPRITE = "waterpipes_01_20"
 Constants.MAX_FINITE_FLUID_CAPACITY = 9999
@@ -320,6 +328,11 @@ Constants.HYDRAULIC_FRICTION_EXPONENT = 1.0
 -- Nominal flow for a consumer with no rate of its own (taps, generators, the router's own transfers).
 -- Back-derived the same way: PRESSURE_FRICTION_TAP / HYDRAULIC_FRICTION_K = 0.05 / 0.111.
 Constants.HYDRAULIC_TAP_FLOW = 0.45         -- litres per in-game hour
+
+-- Head at which a pressure-throttled transfer runs at its FULL rate; below it the rate falls off as
+-- sqrt(P / this). 3.0 is one PRESSURE_PER_LEVEL, i.e. a source one storey above the consumer -- the
+-- point at which a gravity-fed line is doing well rather than merely working. See Pressure.flowFactor.
+Constants.HYDRAULIC_FLOW_REFERENCE_PRESSURE = 3.0
 
 -- How much of the SHARED demand an edge is charged for. A real dial, not a fudge:
 --   1.0 -> the edge carries everything flowing through it. Full demand realism.

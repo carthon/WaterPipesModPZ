@@ -350,7 +350,7 @@ local function classifySites(nodes, order)
     return sites
 end
 
-local function collectSupplyAndDemand(nodes, order, sites)
+local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets)
     local supply = {}        -- key -> head at that node (m.c.a., absolute)
     local boostable = {}     -- key -> true when a pump may lift this supply (see the end of the pass)
     local demand = {}        -- key -> litres/hour drawn there
@@ -385,6 +385,21 @@ local function collectSupplyAndDemand(nodes, order, sites)
             if (descriptor.waterAmount or 0) > 0 then
                 raise(key, elevation(node.z) + containerBase, true)
             end
+        end
+    end
+
+    -- A purifier's clean buffer is STORED WATER on this zone, exactly like a barrel, and it was the one
+    -- store that supplied no head. That is not a rounding error: a head field with no supply anywhere
+    -- answers "nothing reaches you" to every consumer on it, so a clean side whose only water is the
+    -- buffer -- a purifier with no barrel behind it, which is how most people first build one -- could
+    -- take dirty water in and let nobody draw the clean water out. The comment on the settle even
+    -- promised the opposite: "with no barrels it is a no-op and a tap can still reach it".
+    -- Same base head as a vessel, and boostable for the same reason: a pump lifts stored water.
+    for _, outlet in pairs(purifierOutlets or {}) do
+        local node = outlet.nodeKey and nodes[outlet.nodeKey]
+        if node and Purifier and Purifier.getOutAmount
+            and (Purifier.getOutAmount(outlet.purifier) or 0) > 0 then
+            raise(outlet.nodeKey, elevation(node.z) + containerBase, true)
         end
     end
 
@@ -858,7 +873,7 @@ local function solveWithTopology(topology, zoneKey)
 
     local mark = markPhase()
     local supply, demand, kinds, pumps, sources, supplyFloor, stats =
-        collectSupplyAndDemand(nodes, order, topology.sites)
+        collectSupplyAndDemand(nodes, order, topology.sites, purifierOutlets)
     sincePhase("solve/supply", mark)
 
     mark = markPhase()
@@ -1508,6 +1523,93 @@ function Hydraulics.floodFrom(solution, distance, queue)
         end
     end
     return distance
+end
+
+-- Which of the zone's nodes a consumer standing on `square` may actually DRAW from, and how far each is.
+--
+-- The head field joins a router's two ends in BOTH directions on purpose (see buildFeeders): a supply
+-- sitting past a valve still has to be visible to the pressure solve, or it strands. STORAGE is not
+-- symmetric in the same way. A router carries water one way and refuses the return, so litres that have
+-- already crossed are gone as far as the upstream side is concerned -- and a draw that counted them
+-- levelled the two networks against each other instead of emptying the source into the destination.
+--
+-- So: plain adjacency both ways, and a router edge only in the direction a draw may cross it -- standing
+-- on the OUT side, reaching back to the IN side, which is what viaRouter already records.
+-- Returns (distanceByKey, squares) with the squares in the zone's own order, so the draw's vessel
+-- ordering does not depend on how this walk happened to expand.
+function Hydraulics.drawReachableFrom(solution, square)
+    if not solution or not square then
+        return {}, {}
+    end
+
+    local startKey = squareKey(square)
+    solution._drawReach = solution._drawReach or {}
+    local cached = solution._drawReach[startKey]
+    if cached then
+        return cached.distance, cached.squares
+    end
+
+    local distance = {}
+    local queue = {}
+
+    if solution.nodes[startKey] then
+        distance[startKey] = 0
+        queue[1] = startKey
+    else
+        -- A fixture (sink, generator) has no pipe of its own; it is one tile off the line.
+        local x, y, z = square:getX(), square:getY(), square:getZ()
+        for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
+            local neighbourKey = keyOf(x + offset.x, y + offset.y, z)
+            if solution.nodes[neighbourKey] and distance[neighbourKey] == nil then
+                distance[neighbourKey] = 1
+                queue[#queue + 1] = neighbourKey
+            end
+        end
+    end
+
+    local index = 1
+    while index <= #queue do
+        local key = queue[index]
+        index = index + 1
+
+        for neighbourKey in pairs(solution.adjacency[key] or {}) do
+            if distance[neighbourKey] == nil and solution.nodes[neighbourKey] then
+                distance[neighbourKey] = distance[key] + 1
+                queue[#queue + 1] = neighbourKey
+            end
+        end
+
+        -- The one legal valve crossing for a draw: we are on the OUT side, the water we want is behind it.
+        for neighbourKey in pairs((solution.viaRouter or {})[key] or {}) do
+            if distance[neighbourKey] == nil and solution.nodes[neighbourKey] then
+                distance[neighbourKey] = distance[key] + 1
+                queue[#queue + 1] = neighbourKey
+            end
+        end
+    end
+
+    -- The lowest reached key doubles as the SOURCE NETWORK's identity: two consumers that can draw from
+    -- each other agree on it, and one on the far side of a valve does not. Computed once per origin here
+    -- rather than by whoever needs it, which would be once a minute per router.
+    local squares = {}
+    local sourceId = nil
+    for _, key in ipairs(solution.order) do
+        if distance[key] ~= nil then
+            squares[#squares + 1] = solution.nodes[key].square
+            if not sourceId or key < sourceId then
+                sourceId = key
+            end
+        end
+    end
+
+    solution._drawReach[startKey] = { distance = distance, squares = squares, sourceId = sourceId }
+    return distance, squares, sourceId
+end
+
+-- The identity of the body of water a consumer standing here can reach. See drawReachableFrom.
+function Hydraulics.drawSourceId(solution, square)
+    local _, _, sourceId = Hydraulics.drawReachableFrom(solution, square)
+    return sourceId
 end
 
 -- Litres/hour flowing through the node, for the gauge and the debug overlay. This is the number that

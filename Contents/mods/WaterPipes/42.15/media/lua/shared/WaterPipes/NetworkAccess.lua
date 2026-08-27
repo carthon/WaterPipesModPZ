@@ -607,12 +607,18 @@ local function collectStorageDescriptors(pipeSquares, hops, chains, solution, en
         -- at 0.092 ms an emitter, against the 1.042 ms the discovery above used to cost.
         local descriptors = {}
         for _, entry in ipairs(pooled) do
-            local distance = hops and hops[entry.key] or 0
-            local chain = chains and chains[entry.key] or nil
-            for descriptorKey, descriptor in pairs(Adapter.collectSquareContainers(entry.square)) do
-                descriptor.pipeHops = distance
-                descriptor.pressureChain = chain
-                descriptors[descriptorKey] = descriptor
+            -- The pool is the whole ZONE's vessels, and a zone spans a bare router because the head field
+            -- needs it to. `hops` comes from the directional draw walk, so a tile it never reached is one
+            -- this consumer cannot draw from -- water already past a one-way valve. Missing hops used to be
+            -- impossible here (the old walk reached everything) and now carries that meaning.
+            local distance = hops and hops[entry.key]
+            if distance or not hops then
+                local chain = chains and chains[entry.key] or nil
+                for descriptorKey, descriptor in pairs(Adapter.collectSquareContainers(entry.square)) do
+                    descriptor.pipeHops = distance or 0
+                    descriptor.pressureChain = chain
+                    descriptors[descriptorKey] = descriptor
+                end
             end
         end
         return descriptors
@@ -718,12 +724,14 @@ end
 -- Re-shape a solved zone into what the descriptor builders already take: a list of squares, a hop
 -- count per square key, and a `zone` of the pumps and inlets in it. A projection, not a second pass.
 local function squaresFromSolution(solution, originSquare)
-    -- By reference, not rebuilt: these are properties of the zone, identical for every consumer on it.
-    local pipeSquares = Hydraulics.pipeSquares(solution)
-
-    -- Hop counts stay measured FROM THE CONSUMER, which is what nearest-vessel draw order means. Walked
-    -- over the solved adjacency instead of the world: pure Lua, zero bridge calls.
-    local hops = Hydraulics.distancesFrom(solution, originSquare)
+    -- Tiles AND hop counts from one directional walk, both measured FROM THE CONSUMER -- which is what
+    -- nearest-vessel draw order means. Pure Lua over the solved adjacency, zero bridge calls.
+    -- It used to take the tile set from Hydraulics.pipeSquares, which is the WHOLE zone: the head field
+    -- deliberately spans a bare router, so a consumer on the inlet side counted the storage on the outlet
+    -- side as its own. A router that cannot be crossed back is exactly what makes that wrong, and it is
+    -- why two networks joined by one levelled against each other instead of the source emptying into the
+    -- destination.
+    local hops, pipeSquares = Hydraulics.drawReachableFrom(solution, originSquare)
 
     local pumps = Hydraulics.poweredPumps(solution)
 
@@ -747,6 +755,9 @@ local function squaresFromSolution(solution, originSquare)
     }
 end
 
+-- The `fill` value that means "gate this like a fill, but treat every router as a wall".
+local SEALED = "sealed"
+
 local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, statusOnly)
     if not originSquare then
         return nil
@@ -754,9 +765,17 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, st
 
     -- Which way the water is travelling, which decides how a bare router may be crossed.
     -- Visualization asks for neither and keeps every router solid.
+    --
+    -- `fill` has THREE states, not two:
+    --   nil/false   a draw (or visualization): crosses a bare router only OUT -> IN.
+    --   true        a fill: crosses IN -> OUT, which is where water pushed in actually goes.
+    --   "sealed"    a level-out: gated exactly like a fill, but every router is a wall.
+    -- The third exists because a settle is a body of water finding its own level, and a body of water
+    -- ENDS at a valve. Levelling across one moved water at no rate at all -- straight past the router's
+    -- own ROUTER_TRANSFER_RATE and the head that throttles it -- which is a hole nothing metered.
     local conduct = nil
     if fill then
-        conduct = "fill"
+        conduct = fill ~= SEALED and "fill" or nil
     elseif kind then
         conduct = "draw"
     end
@@ -992,8 +1011,15 @@ end
 -- Even the stored water out across the network without adding or removing any; returns litres moved.
 -- The purifier needs it: a network otherwise settles only when something draws from it or fills it,
 -- so a purifier feeding barrels nobody drinks from would stall at a full buffer.
+-- A settle is a FILL-shaped question -- where can water sitting here GO -- and the arguments have to say
+-- so. This read `(originSquare, nil, true)` against a signature of
+-- (originSquare, verticalMode, kind, fill, statusOnly): one short, so `true` landed in `kind` and the
+-- level-out was answered as a CONSUMER DRAW. The gate that comes with a draw asks each vessel whether it
+-- could push water UP to the origin, so a barrel below the purifier's outlet was struck off the list and
+-- the buffer had nothing left to even out against. Harmless until the shared head field made that gate
+-- all-or-nothing; after it, the purifier's clean side simply stopped draining.
 function NetworkAccess.settleAtSquare(originSquare)
-    local summary = buildSummaryFromSquare(originSquare, nil, true)
+    local summary = buildSummaryFromSquare(originSquare, "both", nil, SEALED)
     if not summary or summary.isMixed or (summary.totalAmount or 0) <= 0 then
         return 0
     end
@@ -1164,12 +1190,25 @@ end
 
 -- Router intake helper: which single fluid (and how much) can be PULLED from the network reachable
 -- upward from `square` (gravity-consumer view). Returns (amount, fluidTypeName) or (0, nil).
+-- Third return is the head reaching `square`, for a caller that wants to throttle by it: the summary
+-- already carries it, so taking it costs nothing. Existing two-value callers are unaffected.
 function NetworkAccess.availableToPull(square, kind)
     local summary = buildSummaryFromSquare(square, "both", kind or Constants.PRESSURE_KIND_TAP)
     if not summary or summary.isMixed or (summary.totalAmount or 0) <= 0 then
-        return 0, nil
+        return 0, nil, nil
     end
-    return summary.totalAmount, summary.fluidTypeName
+    return summary.totalAmount, summary.fluidTypeName, summary.pressure
+end
+
+-- Identity of the body of water reachable for DRAWING from `square`, or nil if nothing is. Two squares
+-- that can draw from each other share it; one past a router does not. Free -- the walk behind it is the
+-- one every draw summary from this tile already made.
+function NetworkAccess.getDrawSourceId(square)
+    if not square then
+        return nil
+    end
+    local solution = Hydraulics.solveAt(square)
+    return solution and Hydraulics.drawSourceId(solution, square) or nil
 end
 
 -- Router output helper: how much `fluidType` can be PUSHED into the network reachable downward from
@@ -1322,6 +1361,18 @@ function NetworkAccess.drawFluidAtSquare(originSquare, requiredFluidType, amount
     return NetworkAccess.drawFromSummary(
         buildSummaryFromSquare(originSquare, "both", kind or Constants.PRESSURE_KIND_TAP),
         requiredFluidType, amount)
+end
+
+-- As drawFluidAtSquare, but the amount asked for is first scaled by the head reaching this square
+-- (Pressure.flowFactor). ONE summary, the same one the unthrottled draw builds -- the pressure rides on
+-- it already, so this costs no extra walk and no extra bridge call.
+function NetworkAccess.drawFluidAtSquareThrottled(originSquare, requiredFluidType, amount, kind)
+    local summary = NetworkAccess.getDrawSummary(originSquare, kind)
+    if not summary then
+        return 0
+    end
+    local wanted = math.max(amount or 0, 0) * Pressure.flowFactor(summary.pressure)
+    return NetworkAccess.drawFromSummary(summary, requiredFluidType, wanted)
 end
 
 -- Add up to `amount` of `fluidType` into the network reachable from `originSquare`. Only works if

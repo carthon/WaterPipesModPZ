@@ -16,6 +16,7 @@ require "WaterPipes/GravityFlow"
 require "WaterPipes/Router"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/Mains"
+require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Hydrant"
 require "WaterPipes/Stagnation"
@@ -41,6 +42,7 @@ local GravityFlow = WaterPipes.GravityFlow
 local Router = WaterPipes.Router
 local NetworkAccess = WaterPipes.NetworkAccess
 local Mains = WaterPipes.Mains
+local Pressure = WaterPipes.Pressure
 local Pump = WaterPipes.Pump
 local Hydrant = WaterPipes.Hydrant
 local Stagnation = WaterPipes.Stagnation
@@ -146,19 +148,64 @@ function System.scanContainersAroundPipes()
 
             -- Reconcile the purifier registry and fill in a missing `kind` while standing on the tile anyway: a
             -- save made before either existed carries devices nobody recorded, and the answer is on the object.
-            -- Only router tiles are asked. One pass over ten in-game minutes fills the whole base.
-            local metadata = pipeData.metadata
-            if not metadata or not metadata.kinds then
-                metadata = metadata or {}
-                for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
-                    if Router.isRouter(worldObject) then metadata.router = true end
-                    if Pump.isPump(worldObject) then metadata.pump = true end
-                    if Irrigation.isDrip(worldObject) then metadata.drip = true end
-                    if Irrigation.isSprinkler(worldObject) then metadata.sprinkler = true end
+            --
+            -- DERIVED EVERY PASS, AND ONLY EVER ADDED TO. It used to stamp `kinds` once and never look again,
+            -- and every one of these predicates reads MODDATA -- which in MP arrives after the square does.
+            -- A scan that landed in that window recorded "not a router" permanently. Pumps and emitters
+            -- survived it, because they are only skipped on a POSITIVE "not a pump"; routers were iterated on
+            -- `metadata.router == true` with no world probe behind it, so a router caught by that window was
+            -- dead until the player dismantled and rebuilt it. Which is what was reported.
+            --
+            -- Re-deriving is what makes the stamp self-healing: the flag appears on the first pass that can
+            -- actually read it, so an existing save repairs itself without a migration. Never cleared, so a
+            -- momentarily unreadable modData cannot switch a working router off for a tick either. A flag left
+            -- on a tile that is no longer a router costs one findOnSquare a minute and nothing else.
+            -- The four keys read off ONE modData fetch rather than through the four module predicates, which
+            -- would each fetch it again. Same test each of them makes (`modData[KEY] == true`); four bridge
+            -- calls per object become one, which is what makes re-deriving every pass affordable.
+            --
+            -- AUTHORITY IS THE POINT HERE, in both directions. `metadata.router` is not a hint: State
+            -- .rebuildGraph reads it to decide where a network ENDS -- routers are flow boundaries -- and it
+            -- is the only place that asks the registry rather than the world. So a flag left behind on a
+            -- tile whose router has been dismantled cuts the base in two at a tile that conducts perfectly
+            -- well, which is what a player rebuilding routers hits. Deriving these monotonically, as this
+            -- did for one commit, cannot repair that.
+            --
+            -- What makes clearing safe is knowing when the reading is worth trusting. getPipeObjectsOnSquare
+            -- accepts an object by NAME as well as by modData, so the list alone proves nothing -- but an
+            -- object carrying our own PIPE key has had its modData delivered, and the kind keys are written
+            -- on that same object in the same breath. One such object makes the whole square's answer
+            -- authoritative; none makes it silence, and silence must not overwrite anything. That is the
+            -- MP window the old one-shot stamp fell into, from the other side.
+            local metadata = pipeData.metadata or {}
+            local derived = nil
+            for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+                local okMod, modData = pcall(worldObject.getModData, worldObject)
+                if okMod and modData and modData[Constants.PIPE_MODDATA_KEY] then
+                    derived = derived or {}
+                    if modData[Constants.ROUTER_MODDATA_KEY] == true then derived.router = true end
+                    if modData[Constants.PUMP_MODDATA_KEY] == true then derived.pump = true end
+                    if modData[Constants.DRIP_MODDATA_KEY] == true then derived.drip = true end
+                    if modData[Constants.SPRINKLER_MODDATA_KEY] == true then derived.sprinkler = true end
                 end
-                metadata.kinds = true
-                pipeData.metadata = metadata
             end
+
+            if derived then
+                if metadata.kinds and (metadata.router or false) ~= (derived.router or false) then
+                    Logger.warn(string.format(
+                        "ROUTER REGISTRY WRONG at %d:%d:%d: recorded as %s, the world says %s. Repaired -- "
+                        .. "a stale flag here splits the network at a tile that conducts.",
+                        pipeData.x, pipeData.y, pipeData.z,
+                        metadata.router and "a router" or "not a router",
+                        derived.router and "a router" or "not a router"))
+                end
+                metadata.router = derived.router
+                metadata.pump = derived.pump
+                metadata.drip = derived.drip
+                metadata.sprinkler = derived.sprinkler
+                metadata.kinds = true
+            end
+            pipeData.metadata = metadata
 
             if pipeData.metadata and pipeData.metadata.router == true then
                 local purifier = Purifier.findForRouterSquare(square)
@@ -267,8 +314,36 @@ function System.checkIrrigationConservation(dtHours)
     return report
 end
 
+-- "The vessels are not sharing water" has exactly two causes and they look identical in game: the
+-- vessels are in different COMPONENTS (something is acting as a flow boundary between them -- a router,
+-- or a tile the registry still thinks holds one), or they are in one component holding TWO FLUIDS, which
+-- the settle refuses. Reported on change rather than every pass, so a working base stays quiet.
+local lastShapeReport = nil
+
 function System.redistributeWater()
     local components = State.getComponents()
+
+    local shape = {}
+    for _, component in ipairs(components) do
+        local vessels = 0
+        for _, node in pairs(component.nodes) do
+            if node.kind == Constants.NODE_KIND_CONTAINER then
+                vessels = vessels + 1
+            end
+        end
+        if vessels > 0 then
+            shape[#shape + 1] = vessels
+        end
+    end
+    table.sort(shape)
+    local signature = table.concat(shape, "+")
+    if signature ~= lastShapeReport then
+        lastShapeReport = signature
+        Logger.log(string.format(
+            "vessel groups that share water: %s (%d group(s) holding vessels, out of %d network(s)). "
+            .. "Vessels in different groups never level against each other.",
+            signature ~= "" and signature or "none", #shape, #components))
+    end
 
     for _, component in ipairs(components) do
         local containers = {}
@@ -313,30 +388,92 @@ function System.redistributeWater()
             -- classic per-pool equalization, so one floor is unchanged.
             GravityFlow.settle(containers, totalWater, networkFluidType)
         elseif fluidTypeCount > 1 then
-            Logger.warn("Skipping mixed-fluid network with " .. tostring(fluidTypeCount) .. " fluid types")
+            -- Naming the fluids and one tile of the group, because the count alone cannot be acted on: the
+            -- player has to know WHICH vessel is holding the odd fluid before they can empty it.
+            local names = {}
+            for fluidTypeName in pairs(totalByFluidType) do
+                names[#names + 1] = tostring(fluidTypeName)
+            end
+            table.sort(names)
+            local where = containers[1]
+            Logger.warn(string.format(
+                "NOT LEVELLING a group of %d vessel(s) near %s: it holds %d fluids (%s). A group has to be "
+                .. "of one mind about what it contains before water will move inside it.",
+                #containers,
+                where and string.format("%d:%d:%d", where.x or 0, where.y or 0, where.z or 0) or "?",
+                fluidTypeCount, table.concat(names, ", ")))
         end
     end
 end
 
 -- No purifier on the tile: one-way passthrough of the IN network's single fluid into the OUT network.
 -- `dt` is the elapsed in-game minutes for this sub-step; rates are per-minute and scaled by it.
-local function processPassthroughRouter(inSquare, outSquare, dt)
-    local avail, fluidType = NetworkAccess.availableToPull(inSquare)
-    if not fluidType or avail <= 0 then
+-- Why a router moved nothing, said ONCE per router per stall rather than every minute. "It stopped and
+-- the source still had water" is the report this exists to answer, and it has four possible causes that
+-- look identical from outside the pipe: nothing to pull, nowhere to put it, a head too low to matter, or
+-- a fluid the destination refuses. Guessing between them from a screenshot is not possible.
+local routerStallReason = {}
+
+local function noteRouterStall(inSquare, reason, detail)
+    if not inSquare or not inSquare.getX then
         return
+    end
+    local key = State.squareKey(inSquare:getX(), inSquare:getY(), inSquare:getZ())
+    if routerStallReason[key] == reason then
+        return
+    end
+    routerStallReason[key] = reason
+    Logger.log(string.format("router at %d:%d:%d moved nothing: %s%s",
+        inSquare:getX(), inSquare:getY(), inSquare:getZ(), reason, detail or ""))
+end
+
+local function noteRouterRunning(inSquare)
+    if not inSquare or not inSquare.getX then
+        return
+    end
+    local key = State.squareKey(inSquare:getX(), inSquare:getY(), inSquare:getZ())
+    if routerStallReason[key] then
+        routerStallReason[key] = nil
+        Logger.log(string.format("router at %d:%d:%d moving again.",
+            inSquare:getX(), inSquare:getY(), inSquare:getZ()))
+    end
+end
+
+local function processPassthroughRouter(inSquare, outSquare, dt)
+    local avail, fluidType, pressure = NetworkAccess.availableToPull(inSquare)
+    if not fluidType or avail <= 0 then
+        -- A MIXED source reads exactly like an empty one here, and is the likelier of the two when the
+        -- player can see water in the tank: availableToPull refuses a network holding two fluids.
+        noteRouterStall(inSquare, "nothing to pull",
+            string.format(" (available %.2f, fluid %s)", avail or 0, tostring(fluidType)))
+        return false
     end
     local headroom = NetworkAccess.availableToPush(outSquare, fluidType)
     if headroom <= 0 then
-        return
+        noteRouterStall(inSquare, "destination full or refusing this fluid",
+            string.format(" (%s, %.2f available to send)", tostring(fluidType), avail))
+        return false
     end
-    local transfer = math.min(Constants.ROUTER_TRANSFER_RATE * dt, avail, headroom)
+    -- The rate is what the IN side can actually deliver to the router tile, not a flat ceiling: the head
+    -- was already solved for this square and until now was read only as a pass/fail gate. Free to use.
+    local factor = Pressure.flowFactor(pressure)
+    local rate = Constants.ROUTER_TRANSFER_RATE * dt * factor
+    local transfer = math.min(rate, avail, headroom)
     if transfer <= 0 then
-        return
+        noteRouterStall(inSquare, "no head to move it with",
+            string.format(" (pressure %s, flow factor %.3f)",
+                pressure and string.format("%.2f", pressure) or "nil", factor))
+        return false
     end
     local drawn = NetworkAccess.drawFluidAtSquare(inSquare, fluidType, transfer)
     if drawn and drawn > 0 then
         NetworkAccess.fillFluidAtSquare(outSquare, fluidType, drawn)
+        noteRouterRunning(inSquare)
+        return true
     end
+    noteRouterStall(inSquare, "the draw returned nothing",
+        string.format(" (wanted %.2f of %s from %.2f available)", transfer, tostring(fluidType), avail))
+    return false
 end
 
 -- Purifier on the tile: IN network -> IN buffer -> convert -> OUT buffer -> OUT network. Intake pulls
@@ -415,17 +552,19 @@ end
 
 -- Fluid routers actively move fluid across their boundary in the OUT direction each server tick. A
 -- purifier-container on the tile purifies in transit; otherwise it is a plain one-way passthrough.
+-- Returns whether it actually moved fluid, which processRouters uses to decide whether the next router
+-- on the same source network gets a turn this tick.
 function System.processRouter(router, rx, ry, rz, dt)
     dt = dt or 1.0
     local out = Router.getOutOffset(router)
     if not out then
-        return
+        return false
     end
 
     local inSquare = getSquare(rx - out.dx, ry - out.dy, rz)
     local outSquare = getSquare(rx + out.dx, ry + out.dy, rz)
     if not inSquare or not outSquare then
-        return
+        return false
     end
 
     -- Scan the whole purifier footprint from the router tile: the tank's modData may live on a footprint
@@ -433,9 +572,12 @@ function System.processRouter(router, rx, ry, rz, dt)
     local purifier = Purifier.findForRouterSquare(getSquare(rx, ry, rz))
     if purifier then
         processPurifierRouter(purifier, inSquare, outSquare, dt)
-    else
-        processPassthroughRouter(inSquare, outSquare, dt)
+        -- A purifier router is never sequenced: it is a hard boundary with its own buffers, not a queue
+        -- position on somebody's tank.
+        return false
     end
+
+    return processPassthroughRouter(inSquare, outSquare, dt)
 end
 
 -- `dt` = elapsed in-game minutes since routers were last processed (defaults to a 1-minute step).
@@ -445,12 +587,43 @@ function System.processRouters(dt)
         return
     end
     local state = State.ensure()
+
+    -- Sorted, because the order decides who fills first and `pairs` does not have one. Two routers off the
+    -- same tank must not swap places between ticks.
+    local candidates = {}
     for _, pipeData in pairs(state.pipes) do
-        if pipeData.metadata and pipeData.metadata.router == true then
-            local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
-            local router = square and Router.findOnSquare(square)
-            if router then
-                System.processRouter(router, pipeData.x, pipeData.y, pipeData.z, dt)
+        -- Skip only what we KNOW is not a router, which is the rule the pump pass already follows. Requiring
+        -- `router == true` made the registry the sole authority on a flag derived from modData that can be
+        -- read too early, and a tile it got wrong stayed switched off for the life of the save.
+        local metadata = pipeData.metadata
+        if not (metadata and metadata.kinds and not metadata.router) then
+            candidates[#candidates + 1] = pipeData
+        end
+    end
+    table.sort(candidates, function(left, right)
+        if left.z ~= right.z then return left.z < right.z end
+        if left.x ~= right.x then return left.x < right.x end
+        return left.y < right.y
+    end)
+
+    -- ONE router per source network per tick, in that order. A router is one-way, so several off the same
+    -- tank are not parallel taps on it -- they are a queue: the first fills its network, and only when that
+    -- network refuses more does the next one get a turn. Draining a source through all of them at once is
+    -- what levelling looked like from the outside, and it is not what a valve does.
+    -- Note the cost of the rule: the source now empties at ONE router's rate rather than the sum of them.
+    local servedSource = {}
+    for _, pipeData in ipairs(candidates) do
+        local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
+        local router = square and Router.findOnSquare(square)
+        if router then
+            local out = Router.getOutOffset(router)
+            local inSquare = out and getSquare(pipeData.x - out.dx, pipeData.y - out.dy, pipeData.z)
+            local sourceId = Constants.ROUTER_FILL_SEQUENTIAL
+                and inSquare and NetworkAccess.getDrawSourceId(inSquare) or nil
+            if not sourceId or not servedSource[sourceId] then
+                if System.processRouter(router, pipeData.x, pipeData.y, pipeData.z, dt) and sourceId then
+                    servedSource[sourceId] = true
+                end
             end
         end
     end
@@ -1003,6 +1176,9 @@ function System.tick()
         -- Broken out because 10min measured 26 ms a pass and nothing said which third that was. A rebuild drops
         -- the traversal cache and the head field, so it is also what makes the NEXT cold solve happen.
         Profiler.time("10min/rebuild", System.rebuild, false)
+        -- Levelling runs on its own two-minute cadence now (see onEveryOneMinute). Kept here as well so a
+        -- rebuild -- and the debug "force network tick" that calls this -- still leaves the water settled;
+        -- a settle that has nothing to move writes nothing, so the overlap costs a walk and no packets.
         Profiler.time("10min/redist", System.redistributeWater)
         Profiler.time("10min/endpoints", System.refreshPlumbedEndpoints)
     end)
@@ -1121,6 +1297,15 @@ local function processPendingPipeRemovals()
 
     -- Material returns first, one per dismantled OBJECT: a cancelled removal drops nothing, and a
     -- multi-pipe square pays for exactly the pipe that was taken down.
+    --
+    -- ONE side pays. A co-op host runs a client Lua state and a server Lua state over the SAME world, so
+    -- this file is loaded twice, both states saw the removal and both spawned a pipe -- two items for one
+    -- dismantle. A dedicated server's clients never load lua/server, which is why only the host saw it.
+    -- The server side pays; SP is neither client nor server and pays as before.
+    if isClient and isClient() then
+        drops = {}
+    end
+
     for _, drop in ipairs(drops) do
         local square = getSquare(drop.x, drop.y, drop.z)
         if square and square.getObjects then
@@ -1274,6 +1459,10 @@ end
 
 local function dropDismantleReturns(square)
     if not square or not square.AddWorldInventoryItem or not ZombRand then
+        return
+    end
+    -- Same one-side rule as the pipe payout above: a co-op host would otherwise salvage the tank twice.
+    if isClient and isClient() then
         return
     end
     for _, entry in ipairs(Constants.PURIFIER_DISMANTLE_RETURNS) do
@@ -1562,6 +1751,10 @@ local function checkWatchedInputs()
     end
 end
 
+-- Minutes between levelling passes. See the call site at the end of onEveryOneMinute.
+local REDIST_EVERY_MINUTES = 2
+local redistCounter = 0
+
 local function onEveryOneMinute()
     -- The head field is no longer dropped per frame, so this is what bounds how stale it can get. A minute
     -- is the cadence the water itself moves on, so the field is never reasoning about a supply that has
@@ -1601,6 +1794,20 @@ local function onEveryOneMinute()
     local ok, err = pcall(Profiler.time, "1min/endpoints", System.refreshPlumbedEndpoints)
     if not ok then
         Logger.error("Endpoint plumbing refresh failed: " .. tostring(err))
+    end
+
+    -- Levelling between vessels used to ride the ten-minute tick, which is why a barrel took ten in-game
+    -- minutes to answer for water that had already arrived. GravityFlow.settle is not rate-limited -- one
+    -- pass equalises the whole component -- so the wait was cadence, not flow. Every two minutes instead:
+    -- the pass is the cheapest the mod has (it walks the built component graph, not the world) at ~2.4%
+    -- of a minute's work on a full base, and halving it again would only buy writes nobody can see.
+    redistCounter = redistCounter + 1
+    if redistCounter >= REDIST_EVERY_MINUTES then
+        redistCounter = 0
+        local okRedist, errRedist = pcall(Profiler.time, "2min/redist", System.redistributeWater)
+        if not okRedist then
+            Logger.error("Water redistribution failed: " .. tostring(errRedist))
+        end
     end
 end
 
