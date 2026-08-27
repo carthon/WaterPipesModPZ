@@ -3,11 +3,13 @@ WaterPipes.ContainerAdapter = WaterPipes.ContainerAdapter or {}
 
 require "WaterPipes/Constants"
 require "WaterPipes/EndpointObjects"
+require "WaterPipes/Logger"
 require "WaterPipes/State"
 
 local Constants = WaterPipes.Constants
 local Adapter = WaterPipes.ContainerAdapter
 local EndpointObjects = WaterPipes.EndpointObjects
+local Logger = WaterPipes.Logger
 local State = WaterPipes.State
 
 local function readNumber(methodOwner, methodName)
@@ -444,13 +446,133 @@ local function fireExternalWaterChange(worldObject, prevAmount)
     WaterPipes._suppressWaterEvent = saved
 end
 
-function Adapter.writeWorldFluidAmount(worldObject, fluidAmount, fluidTypeName)
+-- Printed once per Lua load. A game reloaded from the main menu keeps the same log FILE, so without this
+-- there is no way to tell from a log whether an edited module is actually the one running -- which cost
+-- a whole round of chasing a bug that had already been fixed on disk.
+Logger.log("ContainerAdapter loaded: vessel writes are verified against the vessel.")
+
+local function describeVessel(worldObject)
+    local square = worldObject and worldObject.getSquare and worldObject:getSquare() or nil
+    local where = square and string.format("%d,%d,%d", square:getX(), square:getY(), square:getZ()) or "?"
+    return tostring(getSpriteName(worldObject) or "?") .. " at " .. where
+end
+
+-- A write is only real if the vessel comes back holding what we asked for. Everything below goes through
+-- pcall, and pcall reports success for a call that raised nothing AND did nothing -- so a container that
+-- silently refuses (input locked, read-only, owned by another mod) used to be reported as WRITTEN. The
+-- caller then credited itself litres that never moved: a tap kept "drawing" from a vessel that never
+-- emptied, and checkIrrigationConservation balanced its books against the same fiction.
+-- Said ONCE per vessel: this runs on every draw, and a refusing container would repeat it every tick.
+local refusedWrite = {}
+local redirectedWrite = {}
+-- Where we LEFT each vessel after our last write. Anything that reads higher next time was put there by
+-- somebody who is not us, and that is a thing worth naming: a vessel refilling itself between ticks looks
+-- exactly like a draw that never landed, and the two took four rounds of logs to tell apart.
+local leftVesselAt = {}
+
+-- Emptying is "try, then LOOK". The write below is "empty, then add the target", and addFluid ADDS --
+-- so an empty that quietly did nothing turns "set to 19 L" into "add 19 L to the 20 already there" and
+-- the vessel climbs to FULL every time the network tries to drain it. That was the amphora: a washer
+-- drinking from it filled it up instead.
+-- The old code was an elseif chain that stopped at worldObject.emptyFluid and never reached the
+-- container's own Empty -- the one EndpointFluidSource.writeSnapshot reaches for first. Each strategy is
+-- now tried in turn and kept only if the vessel actually reads empty afterwards.
+local function emptyWorldFluid(worldObject, fluidContainer)
+    local function isEmptyNow()
+        return (getRawWorldFluidAmount(worldObject) or 0) <= Constants.FLUID_WRITE_EPSILON
+    end
+
+    if isEmptyNow() then
+        return true
+    end
+
+    if worldObject.emptyFluid then
+        pcall(worldObject.emptyFluid, worldObject)
+        if isEmptyNow() then return true end
+    end
+
+    if fluidContainer and fluidContainer.Empty then
+        pcall(fluidContainer.Empty, fluidContainer)
+        if isEmptyNow() then return true end
+    end
+
+    if fluidContainer and fluidContainer.removeFluid then
+        pcall(fluidContainer.removeFluid, fluidContainer)
+        if isEmptyNow() then return true end
+    end
+
+    return false
+end
+
+local function verifyWorldFluidWrite(worldObject, prevAmount, requestedAmount)
+    local capacity = getRawWorldFluidCapacity(worldObject) or 0
+    local target = math.max(requestedAmount or 0, 0)
+    if capacity > 0 then
+        target = math.min(target, capacity)
+    end
+
+    local before = math.max(prevAmount or 0, 0)
+    local actual = getRawWorldFluidAmount(worldObject) or 0
+    local key = tostring(worldObject)
+
+    -- Against the TARGET, not merely "did it move". A failed empty followed by an additive addFluid moves
+    -- the vessel the WRONG WAY -- it goes up when the network asked it to go down -- and a movement test
+    -- waves that through as a successful drain. The whole point is that the vessel ends where we said.
+    leftVesselAt[key] = actual
+
+    if math.abs(actual - target) <= Constants.FLUID_WRITE_EPSILON then
+        if refusedWrite[key] then
+            refusedWrite[key] = nil
+            Logger.log("vessel " .. describeVessel(worldObject) .. " accepts writes again.")
+        end
+        return true
+    end
+
+    if not refusedWrite[key] then
+        refusedWrite[key] = true
+        Logger.warn(string.format(
+            "vessel %s REFUSED a write: asked to go from %.2f L to %.2f L, still holds %.2f L "
+            .. "(capacity %.2f). The network cannot drain or fill it, so nothing is charged against it.",
+            describeVessel(worldObject), before, target, actual, capacity))
+    end
+    return false
+end
+
+local function writeWorldFluidUnmuted(worldObject, fluidAmount, fluidTypeName)
     if not worldObject then
         return false
     end
 
+    -- Descriptors are built by reading the object the classifier found (collectSquareContainers reads it
+    -- RAW), while the write is redirected to whichever sprite-grid sibling reports the biggest capacity.
+    -- When those differ we drain one object and report the level of another: the vessel the player is
+    -- watching never moves, every write verifies happily against the sibling, and the network is charged
+    -- for water that left a tank nobody can see. Said once per object.
+    local requestedObject = worldObject
     worldObject = resolveFluidTarget(worldObject)
+    if worldObject ~= requestedObject then
+        local key = tostring(requestedObject)
+        if not redirectedWrite[key] then
+            redirectedWrite[key] = true
+            Logger.warn(string.format(
+                "vessel %s is READ here but WRITTEN at %s -- the two are different objects, so the level "
+                .. "you see is not the one the network is changing.",
+                describeVessel(requestedObject), describeVessel(worldObject)))
+        end
+    end
+
     local prevAmount = Adapter.readWorldFluidAmount(worldObject) or 0
+
+    -- Did it gain water since we last left it? Reported every time, not once: the SIZE and CADENCE of the
+    -- gain are the evidence -- a steady +1 between ticks is a refiller, a one-off is the player.
+    local leftAt = leftVesselAt[tostring(worldObject)]
+    if leftAt and prevAmount > leftAt + Constants.FLUID_WRITE_EPSILON then
+        Logger.warn(string.format(
+            "vessel %s GAINED %.2f L that the network did not add: left at %.2f, now reads %.2f "
+            .. "(capacity %.2f). Something outside the pipe network is filling it.",
+            describeVessel(worldObject), prevAmount - leftAt, leftAt, prevAmount,
+            getRawWorldFluidCapacity(worldObject) or 0))
+    end
 
     if worldObject.setReserveWaterAmount or worldObject.getReserveWaterMax then
         local reserveCapacity = readNumber(worldObject, "getReserveWaterMax") or 0
@@ -469,6 +591,11 @@ function Adapter.writeWorldFluidAmount(worldObject, fluidAmount, fluidTypeName)
             pcall(worldObject.setTaintedWater, worldObject, clampedAmount > 0 and fluidTypeName == "TaintedWater")
         end
 
+        -- Before sync/transmit: a refused write must not be broadcast as if it had landed.
+        if not verifyWorldFluidWrite(worldObject, prevAmount, clampedAmount) then
+            return false
+        end
+
         if worldObject.sync then
             pcall(worldObject.sync, worldObject)
         end
@@ -483,19 +610,39 @@ function Adapter.writeWorldFluidAmount(worldObject, fluidAmount, fluidTypeName)
     end
 
     local fluidContainer = getWorldFluidContainer(worldObject)
-    local cleared = false
 
-    if worldObject.emptyFluid then
-        cleared = pcall(worldObject.emptyFluid, worldObject)
-    elseif fluidContainer and fluidContainer.removeFluid then
-        cleared = pcall(fluidContainer.removeFluid, fluidContainer)
+    -- B42 locks the input on some world containers. A locked one takes emptyFluid/addFluid without raising
+    -- and without storing anything, which is exactly the silent refusal verifyWorldFluidWrite catches.
+    -- Unlocked only for our write, and only when the original state can be read back to restore it --
+    -- guessing the lock back on would change what the player can pour in by hand.
+    local wasInputLocked = readBoolean(fluidContainer, "isInputLocked")
+    local canToggleLock = wasInputLocked == true and fluidContainer.setInputLocked ~= nil
+    if canToggleLock then
+        pcall(fluidContainer.setInputLocked, fluidContainer, false)
     end
 
+    local function restoreInputLock()
+        if canToggleLock then
+            pcall(fluidContainer.setInputLocked, fluidContainer, true)
+        end
+    end
+
+    local cleared = emptyWorldFluid(worldObject, fluidContainer)
+
     if not cleared then
+        restoreInputLock()
+        -- Through the same once-per-vessel gate: "nothing can empty it" is the loudest refusal there is,
+        -- and bailing quietly here is what left the amphora undiagnosable in the first place.
+        verifyWorldFluidWrite(worldObject, prevAmount, fluidAmount)
         return false
     end
 
+    -- What we actually tried to leave in there. A positive amount with no type refills nothing, so the
+    -- vessel ends up empty and that -- not the amount asked for -- is what the verify must expect.
+    local attempted = 0
+
     if fluidAmount > 0 and fluidTypeName then
+        attempted = fluidAmount
         local fluidType = nil
         if fluidTypeName == "Water" then
             fluidType = (FluidType and FluidType.Water) or (Fluid and Fluid.Water)
@@ -508,6 +655,7 @@ function Adapter.writeWorldFluidAmount(worldObject, fluidAmount, fluidTypeName)
         end
 
         if not fluidType then
+            restoreInputLock()
             return false
         end
 
@@ -519,8 +667,16 @@ function Adapter.writeWorldFluidAmount(worldObject, fluidAmount, fluidTypeName)
         end
 
         if not ok then
+            restoreInputLock()
             return false
         end
+    end
+
+    restoreInputLock()
+
+    -- Before sync/transmit: a refused write must not be broadcast as if it had landed.
+    if not verifyWorldFluidWrite(worldObject, prevAmount, attempted) then
+        return false
     end
 
     if worldObject.sync then
@@ -531,8 +687,33 @@ function Adapter.writeWorldFluidAmount(worldObject, fluidAmount, fluidTypeName)
         pcall(worldObject.transmitModData, worldObject)
     end
 
+    -- The crossing, from the TRUE before and after. The write gets there via empty-then-refill, so the
+    -- engine's own events describe a trip to 0 and back that never happened as far as the network is
+    -- concerned; this is the one report that is about the actual change.
+    noteEmptinessCrossing(worldObject, prevAmount, attempted)
     fireExternalWaterChange(worldObject, prevAmount)
     return true
+end
+
+-- emptyFluid and addFluid raise OnWaterAmountChange THEMSELVES, from the engine -- not only the one we
+-- fire deliberately at the end. So every network write used to re-enter our own handler twice, and the
+-- suppression flag (which only ever wrapped our deliberate event) never saw them:
+--   * the empty step reported a crossing to 0 and the refill reported one back, so the head field was
+--     invalidated twice per write for a trip that is an artifact of how the write is performed;
+--   * the stagnation branch ran a full square rescan on each, twice per write.
+-- Muting for the whole write is what the handler's "ignore the echo of our OWN writes" always claimed.
+-- External listeners still receive every event; the flag gates only us.
+function Adapter.writeWorldFluidAmount(worldObject, fluidAmount, fluidTypeName)
+    WaterPipes = WaterPipes or {}
+    local saved = WaterPipes._suppressWaterEvent
+    WaterPipes._suppressWaterEvent = true
+    local ok, result = pcall(writeWorldFluidUnmuted, worldObject, fluidAmount, fluidTypeName)
+    WaterPipes._suppressWaterEvent = saved
+    if not ok then
+        Logger.error("writeWorldFluidAmount failed: " .. tostring(result))
+        return false
+    end
+    return result
 end
 
 function Adapter.readCapacity(container)

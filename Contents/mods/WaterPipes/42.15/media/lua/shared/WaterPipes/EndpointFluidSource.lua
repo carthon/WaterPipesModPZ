@@ -226,7 +226,15 @@ local function reconcileConsumption(endpoint)
     end
 
     local applied = NetworkAccess.useFluid(endpoint, consumed)
-    Logger.log("Endpoint reconciled consumption: " .. describeObject(endpoint) .. " consumed=" .. tostring(consumed) .. " applied=" .. tostring(applied))
+    local detail = ""
+    -- Only when the draw came up SHORT. "applied" says what the draw believed, and that is enough while
+    -- it got everything it asked for; the litres it could not find are the ones worth naming vessels over.
+    if applied < consumed - CONSUME_EPSILON then
+        detail = " | short by " .. string.format("%.2f", consumed - applied)
+            .. " -- vessels: " .. NetworkAccess.describeVessels(endpoint)
+    end
+    Logger.log("Endpoint reconciled consumption: " .. describeObject(endpoint)
+        .. " consumed=" .. tostring(consumed) .. " applied=" .. tostring(applied) .. detail)
     return applied
 end
 

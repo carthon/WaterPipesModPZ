@@ -1840,23 +1840,24 @@ local function drainIrrigationPass()
 end
 
 local function onWaterAmountChange(object, prevAmount)
-    -- Before the suppression guard, deliberately. The head field cares only whether a vessel holds water,
-    -- and it has to hear about that crossing whoever caused it. The guard below stops endpoint
-    -- reconciliation and stagnation clocks re-entering on our own writes; neither applies to an
-    -- invalidation, which is idempotent.
-    if object and Adapter.noteEmptinessCrossing then
-        local ok, amount = pcall(Adapter.readWorldFluidAmount, object)
-        pcall(Adapter.noteEmptinessCrossing, object, prevAmount, ok and amount or 0)
-    end
-
-    -- Ignore the echo of our OWN network writes. writeWorldFluidAmount fires OnWaterAmountChange purely so
-    -- external mods refresh; processing it here would reset stagnation clocks and risk re-entrancy.
+    -- Ignore our OWN network writes -- the whole write, not just the event we fire at the end of one.
+    -- Adapter.writeWorldFluidAmount holds this flag across the empty-then-refill, because those two calls
+    -- raise the event from the engine as well and this handler used to run twice per write on the way
+    -- past. Our writes report their own emptiness crossing, from the true before and after.
     if WaterPipes._suppressWaterEvent then
         return
     end
 
     if not object then
         return
+    end
+
+    -- Somebody else moved this vessel's water. The head field cares only WHETHER a vessel holds water, so
+    -- it has to hear about a crossing whoever caused it -- and an external writer is the only one left
+    -- that will not report its own.
+    if Adapter.noteEmptinessCrossing then
+        local ok, amount = pcall(Adapter.readWorldFluidAmount, object)
+        pcall(Adapter.noteEmptinessCrossing, object, prevAmount, ok and amount or 0)
     end
 
     -- Legacy hidden adapter objects from older saves (handled until cleaned up).
