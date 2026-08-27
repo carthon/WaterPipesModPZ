@@ -34,7 +34,13 @@ TESTS_DIR = os.path.join(REPO, "tools", "conservation")
 
 # The commit that shipped the last version. There are no tags on this repo; a release is a
 # `chore: bump modversion` on main, which is what the release skill produces.
-BASELINE_GREP = "bump modversion"
+#
+# ANCHORED, and it has to be. The first version of this matched "bump modversion" anywhere in a
+# message, and the very commit that added this file quotes that phrase while explaining itself -- so
+# the gate picked ITSELF as the previous release, diffed today's modules against today's, and
+# reported a clean sweep of "carried forward" for a release with four fixes in it. A gate that can
+# select the wrong baseline reports the reassuring answer, never the alarming one.
+BASELINE_GREP = "^chore: bump modversion"
 
 
 def git(*args):
@@ -50,7 +56,7 @@ def die(message, hint=None):
 
 
 def find_baseline():
-    out = git("log", "--format=%H %s", "-1", "--grep=" + BASELINE_GREP)
+    out = git("log", "-E", "--format=%H %s", "-1", "--grep=" + BASELINE_GREP)
     if out.returncode != 0 or not out.stdout.strip():
         die("no previous release found",
             "No commit matching " + BASELINE_GREP + ". Pass --baseline REV.")
@@ -134,6 +140,9 @@ def main():
     print("=" * 78)
     print("  working tree : " + str(len(tests)) + " test file(s)")
     print("  baseline     : " + baseline[:7] + "  " + subject)
+    if not args.baseline and "modversion" not in subject:
+        die("the baseline commit does not look like a release: " + subject,
+            "Expected a `chore: bump modversion ...` commit. Pass --baseline REV explicitly.")
     print("")
 
     # ---- 1. the tree must be green -------------------------------------------------------
