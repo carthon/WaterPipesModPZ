@@ -4,11 +4,13 @@ WaterPipes.Purifier = WaterPipes.Purifier or {}
 require "WaterPipes/Constants"
 require "WaterPipes/Logger"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/World"
 
 local Constants = WaterPipes.Constants
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Purifier = WaterPipes.Purifier
+local World = WaterPipes.World
 
 -- A purifier is a NON-pipe container object placed on a router tile, tagged with its tier in modData.
 -- It holds two internal buffers (IN tainted / OUT clean); the router drives intake -> convert -> output.
@@ -272,12 +274,10 @@ function Purifier.findForRouterSquare(square)
     if not square then
         return nil
     end
-    local cell = getCell and getCell() or nil
     for _, off in ipairs(PURIFIER_FOOTPRINT_OFFSETS) do
         local sq = square
         if off[1] ~= 0 or off[2] ~= 0 then
-            sq = cell and cell.getGridSquare
-                and cell:getGridSquare(square:getX() + off[1], square:getY() + off[2], square:getZ())
+            sq = World.squareAt(square:getX() + off[1], square:getY() + off[2], square:getZ())
         end
         local purifier = sq and Purifier.findOnSquare(sq)
         if purifier then

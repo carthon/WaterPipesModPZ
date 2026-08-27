@@ -13,6 +13,7 @@ require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Purifier"
 require "WaterPipes/Router"
+require "WaterPipes/World"
 
 local Adapter = WaterPipes.ContainerAdapter
 local Constants = WaterPipes.Constants
@@ -61,18 +62,7 @@ local function routerIsHardBoundary(routerSquare)
     return Adapter.hasSquareContainers(routerSquare)
 end
 
-local function getCellSquare(x, y, z)
-    if not getCell then
-        return nil
-    end
-
-    local cell = getCell()
-    if not cell or not cell.getGridSquare then
-        return nil
-    end
-
-    return cell:getGridSquare(x, y, z)
-end
+local getCellSquare = WaterPipes.World.squareAt
 
 local function keyOf(x, y, z)
     return tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)

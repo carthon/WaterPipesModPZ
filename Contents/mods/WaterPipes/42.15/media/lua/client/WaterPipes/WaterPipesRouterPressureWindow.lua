@@ -7,12 +7,14 @@ require "RadioCom/ISUIRadio/ISSliderPanel"
 require "WaterPipes/Constants"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/Router"
+require "WaterPipes/World"
 
 WaterPipes = WaterPipes or {}
 
 local Constants = WaterPipes.Constants
 local NetworkAccess = WaterPipes.NetworkAccess
 local Router = WaterPipes.Router
+local World = WaterPipes.World
 
 WaterPipesRouterPressureWindow = ISCollapsableWindow:derive("WaterPipesRouterPressureWindow")
 WaterPipesRouterPressureWindow.instances = WaterPipesRouterPressureWindow.instances or {}
@@ -36,8 +38,7 @@ end
 -- The router can be destroyed or picked up while the window is open, so every use re-resolves it
 -- from the world rather than holding a stale reference.
 function WaterPipesRouterPressureWindow:resolveRouter()
-    local cell = getCell and getCell() or nil
-    local square = cell and cell.getGridSquare and cell:getGridSquare(self.px, self.py, self.pz) or nil
+    local square = World.squareAt(self.px, self.py, self.pz)
     return square and Router.findOnSquare(square) or nil
 end
 
@@ -47,11 +48,10 @@ end
 function WaterPipesRouterPressureWindow:readInletHead()
     local router = self:resolveRouter()
     local out = router and Router.getOutOffset(router)
-    local cell = getCell and getCell() or nil
-    if not out or not cell or not cell.getGridSquare then
+    if not out then
         return nil
     end
-    local inlet = cell:getGridSquare(self.px - out.dx, self.py - out.dy, self.pz)
+    local inlet = World.squareAt(self.px - out.dx, self.py - out.dy, self.pz)
     return inlet and NetworkAccess.getPressureAtSquare(inlet, Constants.PRESSURE_KIND_TAP) or nil
 end
 

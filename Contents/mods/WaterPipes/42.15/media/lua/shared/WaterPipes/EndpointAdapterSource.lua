@@ -6,6 +6,7 @@ require "WaterPipes/ContainerAdapter"
 require "WaterPipes/EndpointObjects"
 require "WaterPipes/Logger"
 require "WaterPipes/NetworkAccess"
+require "WaterPipes/World"
 
 local Adapter = WaterPipes.ContainerAdapter
 local AdapterSource = WaterPipes.EndpointAdapterSource
@@ -92,18 +93,7 @@ local function getSpriteName(worldObject)
     return okName and spriteName or nil
 end
 
-local function getSquare(x, y, z)
-    if not getCell then
-        return nil
-    end
-
-    local cell = getCell()
-    if not cell or not cell.getGridSquare then
-        return nil
-    end
-
-    return cell:getGridSquare(x, y, z)
-end
+local getSquare = WaterPipes.World.squareAt
 
 local function describeObject(worldObject)
     if not worldObject then
@@ -133,12 +123,7 @@ local function getEndpointReference(worldObject)
 end
 
 local function getAdapterSquare(endpointObject)
-    local square = endpointObject and endpointObject.getSquare and endpointObject:getSquare() or nil
-    if not square then
-        return nil
-    end
-
-    return getSquare(square:getX(), square:getY(), square:getZ() + 1)
+    return WaterPipes.World.above(WaterPipes.World.squareOf(endpointObject))
 end
 
 function AdapterSource.isAdapterObject(worldObject)

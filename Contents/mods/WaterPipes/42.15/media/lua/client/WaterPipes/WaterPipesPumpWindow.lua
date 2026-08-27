@@ -7,11 +7,13 @@
 require "ISUI/ISCollapsableWindow"
 require "WaterPipes/Constants"
 require "WaterPipes/Pump"
+require "WaterPipes/World"
 
 WaterPipes = WaterPipes or {}
 
 local Constants = WaterPipes.Constants
 local Pump = WaterPipes.Pump
+local World = WaterPipes.World
 
 WaterPipesPumpWindow = ISCollapsableWindow:derive("WaterPipesPumpWindow")
 WaterPipesPumpWindow.instances = WaterPipesPumpWindow.instances or {}
@@ -39,8 +41,7 @@ local function formatHead(value)
 end
 
 function WaterPipesPumpWindow:resolvePump()
-    local cell = getCell and getCell() or nil
-    local square = cell and cell.getGridSquare and cell:getGridSquare(self.px, self.py, self.pz) or nil
+    local square = World.squareAt(self.px, self.py, self.pz)
     return square and Pump.findOnSquare(square) or nil
 end
 

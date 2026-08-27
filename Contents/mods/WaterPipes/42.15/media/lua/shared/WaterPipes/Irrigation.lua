@@ -5,6 +5,7 @@ require "WaterPipes/Constants"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Pressure"
+require "WaterPipes/World"
 
 local Constants = WaterPipes.Constants
 local Irrigation = WaterPipes.Irrigation
@@ -32,16 +33,7 @@ local function transmit(worldObject)
     end
 end
 
-local function getCellSquare(x, y, z)
-    if not getCell then
-        return nil
-    end
-    local cell = getCell()
-    if not cell or not cell.getGridSquare then
-        return nil
-    end
-    return cell:getGridSquare(x, y, z)
-end
+local getCellSquare = WaterPipes.World.squareAt
 
 -- ===== Identity =====
 

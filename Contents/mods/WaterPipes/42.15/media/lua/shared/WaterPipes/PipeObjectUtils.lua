@@ -1,4 +1,5 @@
 require "WaterPipes/Constants"
+require "WaterPipes/World"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.PipeObjectUtils = WaterPipes.PipeObjectUtils or {}
@@ -202,13 +203,7 @@ function PipeObjectUtils.getPipeOnSquare(square)
     return PipeObjectUtils.getPipeObjectsOnSquare(square)[1]
 end
 
-local function squareAt(x, y, z)
-    if not getCell then
-        return nil
-    end
-    local cell = getCell()
-    return cell and cell.getGridSquare and cell:getGridSquare(x, y, z) or nil
-end
+local squareAt = WaterPipes.World.squareAt
 
 -- Which wall edges have a riser (vertical pipe) on square (x,y,z).
 local function riserEdgesAt(x, y, z)

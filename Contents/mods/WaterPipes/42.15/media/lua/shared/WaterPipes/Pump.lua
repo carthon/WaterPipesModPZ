@@ -4,6 +4,7 @@ WaterPipes.Pump = WaterPipes.Pump or {}
 require "WaterPipes/Constants"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Pressure"
+require "WaterPipes/World"
 
 local Constants = WaterPipes.Constants
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
@@ -128,16 +129,7 @@ end
 
 -- ===== Source detection (extractor mode) =====
 
-local function getCellSquare(x, y, z)
-    if not getCell then
-        return nil
-    end
-    local cell = getCell()
-    if not cell or not cell.getGridSquare then
-        return nil
-    end
-    return cell:getGridSquare(x, y, z)
-end
+local getCellSquare = WaterPipes.World.squareAt
 
 -- Server admins can switch off pumping from rivers and lakes without losing wells or the rest of
 -- the pressure model: it is the one source that is genuinely infinite.

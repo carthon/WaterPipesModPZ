@@ -25,6 +25,7 @@ require "WaterPipes/Irrigation"
 require "WaterPipes/Profiler"
 require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
+require "WaterPipes/World"
 
 local Adapter = WaterPipes.ContainerAdapter
 local Constants = WaterPipes.Constants
@@ -64,18 +65,7 @@ local function mergeInto(target, source)
     end
 end
 
-local function getSquare(x, y, z)
-    if not getCell then
-        return nil
-    end
-
-    local cell = getCell()
-    if not cell or not cell.getGridSquare then
-        return nil
-    end
-
-    return cell:getGridSquare(x, y, z)
-end
+local getSquare = WaterPipes.World.squareAt
 
 local function refreshPlumbedEndpointsNearCoordinates(coordinates)
     local visited = {}
@@ -642,8 +632,7 @@ end
 -- purifier at all. A registry entry is a claim, not a fact: one the world contradicts is dropped here.
 local function findPurifierIntakeForPump(square)
     local purifiers = State.getPurifiers()
-    local cell = getCell and getCell() or nil
-    if not purifiers or not cell then
+    if not purifiers then
         return nil
     end
 
@@ -695,7 +684,7 @@ local function findPurifierIntakeForPump(square)
                 end
                 if not found then
                     for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-                        local routerSquare = cell:getGridSquare(coord.x + offset.x,
+                        local routerSquare = getSquare(coord.x + offset.x,
                             coord.y + offset.y, coord.z + offset.z)
                         if routerSquare and Router.hasRouterOnSquare(routerSquare) then
                             local purifier = Purifier.findForRouterSquare(routerSquare)
