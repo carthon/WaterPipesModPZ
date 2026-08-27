@@ -334,26 +334,14 @@ function ContextMenu.hideNetwork(playerObj)
     end
 end
 
-local function playerHasPipeWrench(playerObj)
-    local inventory = playerObj and playerObj:getInventory()
-    if not inventory then
-        return false
-    end
-
-    return inventory:containsTypeRecurse(Constants.PIPE_TOOL_TYPE)
+-- Both go through Constants: showing the entry and doing the thing must ask the same question, or a
+-- broken wrench gets an option that does nothing.
+local function getPipeWrench(playerObj)
+    return Constants.findPipeWrench(playerObj and playerObj:getInventory())
 end
 
-local function getPipeWrench(playerObj)
-    local inventory = playerObj and playerObj:getInventory()
-    if not inventory then
-        return nil
-    end
-
-    return inventory:getFirstTypeEvalRecurse("PipeWrench", function(item)
-        return item and (not item.isBroken or not item:isBroken())
-    end) or inventory:getFirstTagEvalRecurse(ItemTag.PIPE_WRENCH, function(item)
-        return item and (not item.isBroken or not item:isBroken())
-    end)
+local function playerHasPipeWrench(playerObj)
+    return Constants.hasPipeWrench(playerObj and playerObj:getInventory())
 end
 
 function ContextMenu.plumbEndpoint(playerObj, endpointObject)
@@ -1116,7 +1104,7 @@ function ContextMenu.setHydrantOpen(playerObj, hydrant, open)
     if not square or not playerObj then
         return
     end
-    local wrench = playerObj:getInventory():getFirstTypeRecurse(Constants.PIPE_TOOL_TYPE)
+    local wrench = getPipeWrench(playerObj)
     if not wrench then
         return
     end
@@ -1172,7 +1160,7 @@ function ContextMenu.repairDrip(playerObj, drip)
     if not playerObj or not drip then
         return
     end
-    local wrench = playerObj:getInventory():getFirstTypeRecurse(Constants.PIPE_TOOL_TYPE)
+    local wrench = getPipeWrench(playerObj)
     if not wrench then
         return
     end
