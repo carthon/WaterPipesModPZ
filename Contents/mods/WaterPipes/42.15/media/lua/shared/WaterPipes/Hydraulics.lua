@@ -853,6 +853,52 @@ local function discoverTopology(seedSquare)
     }
 end
 
+-- THE SHAPE, and now in one place.
+--
+-- A solve has two answers -- the priced one and the dry one, for a zone nothing supplies -- and they
+-- were two hand-written table literals that had to agree by eye. They stopped agreeing: `feeders` went
+-- missing from the dry one, floodFrom indexes it without a guard, and a farm nobody had filled yet
+-- threw instead of answering. Which is the ordinary state of a farm.
+--
+-- So both answers are built here. The seven fields that come off the topology are read from it rather
+-- than passed, so a caller cannot hand over a mismatched pair; the four the search fills in default to
+-- empty; `supplyStale` is written false rather than left absent, which makes the one field assigned
+-- after construction part of the declared shape too. Adding a field is one edit, not two.
+local function makeSolution(topology, computed)
+    return {
+        -- Carried on the solution so the next supply change can re-price without going to the world.
+        topology = topology,
+        nodes = topology.nodes,
+        order = topology.order,
+        adjacency = topology.adjacency,
+        routers = topology.routers,
+        feeders = topology.feeders,
+        purifierOutlets = topology.purifierOutlets,
+
+        -- Carried so the field can be re-priced with ONE extra consumer switched on (see headIfDrawing).
+        parents = computed.parents,
+        viaRouter = computed.viaRouter,
+
+        supply = computed.supply,
+        sequence = computed.sequence,
+        sources = computed.sources,
+        demand = computed.demand,
+        kinds = computed.kinds,
+        supplyFloor = computed.supplyFloor,
+        pumps = computed.pumps,
+        stats = computed.stats,
+
+        -- What the search produces. Empty is the dry answer, not a missing one.
+        head = computed.head or {},
+        flow = computed.flow or {},
+        depth = computed.depth or {},
+        starved = computed.starved or {},
+        iterations = computed.iterations or 0,
+
+        supplyStale = false,
+    }
+end
+
 local function solveWithTopology(topology, zoneKey)
     local nodes = topology.nodes
     local order = topology.order
@@ -874,18 +920,12 @@ local function solveWithTopology(topology, zoneKey)
     sincePhase("solve/order", mark)
     if not sequence then
         -- Nothing supplies this zone: every node is dry, which is a real answer and not a failure.
-        -- THE SHAPE, not most of it. `feeders` was once missing here and floodFrom indexes it without a guard,
-        -- so a dry network -- the ordinary state of a farm nobody has filled yet -- threw instead of answering.
-        return {
-            topology = topology,
-            nodes = nodes, order = order, adjacency = adjacency, routers = routers,
-            feeders = feeders, purifierOutlets = purifierOutlets,
+        return makeSolution(topology, {
             parents = parents, viaRouter = viaRouter,
             supply = supply, sequence = nil,
             sources = sources, demand = demand, kinds = kinds,
-            head = {}, flow = {}, depth = {}, supplyFloor = supplyFloor, pumps = pumps, stats = stats,
-            starved = {}, iterations = 0,
-        }
+            supplyFloor = supplyFloor, pumps = pumps, stats = stats,
+        })
     end
 
     -- ===== Who actually gets to draw =====
@@ -1042,32 +1082,23 @@ local function solveWithTopology(topology, zoneKey)
         starved[ordered[index]] = true
     end
 
-    return {
-        -- Carried on the solution so the next supply change can re-price without going to the world.
-        topology = topology,
-        nodes = nodes,
-        order = order,
-        adjacency = adjacency,
-        routers = routers,
-        feeders = feeders,
-        -- Carried so the field can be re-priced with ONE extra consumer switched on (see headIfDrawing).
+    return makeSolution(topology, {
         parents = parents,
         viaRouter = viaRouter,
-        purifierOutlets = purifierOutlets,
         supply = supply,
         sequence = sequence,
         sources = sources,
         demand = demand,
         kinds = kinds,
+        supplyFloor = supplyFloor,
+        pumps = pumps,
+        stats = stats,
         head = head,
         flow = flow,
         depth = depth,
-        pumps = pumps,
-        supplyFloor = supplyFloor,
-        stats = stats,
         starved = starved,
         iterations = solves,
-    }
+    })
 end
 
 local function solveZone(seedSquare, zoneKey)
