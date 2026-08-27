@@ -1488,6 +1488,116 @@ function Hydraulics.poweredPumps(solution)
     return solution._pumpList
 end
 
+-- ===== Readouts about the zone itself =====
+-- These exist because the alternative is what NetworkAccess used to do: reach into solution.stats,
+-- .demand, .starved, .sources, .supply, .order, .kinds and .id and reassemble the answer by hand. The
+-- record is this module's working state, and a second module reading nine of its fields means the
+-- record IS the interface -- so a field renamed here breaks a readout over there, silently, because
+-- an absent key in Lua is nil rather than an error.
+
+-- The zone's identity, for callers that memoise per zone.
+function Hydraulics.zoneIdOf(solution)
+    return solution and solution.id or nil
+end
+
+-- How many pipe tiles the zone has.
+function Hydraulics.nodeCount(solution)
+    return solution and solution.order and #solution.order or 0
+end
+
+-- The UTILITY floor: town mains or an open hydrant. Not the pump head, which is a different number
+-- and lives in the zone report -- a pump does not raise this one.
+function Hydraulics.supplyHead(solution)
+    return solution and solution.stats and solution.stats.supplyHead or 0
+end
+
+-- The purifier OUT buffers on this zone, as the solve recorded them during the walk.
+function Hydraulics.purifierOutlets(solution)
+    return solution and solution.purifierOutlets or {}
+end
+
+-- What kind of consumer the solve thinks stands on this square, if any.
+function Hydraulics.kindAt(solution, square)
+    if not solution or not solution.kinds or not square then
+        return nil
+    end
+    return solution.kinds[Hydraulics.nodeKeyOf(square)]
+end
+
+-- Everything a gauge needs about the zone as a whole, measured from `square`: what supplies it, what
+-- is asking for water, how much of that is being served, and every source with its distance from here.
+-- One call, because a caller assembling this out of the record has to know which fields exist on a dry
+-- answer and which do not.
+function Hydraulics.zoneReport(solution, square)
+    local report = {
+        pipeCount = Hydraulics.nodeCount(solution),
+        pumpCount = 0, poweredPumps = 0, mainsCount = 0, hydrantCount = 0,
+        pumpHead = 0, mainsHead = 0, supplyHead = 0,
+        emitterCount = 0, starvedCount = 0, totalDemand = 0, servedDemand = 0,
+        iterations = 0,
+        sources = {}, containerCount = 0,
+    }
+    if not solution then
+        return report
+    end
+
+    local stats = solution.stats or {}
+    report.pumpCount = stats.pumpCount or 0
+    report.poweredPumps = stats.poweredPumps or 0
+    report.mainsCount = stats.mainsCount or 0
+    report.hydrantCount = stats.hydrantCount or 0
+    report.pumpHead = stats.pumpHead or 0
+    report.mainsHead = (stats.mainsCount or 0) > 0 and Mains.head() or 0
+    report.supplyHead = stats.supplyHead or 0
+
+    -- Load: what the zone is being asked for, and how much of it is actually being served.
+    for key, litres in pairs(solution.demand or {}) do
+        report.emitterCount = report.emitterCount + 1
+        report.totalDemand = report.totalDemand + litres
+        if solution.starved[key] then
+            report.starvedCount = report.starvedCount + 1
+        else
+            report.servedDemand = report.servedDemand + litres
+        end
+    end
+    report.iterations = solution.iterations
+
+    if report.pipeCount == 0 or not square then
+        return report
+    end
+
+    -- Hop counts are measured over the solved adjacency, which costs no world access at all.
+    local distance = Hydraulics.distancesFrom(solution, square)
+    local consumerZ = square:getZ()
+    local levelHead = Pressure.levelHead()
+    local containerBase = Pressure.containerBase()
+
+    local seen = {}
+    for _, descriptor in ipairs(solution.sources or {}) do
+        if not seen[descriptor.key] then
+            seen[descriptor.key] = true
+            local nodeSupply = descriptor.nodeKey and solution.supply[descriptor.nodeKey] or nil
+            report.sources[#report.sources + 1] = {
+                key = tostring(descriptor.key),
+                z = descriptor.z,
+                hops = distance[descriptor.nodeKey],
+                amount = descriptor.waterAmount,
+                capacity = descriptor.capacity,
+                fluidType = descriptor.fluidType,
+                -- Two different numbers. `staticHead` is what gravity alone gives this vessel here;
+                -- `supplyHead` is the pressure it actually pushes at, pumps included. Without the
+                -- second, every barrel on a farm with two pumps read the same figure and looked like
+                -- the reason the far end was dry.
+                staticHead = containerBase + levelHead * ((descriptor.z or 0) - consumerZ),
+                supplyHead = nodeSupply and (nodeSupply - levelHead * (descriptor.z or 0)) or nil,
+            }
+        end
+    end
+    report.containerCount = #report.sources
+
+    return report
+end
+
 function Hydraulics.distancesFrom(solution, square)
     if not solution or not square then
         return {}
