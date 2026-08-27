@@ -5,6 +5,7 @@ require "WaterPipes/Constants"
 require "WaterPipes/Logger"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Router"
+require "WaterPipes/World"
 
 local Constants = WaterPipes.Constants
 local Logger = WaterPipes.Logger
@@ -51,16 +52,7 @@ local function isRenderingSide()
     return true
 end
 
-local function getSquare(x, y, z)
-    if not getCell then
-        return nil
-    end
-    local cell = getCell()
-    if not cell or not cell.getGridSquare then
-        return nil
-    end
-    return cell:getGridSquare(x, y, z)
-end
+local getSquare = WaterPipes.World.squareAt
 
 local function getFloorPipeOnSquare(square, exclude)
     if not square then

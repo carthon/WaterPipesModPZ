@@ -1,11 +1,15 @@
 WaterPipes = WaterPipes or {}
 WaterPipes.ContainerAdapter = WaterPipes.ContainerAdapter or {}
 
+require "WaterPipes/World"
+require "WaterPipes/Invalidate"
 require "WaterPipes/Constants"
 require "WaterPipes/EndpointObjects"
 require "WaterPipes/Logger"
 require "WaterPipes/State"
 
+local Invalidate = WaterPipes.Invalidate
+local World = WaterPipes.World
 local Constants = WaterPipes.Constants
 local Adapter = WaterPipes.ContainerAdapter
 local EndpointObjects = WaterPipes.EndpointObjects
@@ -403,23 +407,10 @@ local function noteEmptinessCrossing(worldObject, prevAmount, newAmount)
         return
     end
 
-    local Hydraulics = WaterPipes.Hydraulics
-    if not Hydraulics then
-        return
-    end
-
     -- The SUPPLY form, not the general one. Water moving cannot have moved a pipe, so the zone keeps its
     -- shape and only has to be re-priced, which skips the world walk entirely. This is the common
     -- invalidation by a wide margin: 211 of 215 in a measured window.
-    local invalidate = Hydraulics.invalidateSupplyAroundSquare or Hydraulics.invalidateAroundSquare
-    if not invalidate then
-        return
-    end
-
-    local ok, square = pcall(worldObject.getSquare, worldObject)
-    if ok and square then
-        pcall(invalidate, square)
-    end
+    pcall(Invalidate.supplyChangedAt, World.squareOf(worldObject))
 end
 
 function Adapter.noteEmptinessCrossing(worldObject, prevAmount, newAmount)
@@ -1048,17 +1039,4 @@ end
 -- classifying every tile of it -- 77% of a spray-FX rebuild, three times a second.
 -- What it was really guarding is a square re-created underneath us by chunk streaming, which has its own
 -- event and is hooked directly; the per-minute pass drops the lot as a backstop.
-if Events then
-    local function invalidateForObject(object)
-        local square = object and object.getSquare and object:getSquare() or nil
-        if square then
-            Adapter.invalidateSquareVessels(square)
-        else
-            Adapter.invalidateVesselCache()
-        end
-    end
-
-    if Events.OnObjectAdded then Events.OnObjectAdded.Add(invalidateForObject) end
-    if Events.OnObjectAboutToBeRemoved then Events.OnObjectAboutToBeRemoved.Add(invalidateForObject) end
-    if Events.LoadGridsquare then Events.LoadGridsquare.Add(Adapter.invalidateSquareVessels) end
-end
+-- The world events that drop this memo are registered in Invalidate, with the other three caches.

@@ -1,6 +1,7 @@
 WaterPipes = WaterPipes or {}
 WaterPipes.System = WaterPipes.System or {}
 
+require "WaterPipes/Invalidate"
 require "WaterPipes/Constants"
 require "WaterPipes/Logger"
 require "WaterPipes/State"
@@ -25,7 +26,9 @@ require "WaterPipes/Irrigation"
 require "WaterPipes/Profiler"
 require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
+require "WaterPipes/World"
 
+local Invalidate = WaterPipes.Invalidate
 local Adapter = WaterPipes.ContainerAdapter
 local Constants = WaterPipes.Constants
 local AdapterSource = WaterPipes.EndpointAdapterSource
@@ -64,18 +67,7 @@ local function mergeInto(target, source)
     end
 end
 
-local function getSquare(x, y, z)
-    if not getCell then
-        return nil
-    end
-
-    local cell = getCell()
-    if not cell or not cell.getGridSquare then
-        return nil
-    end
-
-    return cell:getGridSquare(x, y, z)
-end
+local getSquare = WaterPipes.World.squareAt
 
 local function refreshPlumbedEndpointsNearCoordinates(coordinates)
     local visited = {}
@@ -282,13 +274,15 @@ function System.checkIrrigationConservation(dtHours)
 
     -- Read the world cold: neither measurement may be served from something built earlier by whatever
     -- triggered the check, and none of these caches is frame-scoped any more.
-    Adapter.invalidateVesselCache()
-    NetworkAccess.invalidateTraversalCache()
-    PipeObjectUtils.invalidateScanCache()
+    Invalidate.layoutChanged()
 
     local before, vessels = System.totalNetworkWater()
     local spent = Irrigation.run(dtHours) or 0
 
+    -- Deliberately NOT an Invalidate verb, and deliberately narrower than the drop above. Nothing about
+    -- the world changed between the two measurements -- the audit is forcing one cache to be re-read so
+    -- the second reading cannot be served from something built for the first. Naming an event for that
+    -- would be inventing one that never happens.
     Adapter.invalidateVesselCache()
     local after = System.totalNetworkWater()
 
@@ -406,180 +400,6 @@ function System.redistributeWater()
     end
 end
 
--- No purifier on the tile: one-way passthrough of the IN network's single fluid into the OUT network.
--- `dt` is the elapsed in-game minutes for this sub-step; rates are per-minute and scaled by it.
--- Why a router moved nothing, said ONCE per router per stall rather than every minute. "It stopped and
--- the source still had water" is the report this exists to answer, and it has four possible causes that
--- look identical from outside the pipe: nothing to pull, nowhere to put it, a head too low to matter, or
--- a fluid the destination refuses. Guessing between them from a screenshot is not possible.
-local routerStallReason = {}
-
-local function noteRouterStall(inSquare, reason, detail)
-    if not inSquare or not inSquare.getX then
-        return
-    end
-    local key = State.squareKey(inSquare:getX(), inSquare:getY(), inSquare:getZ())
-    if routerStallReason[key] == reason then
-        return
-    end
-    routerStallReason[key] = reason
-    Logger.log(string.format("router at %d:%d:%d moved nothing: %s%s",
-        inSquare:getX(), inSquare:getY(), inSquare:getZ(), reason, detail or ""))
-end
-
-local function noteRouterRunning(inSquare)
-    if not inSquare or not inSquare.getX then
-        return
-    end
-    local key = State.squareKey(inSquare:getX(), inSquare:getY(), inSquare:getZ())
-    if routerStallReason[key] then
-        routerStallReason[key] = nil
-        Logger.log(string.format("router at %d:%d:%d moving again.",
-            inSquare:getX(), inSquare:getY(), inSquare:getZ()))
-    end
-end
-
-local function processPassthroughRouter(inSquare, outSquare, dt)
-    local avail, fluidType, pressure = NetworkAccess.availableToPull(inSquare)
-    if not fluidType or avail <= 0 then
-        -- A MIXED source reads exactly like an empty one here, and is the likelier of the two when the
-        -- player can see water in the tank: availableToPull refuses a network holding two fluids.
-        noteRouterStall(inSquare, "nothing to pull",
-            string.format(" (available %.2f, fluid %s)", avail or 0, tostring(fluidType)))
-        return false
-    end
-    local headroom = NetworkAccess.availableToPush(outSquare, fluidType)
-    if headroom <= 0 then
-        noteRouterStall(inSquare, "destination full or refusing this fluid",
-            string.format(" (%s, %.2f available to send)", tostring(fluidType), avail))
-        return false
-    end
-    -- The rate is what the IN side can actually deliver to the router tile, not a flat ceiling: the head
-    -- was already solved for this square and until now was read only as a pass/fail gate. Free to use.
-    local factor = Pressure.flowFactor(pressure)
-    local rate = Constants.ROUTER_TRANSFER_RATE * dt * factor
-    local transfer = math.min(rate, avail, headroom)
-    if transfer <= 0 then
-        noteRouterStall(inSquare, "no head to move it with",
-            string.format(" (pressure %s, flow factor %.3f)",
-                pressure and string.format("%.2f", pressure) or "nil", factor))
-        return false
-    end
-    local drawn = NetworkAccess.drawFluidAtSquare(inSquare, fluidType, transfer)
-    if drawn and drawn > 0 then
-        NetworkAccess.fillFluidAtSquare(outSquare, fluidType, drawn)
-        noteRouterRunning(inSquare)
-        return true
-    end
-    noteRouterStall(inSquare, "the draw returned nothing",
-        string.format(" (wanted %.2f of %s from %.2f available)", transfer, tostring(fluidType), avail))
-    return false
-end
-
--- Purifier on the tile: IN network -> IN buffer -> convert -> OUT buffer -> OUT network. Intake pulls
--- ONLY TAINTED water and ONLY from the IN network; output pushes clean water ONLY into the OUT network.
--- Intake happens with or without power; only converting needs power and filter life.
--- Step order is OUTPUT -> CONVERT -> INTAKE on purpose: draining the output first and refilling the
--- intake last leaves water resident in both buffers between ticks, so the tanks hold a real level
--- instead of being cycled to 0 every tick. Water just takes one extra tick to traverse.
--- `dt` is the elapsed in-game minutes for this sub-step; the per-minute rates are scaled by it.
-local function processPurifierRouter(purifier, inSquare, outSquare, dt)
-    -- Set by whichever step actually moves fluid. A tank sitting full while it pushes clean water out IS
-    -- busy, and the readout used to call that "Stopped" purely because the levels looked static.
-    local processed = false
-
-    -- 1. Output: even the OUT buffer out with the rest of the clean network.
-    -- It used to PUSH -- read the buffer, ask the network for headroom, fill it, subtract what was taken --
-    -- which is exactly wrong now that the buffer IS one of that network's containers: the fill rebalances
-    -- water back into the buffer and the subtraction removes it a second time. Settling moves nothing in or
-    -- out, it only lets the level equalise; with no barrels it is a no-op and a tap can still reach it.
-    local outAmount = Purifier.getOutAmount(purifier)
-    if outAmount > 0 then
-        local settled = NetworkAccess.settleAtSquare(outSquare)
-        if settled > 0 and Purifier.getOutAmount(purifier) ~= outAmount then
-            processed = true
-        end
-    end
-
-    -- 2. Convert: move IN -> OUT. Tainted needs power AND filter life; clean water always passes.
-    local inAmount = Purifier.getInAmount(purifier)
-    if inAmount > 0 then
-        local outHeadroom = Constants.PURIFIER_BUFFER_CAPACITY - Purifier.getOutAmount(purifier)
-        if outHeadroom > 0 then
-            local move = math.min(Constants.PURIFIER_CONVERT_RATE * dt, inAmount, outHeadroom)
-            if Purifier.isInTainted(purifier) then
-                -- Cleaning tainted water needs power AND a filter with life left. Every unit converted wears the
-                -- filter; at 0 condition it stops and the water waits in IN until the player repairs it.
-                if Purifier.canFilter(purifier) then
-                    local before = Purifier.getInAmount(purifier)
-                    Purifier.moveInToOut(purifier, move)   -- lands in the OUT buffer as clean Water
-                    local converted = before - Purifier.getInAmount(purifier)
-                    Purifier.wearFilter(purifier, converted)
-                    processed = processed or converted > 0
-                end
-                -- tainted + not powered / clogged filter: stays in the IN buffer until it can be cleaned
-            else
-                local before = Purifier.getInAmount(purifier)
-                Purifier.moveInToOut(purifier, move)       -- clean water always passes through
-                processed = processed or Purifier.getInAmount(purifier) < before
-            end
-        end
-    end
-
-    -- 3. Intake: pull ONLY TAINTED water, and ONLY from the router's IN side. The purifier never draws
-    -- clean water and never pulls anything back off the OUT side. Runs with or without power; only
-    -- converting it later needs power and filter life.
-    local avail, fluidType = NetworkAccess.availableToPull(inSquare)
-    if fluidType == "TaintedWater" and avail > 0 then
-        local curIn = Purifier.getInAmount(purifier)
-        -- Pull into an empty buffer or one already holding tainted water (it is always tainted now).
-        if curIn <= 0 or Purifier.isInTainted(purifier) then
-            local headroom = Constants.PURIFIER_BUFFER_CAPACITY - curIn
-            local pull = math.min(Constants.PURIFIER_INTAKE_RATE * dt, avail, headroom)
-            if pull > 0 then
-                local drawn = NetworkAccess.drawFluidAtSquare(inSquare, "TaintedWater", pull)
-                if drawn and drawn > 0 then
-                    Purifier.addIn(purifier, drawn, true)
-                    processed = true
-                end
-            end
-        end
-    end
-
-    -- Record what actually happened, so the readout reports it instead of guessing from the levels.
-    Purifier.setProcessing(purifier, processed)
-end
-
--- Fluid routers actively move fluid across their boundary in the OUT direction each server tick. A
--- purifier-container on the tile purifies in transit; otherwise it is a plain one-way passthrough.
--- Returns whether it actually moved fluid, which processRouters uses to decide whether the next router
--- on the same source network gets a turn this tick.
-function System.processRouter(router, rx, ry, rz, dt)
-    dt = dt or 1.0
-    local out = Router.getOutOffset(router)
-    if not out then
-        return false
-    end
-
-    local inSquare = getSquare(rx - out.dx, ry - out.dy, rz)
-    local outSquare = getSquare(rx + out.dx, ry + out.dy, rz)
-    if not inSquare or not outSquare then
-        return false
-    end
-
-    -- Scan the whole purifier footprint from the router tile: the tank's modData may live on a footprint
-    -- tile other than the anchor. Missing it here would silently run a plain passthrough.
-    local purifier = Purifier.findForRouterSquare(getSquare(rx, ry, rz))
-    if purifier then
-        processPurifierRouter(purifier, inSquare, outSquare, dt)
-        -- A purifier router is never sequenced: it is a hard boundary with its own buffers, not a queue
-        -- position on somebody's tank.
-        return false
-    end
-
-    return processPassthroughRouter(inSquare, outSquare, dt)
-end
-
 -- `dt` = elapsed in-game minutes since routers were last processed (defaults to a 1-minute step).
 function System.processRouters(dt)
     dt = dt or 1.0
@@ -621,7 +441,7 @@ function System.processRouters(dt)
             local sourceId = Constants.ROUTER_FILL_SEQUENTIAL
                 and inSquare and NetworkAccess.getDrawSourceId(inSquare) or nil
             if not sourceId or not servedSource[sourceId] then
-                if System.processRouter(router, pipeData.x, pipeData.y, pipeData.z, dt) and sourceId then
+                if Router.step(router, pipeData.x, pipeData.y, pipeData.z, dt) and sourceId then
                     servedSource[sourceId] = true
                 end
             end
@@ -632,142 +452,6 @@ end
 -- A powered pump next to a well or open water injects fluid into its network. It is NOT a container: a
 -- well holds 10 000 L and open water is infinite, so letting either join as storage would leave
 -- rebalanceSummary smearing them across every pipe and the network permanently full.
-
--- Which purifier, if any, this pump can feed: one on a router bordering the pump's own zone, approached
--- from the router's IN side. The OUT offset points at the clean side, so pushing raw lake water in
--- there would contaminate the clean run.
--- Driven by the REGISTRY rather than by searching the world -- a purifier cannot exist without a router
--- under it, and both appear and disappear by player action. The old walk probed six neighbours of every
--- tile of the pump's network, about 1 260 lookups per pump per minute, to return nil on a base with no
--- purifier at all. A registry entry is a claim, not a fact: one the world contradicts is dropped here.
-local function findPurifierIntakeForPump(square)
-    local purifiers = State.getPurifiers()
-    local cell = getCell and getCell() or nil
-    if not purifiers or not cell then
-        return nil
-    end
-
-    -- Built on first use, so an empty registry never pays for it.
-    local networkKeys = nil
-    local stale = nil
-
-    local function routerFeedsNetwork(routerSquare)
-        local router = Router.findOnSquare(routerSquare)
-        local out = router and Router.getOutOffset(router)
-        if not out then
-            return false
-        end
-
-        local rx, ry, rz = routerSquare:getX(), routerSquare:getY(), routerSquare:getZ()
-        for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-            local tx, ty, tz = rx + offset.x, ry + offset.y, rz + offset.z
-            -- The OUT tile is the clean side; feeding the intake from there would push purified water
-            -- back through the filter. Every other side is the dirty side, which is what a pump wants.
-            local isOutSide = tx == rx + out.dx and ty == ry + out.dy and tz == rz
-            if not isOutSide and networkKeys[State.squareKey(tx, ty, tz)] then
-                return true
-            end
-        end
-        return false
-    end
-
-    for _, coord in pairs(purifiers) do
-        local purifierSquare = getSquare(coord.x, coord.y, coord.z)
-        -- An unloaded square is not a contradiction: it says nothing either way, so the claim stands.
-        if purifierSquare then
-            if not Purifier.findOnSquare(purifierSquare) then
-                stale = stale or {}
-                stale[#stale + 1] = coord
-            else
-                if not networkKeys then
-                    networkKeys = {}
-                    for _, pipeSquare in ipairs(NetworkAccess.getNetworkSquares(square) or {}) do
-                        networkKeys[State.squareKey(pipeSquare:getX(), pipeSquare:getY(),
-                            pipeSquare:getZ())] = true
-                    end
-                end
-
-                -- The purifier sits on its router or beside it, so both are candidates.
-                local found = nil
-                if Purifier.findForRouterSquare(purifierSquare)
-                    and routerFeedsNetwork(purifierSquare) then
-                    found = Purifier.findForRouterSquare(purifierSquare)
-                end
-                if not found then
-                    for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-                        local routerSquare = cell:getGridSquare(coord.x + offset.x,
-                            coord.y + offset.y, coord.z + offset.z)
-                        if routerSquare and Router.hasRouterOnSquare(routerSquare) then
-                            local purifier = Purifier.findForRouterSquare(routerSquare)
-                            if purifier and routerFeedsNetwork(routerSquare) then
-                                found = purifier
-                                break
-                            end
-                        end
-                    end
-                end
-
-                if found then
-                    for _, gone in ipairs(stale or {}) do
-                        State.unregisterPurifier(gone.x, gone.y, gone.z)
-                    end
-                    return found
-                end
-            end
-        end
-    end
-
-    for _, gone in ipairs(stale or {}) do
-        State.unregisterPurifier(gone.x, gone.y, gone.z)
-    end
-    return nil
-end
-
-function System.processPump(pump, square, dt)
-    local source = Profiler.time("pump/source", Pump.findSource, pump)
-    if not source then
-        return   -- booster only: nothing to draw from, but it still adds head to its zone
-    end
-
-    -- Ask what can take water FIRST, so we never pull it out of a well and lose it.
-    -- Two destinations, not one: a fill query stops dead at a router and a purifier sits on a router, so a
-    -- pump feeding one with storage only on the clean side was told "no room" and drew nothing at all.
-    local tainted = source.fluidType == "TaintedWater"
-    local headroom = Profiler.time("pump/headroom", NetworkAccess.availableToPush,
-        square, source.fluidType)
-    local purifier = Profiler.time("pump/purifier", findPurifierIntakeForPump, square)
-    local purifierRoom = purifier and Purifier.intakeHeadroom(purifier, tainted) or 0
-
-    local wanted = math.min(Pump.intakeFor(dt), headroom + purifierRoom)
-    if wanted <= 0 then
-        return
-    end
-
-    local taken = Profiler.time("pump/draw", Pump.drawFromSource, source, wanted)
-    if taken <= 0 then
-        return
-    end
-
-    -- Network first: it is the destination the player can actually see filling up.
-    local added = 0
-    if headroom > 0 then
-        added = Profiler.time("pump/fill", NetworkAccess.fillFluidAtSquare,
-            square, source.fluidType, math.min(taken, headroom))
-    end
-
-    local leftover = taken - added
-    if leftover > 0 and purifierRoom > 0 and purifier then
-        local intoTank = math.min(leftover, purifierRoom)
-        Purifier.addIn(purifier, intoTank, tainted)
-        added = added + intoTank
-    end
-
-    if added < taken then
-        -- Less was taken than we drew (a race with another consumer, or a mixed-fluid refusal). Put the
-        -- remainder back rather than quietly destroying it.
-        Pump.refundToSource(source, taken - added)
-    end
-end
 
 function System.processPumps(dt)
     dt = dt or 1.0
@@ -783,21 +467,10 @@ function System.processPumps(dt)
             local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
             local pump = square and Pump.findOnSquare(square)
             if pump and Pump.isPowered(pump) then
-                System.processPump(pump, square, dt)
+                Pump.step(pump, square, dt)
             end
         end
     end
-end
-
--- A plumbed fixture that still has town water behind it fills the network. Simpler than the pump: the
--- mains is not a container we can overdraw, so there is nothing to draw first and nothing to refund.
-function System.processMains(square, dt)
-    local wanted = math.min(Mains.intakeFor(dt),
-        NetworkAccess.availableToPush(square, "Water"))
-    if wanted <= 0 then
-        return
-    end
-    NetworkAccess.fillFluidAtSquare(square, "Water", wanted)
 end
 
 -- Driven by the ENDPOINT index, not the pipe list. An inlet is a plumbed fixture by definition --
@@ -822,36 +495,9 @@ function System.processAllMains(dt)
     for _, position in pairs(State.getEndpoints()) do
         local square = getSquare(position.x, position.y, position.z)
         if square and Mains.findOnSquare(square) then
-            System.processMains(square, dt)
+            Mains.step(square, dt)
         end
     end
-end
-
--- An OPEN hydrant gushes at its flow rate: whatever the network on its tile can take is fed in, the
--- rest spills onto the street and is wasted. While the town service runs its reserve is held full and
--- the waste costs nothing; once the water is cut, the whole flow comes out of the fixed reserve.
-function System.processHydrant(hydrant, square, dt)
-    local mainsFed = Hydrant.isMainsFed()
-    if mainsFed then
-        Hydrant.setReserve(hydrant, Hydrant.capacity())   -- topped while the main has water
-    end
-
-    local reserve = Hydrant.reserve(hydrant)
-    local flow = mainsFed and Hydrant.flowFor(dt) or math.min(Hydrant.flowFor(dt), reserve)
-    if flow <= 0 then
-        return
-    end
-
-    -- The network takes what it can and the remainder is spilled: the reserve loses the whole flow whether
-    -- or not anything was connected.
-    NetworkAccess.fillFluidAtSquare(square, "Water", flow)
-    if not mainsFed then
-        Hydrant.setReserve(hydrant, reserve - flow)
-    end
-
-    -- The spilled water lands somewhere: the gush waters the hydrant's own 3x3 like a sprinkler. Free
-    -- litres -- they are already leaving through the open cap.
-    Irrigation.waterHydrantSurroundings(square, dt / 60)
 end
 
 -- Driven by the open-hydrant registry rather than the pipe list, so a hydrant opened with no pipe on its
@@ -866,7 +512,7 @@ function System.processHydrants(dt)
         if square then
             local hydrant = Hydrant.findOnSquare(square)
             if hydrant and Hydrant.isOpen(hydrant) then
-                System.processHydrant(hydrant, square, dt)
+                Hydrant.step(hydrant, square, dt)
             else
                 State.setHydrantOpen(coord.x, coord.y, coord.z, false)
             end
@@ -1163,8 +809,7 @@ function System.rebuild(afterLayoutChange)
     if afterLayoutChange ~= false then
         -- Both caches invalidate by tile on object events, but a build and the rebuild it triggers happen in the
         -- same frame -- so without this the refresh that follows would still see the pre-build shape.
-        PipeObjectUtils.invalidateScanCache()
-        NetworkAccess.invalidateTraversalCache()
+        Invalidate.registryRebuilt()
     end
 
     System.scanContainersAroundPipes()
@@ -1616,11 +1261,7 @@ local function verifyCachesAgainstTheWorld()
     -- A disagreement means something else may be stale too, and the verifier only repaired the tiles it
     -- looked at. Falling back to the wholesale drop is the safe response to being wrong about the premise.
     if disagreed > 0 then
-        Adapter.invalidateVesselCache()
-        PipeObjectUtils.invalidateScanCache()
-        if Hydraulics and Hydraulics.invalidate then
-            Hydraulics.invalidate()
-        end
+        Invalidate.worldVerified()
     end
 end
 
@@ -1733,12 +1374,12 @@ local function checkWatchedInputs()
     -- Both, before either drop: a watcher skipped because an earlier one already decided to invalidate
     -- would never record its own state, and would then report a change every single minute.
     local pumpChanged = checkPumpPower()
-    local supplyChanged = NetworkAccess.supplyClockChanged()
+    local supplyChanged = Invalidate.supplyClockChanged()
 
     if supplyChanged then
-        NetworkAccess.invalidateTraversalCache()      -- the walks, and the field with them
-    elseif pumpChanged and Hydraulics and Hydraulics.invalidate then
-        Hydraulics.invalidate()                       -- the field only
+        Invalidate.flowPathChanged()                  -- the walks, and the field with them
+    elseif pumpChanged then
+        Invalidate.pumpStateChanged()                 -- the field only
     end
 
     -- The irrigation hold crosses frames; one that outlives its pass would freeze the head field. Same

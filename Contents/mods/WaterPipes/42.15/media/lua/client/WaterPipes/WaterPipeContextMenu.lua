@@ -31,6 +31,7 @@ require "WaterPipes/ISRepairWaterPurifier"
 require "WaterPipes/ISOpenWaterPurifier"
 require "WaterPipes/Profiler"
 require "WaterPipes/RemovalAudit"
+require "WaterPipes/World"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.ContextMenu = WaterPipes.ContextMenu or {}
@@ -51,6 +52,7 @@ local Irrigation = WaterPipes.Irrigation
 local IrrigationDebug = WaterPipes.IrrigationDebug
 local PipeAutotile = WaterPipes.PipeAutotile
 local ContextMenu = WaterPipes.ContextMenu
+local World = WaterPipes.World
 ContextMenu.originalOnPlumbItem = ContextMenu.originalOnPlumbItem or ISWorldObjectContextMenu.onPlumbItem
 ContextMenu.DEBUG_ROOT_NAME = "Water Pipes"
 
@@ -132,7 +134,6 @@ local function findPurifierInWorldObjects(worldobjects)
     if not worldobjects then
         return nil
     end
-    local cell = getCell and getCell() or nil
     for _, worldObject in ipairs(worldobjects) do
         if Purifier.isPurifier(worldObject) then
             return worldObject
@@ -142,7 +143,7 @@ local function findPurifierInWorldObjects(worldobjects)
             for _, off in ipairs(PURIFIER_BLOCK_OFFSETS) do
                 local nsq = square
                 if off[1] ~= 0 or off[2] ~= 0 then
-                    nsq = cell and cell:getGridSquare(square:getX() + off[1], square:getY() + off[2], square:getZ())
+                    nsq = World.squareAt(square:getX() + off[1], square:getY() + off[2], square:getZ())
                 end
                 local purifier = nsq and Purifier.findOnSquare(nsq)
                 if purifier then
@@ -160,15 +161,14 @@ end
 -- Resolved exactly the way the server does it, so client and server agree on which object they mean.
 local function resolvePurifierAnchor(purifierObject)
     local square = purifierObject and purifierObject.getSquare and purifierObject:getSquare() or nil
-    local cell = getCell and getCell() or nil
-    if not square or not cell then
+    if not square then
         return nil, nil
     end
 
     for _, off in ipairs(PURIFIER_BLOCK_OFFSETS) do
         local nsq = square
         if off[1] ~= 0 or off[2] ~= 0 then
-            nsq = cell:getGridSquare(square:getX() + off[1], square:getY() + off[2], square:getZ())
+            nsq = World.squareAt(square:getX() + off[1], square:getY() + off[2], square:getZ())
         end
         if nsq and Router.hasRouterOnSquare(nsq) then
             local anchor = Purifier.findForRouterSquare(nsq)
@@ -280,12 +280,11 @@ function ContextMenu.showNetwork(playerObj, pipeObject)
 
     -- Routers bounding this network (amber). They are excluded from the traversal, so surface any
     -- router sitting on a square adjacent to a shown pipe.
-    local cell = getCell and getCell() or nil
-    if cell then
+    do
         local routerSeen = {}
         for _, sq in ipairs(pipeSquares or {}) do
             for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-                local nsq = cell:getGridSquare(sq:getX() + offset.x, sq:getY() + offset.y, sq:getZ() + offset.z)
+                local nsq = World.squareAt(sq:getX() + offset.x, sq:getY() + offset.y, sq:getZ() + offset.z)
                 local router = nsq and Router.findOnSquare(nsq)
                 if router and not routerSeen[tostring(router)] then
                     routerSeen[tostring(router)] = true
@@ -334,26 +333,14 @@ function ContextMenu.hideNetwork(playerObj)
     end
 end
 
-local function playerHasPipeWrench(playerObj)
-    local inventory = playerObj and playerObj:getInventory()
-    if not inventory then
-        return false
-    end
-
-    return inventory:containsTypeRecurse(Constants.PIPE_TOOL_TYPE)
+-- Both go through Constants: showing the entry and doing the thing must ask the same question, or a
+-- broken wrench gets an option that does nothing.
+local function getPipeWrench(playerObj)
+    return Constants.findPipeWrench(playerObj and playerObj:getInventory())
 end
 
-local function getPipeWrench(playerObj)
-    local inventory = playerObj and playerObj:getInventory()
-    if not inventory then
-        return nil
-    end
-
-    return inventory:getFirstTypeEvalRecurse("PipeWrench", function(item)
-        return item and (not item.isBroken or not item:isBroken())
-    end) or inventory:getFirstTagEvalRecurse(ItemTag.PIPE_WRENCH, function(item)
-        return item and (not item.isBroken or not item:isBroken())
-    end)
+local function playerHasPipeWrench(playerObj)
+    return Constants.hasPipeWrench(playerObj and playerObj:getInventory())
 end
 
 function ContextMenu.plumbEndpoint(playerObj, endpointObject)
@@ -1116,7 +1103,7 @@ function ContextMenu.setHydrantOpen(playerObj, hydrant, open)
     if not square or not playerObj then
         return
     end
-    local wrench = playerObj:getInventory():getFirstTypeRecurse(Constants.PIPE_TOOL_TYPE)
+    local wrench = getPipeWrench(playerObj)
     if not wrench then
         return
     end
@@ -1172,7 +1159,7 @@ function ContextMenu.repairDrip(playerObj, drip)
     if not playerObj or not drip then
         return
     end
-    local wrench = playerObj:getInventory():getFirstTypeRecurse(Constants.PIPE_TOOL_TYPE)
+    local wrench = getPipeWrench(playerObj)
     if not wrench then
         return
     end
