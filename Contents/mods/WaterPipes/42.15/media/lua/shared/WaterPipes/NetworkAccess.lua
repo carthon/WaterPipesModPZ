@@ -1452,6 +1452,26 @@ function NetworkAccess.hasWater(endpointObject)
     return NetworkAccess.hasFluid(endpointObject)
 end
 
+-- Every vessel an endpoint's network can draw from, with its level, as one line. For diagnosis: a draw
+-- that reports success while the vessel the player watches never moves is only decidable by reading the
+-- vessels themselves, on both sides of the draw. Amounts are read fresh, never from a memo.
+function NetworkAccess.describeVessels(endpointObject)
+    local summary = buildSummary(endpointObject)
+    if not summary or #summary.descriptors == 0 then
+        return "no vessels"
+    end
+
+    local parts = {}
+    for _, descriptor in ipairs(summary.descriptors) do
+        parts[#parts + 1] = string.format("%s@%s %.2f/%.2f %s",
+            tostring(descriptor.kind or "?"), tostring(descriptor.squareKey or "?"),
+            descriptor.waterAmount or 0, descriptor.capacity or 0,
+            tostring(descriptor.fluidType or "-"))
+    end
+    return string.format("%.2f L across %d: %s",
+        summary.totalAmount or 0, #summary.descriptors, table.concat(parts, " | "))
+end
+
 function NetworkAccess.useFluid(endpointObject, amount)
     local summary = NetworkAccess.getUsableWaterSummary(endpointObject)
     if not summary then
