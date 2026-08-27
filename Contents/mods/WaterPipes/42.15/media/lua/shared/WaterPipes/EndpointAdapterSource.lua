@@ -16,6 +16,21 @@ local NetworkAccess = WaterPipes.NetworkAccess
 local INTERNAL_SYNCING_KEY = "waterpipesAdapterSyncing"
 local CONSUME_EPSILON = 0.001
 
+-- LEGACY MIGRATION ONLY. Nothing here creates an adapter any more.
+--
+-- A plumbed fixture used to be fed by a hidden IsoThumpable stacked on the square above it, holding a
+-- FluidContainer that mirrored the network. EndpointFluidSource replaced that: the fixture's OWN
+-- container is written instead, so there is no second object to keep in step, prioritise on the tile,
+-- or lose track of.
+--
+-- What survives is everything needed to get an OLD save back to a clean state: recognise an adapter,
+-- find it, take it off the tile, and keep honouring draws made through one until it is gone. The
+-- creation half -- createAdapterObject, syncForEndpoint, and the flag/priority/reconcile helpers only
+-- they reached -- is deleted; it had no callers left and was 315 lines of ways to build a thing this
+-- mod no longer builds.
+--
+-- So: do not add anything here. A fixture's water belongs to EndpointFluidSource.
+
 local function isAuthoritative()
     if isServer and isServer() then
         return true
@@ -117,20 +132,6 @@ local function getEndpointReference(worldObject)
     }
 end
 
-local function setAdapterReference(adapterObject, endpointObject)
-    local modData = getModData(adapterObject)
-    local reference = getEndpointReference(endpointObject)
-    if not modData or not reference then
-        return
-    end
-
-    modData[Constants.ADAPTER_SOURCE_MODDATA_KEY] = true
-    modData[Constants.ADAPTER_SOURCE_ENDPOINT_X_KEY] = reference.x
-    modData[Constants.ADAPTER_SOURCE_ENDPOINT_Y_KEY] = reference.y
-    modData[Constants.ADAPTER_SOURCE_ENDPOINT_Z_KEY] = reference.z
-    modData[Constants.ADAPTER_SOURCE_ENDPOINT_INDEX_KEY] = reference.index
-end
-
 local function getAdapterSquare(endpointObject)
     local square = endpointObject and endpointObject.getSquare and endpointObject:getSquare() or nil
     if not square then
@@ -138,38 +139,6 @@ local function getAdapterSquare(endpointObject)
     end
 
     return getSquare(square:getX(), square:getY(), square:getZ() + 1)
-end
-
-local function applyHiddenAdapterFlags(worldObject)
-    if not worldObject then
-        return
-    end
-
-    if worldObject.setName then
-        pcall(worldObject.setName, worldObject, "")
-    end
-    if worldObject.setNoPicking then
-        pcall(worldObject.setNoPicking, worldObject, true)
-    end
-    if worldObject.setSpecialTooltip then
-        pcall(worldObject.setSpecialTooltip, worldObject, false)
-    end
-    if worldObject.setOutlineOnMouseover then
-        pcall(worldObject.setOutlineOnMouseover, worldObject, false)
-    end
-    if worldObject.setHighlighted then
-        pcall(worldObject.setHighlighted, worldObject, false)
-    end
-    if worldObject.setAlphaAndTarget then
-        pcall(worldObject.setAlphaAndTarget, worldObject, 0.0)
-    else
-        if worldObject.setAlpha then
-            pcall(worldObject.setAlpha, worldObject, 0.0)
-        end
-        if worldObject.setTargetAlpha then
-            pcall(worldObject.setTargetAlpha, worldObject, 0.0)
-        end
-    end
 end
 
 function AdapterSource.isAdapterObject(worldObject)
@@ -239,29 +208,6 @@ function AdapterSource.squareHasAdapter(square)
     return AdapterSource.findOnSquare(square) ~= nil
 end
 
-local function ensureFluidContainerComponent(adapterObject)
-    if not adapterObject then
-        return false
-    end
-
-    if adapterObject.getFluidContainer and adapterObject:getFluidContainer() then
-        return true
-    end
-
-    if not GameEntityFactory or not GameEntityFactory.AddComponent or not ComponentType or not ComponentType.FluidContainer then
-        return false
-    end
-
-    local fluidComponent = ComponentType.FluidContainer.CreateComponent and ComponentType.FluidContainer:CreateComponent() or nil
-    if not fluidComponent then
-        return false
-    end
-
-    fluidComponent:setCapacity(1.0)
-    local ok = pcall(GameEntityFactory.AddComponent, adapterObject, true, fluidComponent)
-    return ok and adapterObject.getFluidContainer and adapterObject:getFluidContainer() ~= nil or false
-end
-
 local function setAdapterCapacity(adapterObject, capacity)
     local fluidContainer = adapterObject and adapterObject.getFluidContainer and adapterObject:getFluidContainer() or nil
     if not fluidContainer or not fluidContainer.setCapacity then
@@ -274,136 +220,6 @@ local function setAdapterCapacity(adapterObject, capacity)
         pcall(adapterObject.transmitModData, adapterObject)
     end
     return ok
-end
-
-local function isCompetingWorldSource(candidate)
-    if not candidate or AdapterSource.isAdapterObject(candidate) or EndpointObjects.isEndpointCandidate(candidate) then
-        return false
-    end
-
-    return Adapter.getWorldFluidKind(candidate) == "worldFluid"
-end
-
-local function prioritizeAdapterOnSquare(adapterObject)
-    local square = adapterObject and adapterObject.getSquare and adapterObject:getSquare() or nil
-    local objects = square and square.getObjects and square:getObjects() or nil
-    if not objects or not objects.size then
-        return false
-    end
-
-    local currentIndex = nil
-    local targetIndex = nil
-    for index = 0, objects:size() - 1 do
-        local candidate = objects:get(index)
-        if candidate == adapterObject then
-            currentIndex = index
-        elseif targetIndex == nil and isCompetingWorldSource(candidate) then
-            targetIndex = index
-        end
-    end
-
-    if currentIndex == nil or targetIndex == nil or currentIndex < targetIndex then
-        return false
-    end
-
-    local removed = pcall(function()
-        objects:remove(currentIndex)
-    end)
-    if not removed then
-        return false
-    end
-
-    local insertIndex = math.max(math.min(targetIndex, objects:size()), 0)
-    local inserted = pcall(function()
-        objects:add(insertIndex, adapterObject)
-    end)
-    if not inserted then
-        pcall(function()
-            objects:add(adapterObject)
-        end)
-        return false
-    end
-
-    if square.RecalcProperties then
-        square:RecalcProperties()
-    end
-    if square.RecalcAllWithNeighbours then
-        square:RecalcAllWithNeighbours(true)
-    end
-
-    return true
-end
-
-local function createAdapterObject(endpointObject)
-    if not isAuthoritative() then
-        return nil
-    end
-
-    local squareAbove = getAdapterSquare(endpointObject)
-    if not squareAbove or not IsoThumpable or not getWorld then
-        return nil
-    end
-
-    local cell = getWorld():getCell()
-    if not cell then
-        return nil
-    end
-
-    local javaObject = IsoThumpable.new(cell, squareAbove, Constants.ADAPTER_SOURCE_SPRITE, false, {})
-    if not javaObject then
-        return nil
-    end
-
-    if javaObject.setName then
-        javaObject:setName("")
-    end
-    if javaObject.setCanPassThrough then
-        javaObject:setCanPassThrough(true)
-    end
-    if javaObject.setBlockAllTheSquare then
-        javaObject:setBlockAllTheSquare(false)
-    end
-    if javaObject.setCanBarricade then
-        javaObject:setCanBarricade(false)
-    end
-    if javaObject.setIsDismantable then
-        javaObject:setIsDismantable(false)
-    end
-    if javaObject.setIsHoppable then
-        javaObject:setIsHoppable(false)
-    end
-    if javaObject.setIsThumpable then
-        javaObject:setIsThumpable(false)
-    end
-    applyHiddenAdapterFlags(javaObject)
-
-    setAdapterReference(javaObject, endpointObject)
-    local modData = getModData(javaObject)
-    if modData then
-        modData.waterMax = 0
-    end
-
-    local info = SpriteConfigManager and SpriteConfigManager.getObjectInfoFromSprite and SpriteConfigManager.getObjectInfoFromSprite(Constants.ADAPTER_SOURCE_SPRITE) or nil
-    if info and info.getScript and info:getScript() and info:getScript():getParent() and GameEntityFactory and GameEntityFactory.CreateIsoObjectEntity then
-        local gameEntityScript = info:getScript():getParent()
-        pcall(GameEntityFactory.CreateIsoObjectEntity, javaObject, gameEntityScript, true)
-    end
-
-    applyHiddenAdapterFlags(javaObject)
-
-    squareAbove:AddSpecialObject(javaObject)
-    applyHiddenAdapterFlags(javaObject)
-    if not ensureFluidContainerComponent(javaObject) then
-        Logger.error("Failed to attach FluidContainer to adapter source " .. describeObject(javaObject))
-    end
-    prioritizeAdapterOnSquare(javaObject)
-    if javaObject.transmitCompleteItemToClients then
-        pcall(javaObject.transmitCompleteItemToClients, javaObject)
-    end
-    applyHiddenAdapterFlags(javaObject)
-
-    Logger.log("Created adapter source: " .. describeObject(javaObject) .. " for endpoint " .. describeObject(endpointObject))
-    return javaObject
 end
 
 local function removeAdapterObject(adapterObject, reason)
@@ -475,109 +291,6 @@ local function writeAdapterSnapshot(adapterObject, totalAmount, totalCapacity, f
     setAdapterLastSyncAmount(adapterObject, effectiveAmount)
 end
 
-local function reconcileAdapterConsumption(adapterObject, endpointObject)
-    if not adapterObject or not endpointObject then
-        return 0
-    end
-
-    local adapterModData = getModData(adapterObject)
-    if adapterModData and adapterModData[INTERNAL_SYNCING_KEY] then
-        return 0
-    end
-
-    local currentAmount = math.max(Adapter.readWorldFluidAmount(adapterObject) or 0, 0)
-    local lastSyncAmount = getAdapterLastSyncAmount(adapterObject)
-    if type(lastSyncAmount) ~= "number" then
-        setAdapterLastSyncAmount(adapterObject, currentAmount)
-        return 0
-    end
-
-    local consumed = math.max(lastSyncAmount - currentAmount, 0)
-    if consumed <= CONSUME_EPSILON then
-        if currentAmount > lastSyncAmount + CONSUME_EPSILON then
-            setAdapterLastSyncAmount(adapterObject, currentAmount)
-        end
-        return 0
-    end
-
-    local applied = NetworkAccess.useFluid(endpointObject, consumed)
-    Logger.log(
-        "Adapter source reconciled consumption: endpoint="
-            .. describeObject(endpointObject)
-            .. " requested="
-            .. tostring(consumed)
-            .. " applied="
-            .. tostring(applied)
-    )
-
-    setAdapterLastSyncAmount(adapterObject, currentAmount)
-    return applied
-end
-
-function AdapterSource.syncForEndpoint(endpointObject)
-    if not isAuthoritative() then
-        return nil
-    end
-
-    local squareAbove = getAdapterSquare(endpointObject)
-    if not squareAbove then
-        AdapterSource.removeForEndpoint(endpointObject, "noSquareAbove")
-        return nil
-    end
-
-    local adapterObject = AdapterSource.findForEndpoint(endpointObject)
-    if adapterObject then
-        reconcileAdapterConsumption(adapterObject, endpointObject)
-    end
-
-    local summary = NetworkAccess.getSummary(endpointObject)
-    if not summary or summary.totalCapacity <= 0 then
-        if adapterObject then
-            writeAdapterSnapshot(adapterObject, 0, 0, nil)
-        end
-        return adapterObject
-    end
-
-    adapterObject = adapterObject or createAdapterObject(endpointObject)
-    if not adapterObject then
-        return nil
-    end
-
-    applyHiddenAdapterFlags(adapterObject)
-
-    if not ensureFluidContainerComponent(adapterObject) then
-        Logger.error("Adapter source missing FluidContainer component for " .. describeObject(endpointObject))
-        return nil
-    end
-
-    prioritizeAdapterOnSquare(adapterObject)
-
-    if summary.isMixed or not summary.isWater then
-        writeAdapterSnapshot(adapterObject, 0, summary.totalCapacity, nil)
-        return adapterObject
-    end
-
-    local reserveCapacity = math.max(summary.totalCapacity or 0, 0)
-    local visibleAmount = math.min(summary.totalAmount or 0, reserveCapacity)
-    if reserveCapacity <= 0 or visibleAmount <= 0 then
-        writeAdapterSnapshot(adapterObject, 0, reserveCapacity, nil)
-        return adapterObject
-    end
-
-    writeAdapterSnapshot(adapterObject, visibleAmount, reserveCapacity, summary.fluidTypeName)
-    return adapterObject
-end
-
-function AdapterSource.returnReservation(endpointObject)
-    local adapterObject = AdapterSource.findForEndpoint(endpointObject)
-    if not adapterObject then
-        return 0
-    end
-
-    writeAdapterSnapshot(adapterObject, 0, 0, nil)
-    return 0
-end
-
 function AdapterSource.describeHiddenFlags(worldObject)
     if not worldObject then
         return "nil"
@@ -623,19 +336,6 @@ local function findEndpointForAdapter(adapterObject)
     end
 
     return nil
-end
-
-function AdapterSource.onAdapterDestroyed(adapterObject)
-    if not AdapterSource.isAdapterObject(adapterObject) then
-        return nil
-    end
-
-    local endpointObject = findEndpointForAdapter(adapterObject)
-    if not endpointObject then
-        return nil
-    end
-
-    return AdapterSource.syncForEndpoint(endpointObject)
 end
 
 function AdapterSource.onAdapterWaterAmountChange(adapterObject, prevAmount)

@@ -22,14 +22,6 @@ local function getModData(worldObject)
     return ok and modData or nil
 end
 
-local function getSquare(x, y, z)
-    if not getCell then
-        return nil
-    end
-    local cell = getCell()
-    return cell and cell.getGridSquare and cell:getGridSquare(x, y, z) or nil
-end
-
 -- The tier string ("filter"/"fire"/"electric") baked into a purifier, or nil if not a purifier.
 function Purifier.getTier(worldObject)
     local modData = getModData(worldObject)
