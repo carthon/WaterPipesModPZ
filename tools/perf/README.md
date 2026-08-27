@@ -38,6 +38,7 @@ Workflow for an optimisation: `--check` before, make the change in Lua, mirror i
 | `wp_model.py` | the world model, the BFS, and one function per periodic pass |
 | `wp_bench.py` | scenarios, report, baseline diff |
 | `baseline.json` | recorded counts; committed so regressions are visible in review |
+| `release_gate.py` | the pre-release gate: runs the conservation suite against the tree AND against the last release -- see below |
 | `lint_forward_refs.py` | finds a `local` used above its declaration -- see below |
 | `lint_json.py` | reads every shipped JSON the way the GAME does -- see below |
 | `lint_calls.py` | finds calls to a module member that is never defined -- see below |
@@ -231,3 +232,29 @@ each here and are not one each in the JVM. Twice this model has ranked candidate
 order the in-game profiler then contradicted. Use it for SHAPE -- work that scales with
 the network, work landing per frame that belongs per minute -- and use the profiler
 (pipe Debug menu) for what anything actually costs.
+
+
+## The release gate
+
+```sh
+python release_gate.py                # gate the working tree against the last release
+python release_gate.py --baseline REV # against some other point
+```
+
+A green suite is not evidence. `test_fill_path` carried an assertion **naming** the router
+levelling bug and passed through the entire release that shipped it: its world had water on
+only one side of the valve, so the pressure gate produced the same `0` the topology should
+have. Two mechanisms, one number.
+
+So the gate runs every conservation test twice -- against the working tree, where all must
+pass, and against the Lua modules as they stood at the previous `chore: bump modversion`,
+where the ones covering this cycle's fixes must **fail**. It sorts them into:
+
+- **proves a fix** -- fails on the old build. The test would have caught the bug.
+- **carried forward** -- passes on both. Real coverage, but it earned no trust this cycle.
+
+If a release claims to fix something and nothing fails against the last one, the fix has no
+test behind it. That is the signal the gate exists to produce.
+
+It needs `lua` on PATH and `tools/conservation/`, which this `.gitignore` excludes -- so a
+fresh clone cannot run the gate until that directory is restored.
