@@ -248,4 +248,22 @@ function Mains.findOnSquare(square)
     return nil
 end
 
+-- A plumbed fixture that still has town water behind it fills the network. Simpler than the pump: the
+-- mains is not a container we can overdraw, so there is nothing to draw first and nothing to refund.
+-- ===== The per-tick step =====
+-- Moved here from WaterPipeSystem. Which fixtures are live inlets is decided by the tick, off
+-- the endpoint index; what one of them does with a minute is this.
+function Mains.step(square, dt)
+    local NetworkAccess = WaterPipes.NetworkAccess
+    if not NetworkAccess or (dt or 0) <= 0 then
+        return
+    end
+    local wanted = math.min(Mains.intakeFor(dt),
+        NetworkAccess.availableToPush(square, "Water"))
+    if wanted <= 0 then
+        return
+    end
+    NetworkAccess.fillFluidAtSquare(square, "Water", wanted)
+end
+
 return Mains

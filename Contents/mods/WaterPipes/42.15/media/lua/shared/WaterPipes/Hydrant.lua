@@ -164,4 +164,44 @@ function Hydrant.isFlowing(hydrant)
     return Hydrant.isMainsFed() or Hydrant.reserve(hydrant) > 0
 end
 
+-- An OPEN hydrant gushes at its flow rate: whatever the network on its tile can take is fed in, the
+-- rest spills onto the street and is wasted. While the town service runs its reserve is held full and
+-- the waste costs nothing; once the water is cut, the whole flow comes out of the fixed reserve.
+-- ===== The per-tick step =====
+-- Moved here from WaterPipeSystem. Which hydrants run comes off the open-hydrant registry in
+-- the tick; what an open one does with a minute is this.
+function Hydrant.step(hydrant, square, dt)
+    -- Resolved off the WaterPipes table rather than required: NetworkAccess requires this
+    -- module, and Irrigation requires NetworkAccess, so either require would close a cycle.
+    local NetworkAccess = WaterPipes.NetworkAccess
+    local Irrigation = WaterPipes.Irrigation
+    if not NetworkAccess or (dt or 0) <= 0 then
+        return
+    end
+
+    local mainsFed = Hydrant.isMainsFed()
+    if mainsFed then
+        Hydrant.setReserve(hydrant, Hydrant.capacity())   -- topped while the main has water
+    end
+
+    local reserve = Hydrant.reserve(hydrant)
+    local flow = mainsFed and Hydrant.flowFor(dt) or math.min(Hydrant.flowFor(dt), reserve)
+    if flow <= 0 then
+        return
+    end
+
+    -- The network takes what it can and the remainder is spilled: the reserve loses the whole flow whether
+    -- or not anything was connected.
+    NetworkAccess.fillFluidAtSquare(square, "Water", flow)
+    if not mainsFed then
+        Hydrant.setReserve(hydrant, reserve - flow)
+    end
+
+    -- The spilled water lands somewhere: the gush waters the hydrant's own 3x3 like a sprinkler. Free
+    -- litres -- they are already leaving through the open cap.
+    if Irrigation then
+        Irrigation.waterHydrantSurroundings(square, dt / 60)
+    end
+end
+
 return Hydrant
