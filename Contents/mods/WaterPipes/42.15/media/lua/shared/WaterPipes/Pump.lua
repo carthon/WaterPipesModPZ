@@ -405,7 +405,7 @@ end
 local function timed(name, fn, ...)
     local Profiler = WaterPipes.Profiler
     if Profiler and Profiler.time then
-        return timed(name, fn, ...)
+        return Profiler.time(name, fn, ...)
     end
     return fn(...)
 end

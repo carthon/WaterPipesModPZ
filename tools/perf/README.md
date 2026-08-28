@@ -40,6 +40,7 @@ Workflow for an optimisation: `--check` before, make the change in Lua, mirror i
 | `baseline.json` | recorded counts; committed so regressions are visible in review |
 | `release_gate.py` | the pre-release gate: runs the conservation suite against the tree AND against the last release -- see below |
 | `lint_forward_refs.py` | finds a `local` used above its declaration -- see below |
+| `lint_self_calls.py` | finds a local function that returns itself unchanged -- see below |
 | `lint_json.py` | reads every shipped JSON the way the GAME does -- see below |
 | `lint_calls.py` | finds calls to a module member that is never defined -- see below |
 | `lint_translations.py` | key parity, placeholder drift, and keys the code asks for -- see below |
@@ -158,6 +159,25 @@ references to a Lua `local` that appear above its declaration -- which is valid 
 **global** read that is nil at run time, and is invisible to `luac -p`. This repo has shipped that bug
 three times, most recently as a public function with no caller in any test: green suite, nil global,
 found in a player's game log. Exits 1 on a finding, so it can gate a commit.
+
+## The self-call linter
+
+```sh
+python lint_self_calls.py
+```
+
+Also nothing to do with performance, and here for the same reason. It finds a `local function` whose
+body does `return itself(...)` with its own parameters handed straight back -- a wrapper that never
+reaches the thing it was supposed to wrap.
+
+Worth its own linter because of HOW it fails. In Lua that is a tail call, so the frame is reused and
+the stack never grows: no stack overflow, no error, no log line. The pass simply never returns. It
+shipped once as a profiler wrapper in `Pump.lua` that called `timed` where it meant `Profiler.time`,
+and reached a player as "the game froze when I walked to the farm" -- with a console log that stopped
+mid-sentence and named nothing.
+
+Terminating recursion has to change something on the way down, so only an argument list textually
+identical to the parameter list is reported. Exits 1 on a finding.
 
 ## The JSON linter
 
