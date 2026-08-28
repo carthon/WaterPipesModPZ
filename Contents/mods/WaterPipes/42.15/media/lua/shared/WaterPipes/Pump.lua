@@ -418,8 +418,14 @@ end
 -- tile of the pump's network, about 1 260 lookups per pump per minute, to return nil on a base with no
 -- purifier at all. A registry entry is a claim, not a fact: one the world contradicts is dropped here.
 local function findPurifierIntakeForPump(square)
+    -- Resolved off the WaterPipes table rather than required, for the reason above Pump.getStatus:
+    -- NetworkAccess requires this module, so closing the loop would be a recursive require. Without
+    -- this line the name below is a nil GLOBAL -- the function moved here from WaterPipeSystem, where
+    -- the file had a local for it, and nothing here replaced it.
+    local NetworkAccess = WaterPipes.NetworkAccess
+
     local purifiers = State.getPurifiers()
-    if not purifiers then
+    if not purifiers or not NetworkAccess then
         return nil
     end
 
