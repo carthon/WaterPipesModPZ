@@ -30,6 +30,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, os.pardir, os.pardir))
 SHARED = "Contents/mods/WaterPipes/42.15/media/lua/shared/WaterPipes"
 COMMON = "Contents/mods/WaterPipes/common/media/lua/shared/WaterPipes"
+SCRIPTS = "Contents/mods/WaterPipes/42.15/media/scripts"
 TESTS_DIR = os.path.join(REPO, "tools", "conservation")
 
 # The commit that shipped the last version. There are no tags on this repo; a release is a
@@ -64,37 +65,52 @@ def find_baseline():
     return sha, subject
 
 
-def extract(rev, path, into):
-    """Copy one directory of Lua modules out of `rev` into `into`. Returns how many."""
+def extract(rev, path, into, suffix=".lua", flatten=True):
+    """Copy one directory out of `rev` into `into`. Returns how many files landed.
+
+    Lua modules are flattened, because that is how WP_LUA_ROOT addresses them. Script .txt
+    files keep their tree: the recipes sit several directories down and the tests open
+    them by that path.
+    """
     os.makedirs(into, exist_ok=True)
-    listing = git("ls-tree", "--name-only", rev, path + "/")
+    listing = git("ls-tree", "-r", "--name-only", rev, path + "/")
     if listing.returncode != 0:
         return 0
     count = 0
     for entry in listing.stdout.split("\n"):
         entry = entry.strip()
-        if not entry.endswith(".lua"):
+        if not entry.endswith(suffix):
             continue
         blob = subprocess.run(["git", "show", rev + ":" + entry], cwd=REPO,
                               capture_output=True)
         if blob.returncode != 0:
             continue
-        with open(os.path.join(into, os.path.basename(entry)), "wb") as handle:
+        if flatten:
+            target = os.path.join(into, os.path.basename(entry))
+        else:
+            target = os.path.join(into, os.path.relpath(entry, path))
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "wb") as handle:
             handle.write(blob.stdout)
         count += 1
     return count
 
 
-def run_test(name, env_root=None, env_common=None):
+def run_test(name, env_root=None, env_common=None, env_scripts=None):
     env = dict(os.environ)
     if env_root:
         env["WP_LUA_ROOT"] = env_root
         # Set rather than left over: a baseline run that silently loaded today's common
         # modules would be measuring a mixture of two builds.
         env["WP_LUA_COMMON"] = env_common or env_root
+        # Same reasoning for the script .txt tree. Balance lives in recipes as much as in
+        # modules, and a fix that edits only a recipe is invisible to a baseline that keeps
+        # serving today's copy -- it would report itself as carried-forward coverage.
+        env["WP_SCRIPTS_ROOT"] = env_scripts or ""
     else:
         env.pop("WP_LUA_ROOT", None)
         env.pop("WP_LUA_COMMON", None)
+        env.pop("WP_SCRIPTS_ROOT", None)
     try:
         done = subprocess.run(["lua", name], cwd=TESTS_DIR, capture_output=True,
                               text=True, encoding="utf-8", errors="replace",
@@ -162,8 +178,10 @@ def main():
     try:
         root = os.path.join(workdir, "shared")
         common = os.path.join(workdir, "common")
+        scripts = os.path.join(workdir, "scripts")
         n = extract(baseline, SHARED, root)
         extract(baseline, COMMON, common)
+        extract(baseline, SCRIPTS, scripts, suffix=".txt", flatten=False)
         if n == 0:
             die("could not extract the baseline's Lua modules from " + baseline[:7])
 
@@ -171,7 +189,7 @@ def main():
         print("-- and it must FAIL against the previous release --")
         proves, carried = [], []
         for name in tests:
-            ok, detail = run_test(name, root + os.sep, common + os.sep)
+            ok, detail = run_test(name, root + os.sep, common + os.sep, scripts + os.sep)
             if ok:
                 carried.append(name)
                 print("  %-28s passes there too   (carried forward)" % name)
