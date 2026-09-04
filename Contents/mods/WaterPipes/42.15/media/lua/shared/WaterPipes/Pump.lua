@@ -470,11 +470,10 @@ local function findPurifierIntakeForPump(square)
                 end
 
                 -- The purifier sits on its router or beside it, so both are candidates.
-                local found = nil
-                if Purifier.findForRouterSquare(purifierSquare)
-                    and routerFeedsNetwork(purifierSquare) then
-                    found = Purifier.findForRouterSquare(purifierSquare)
-                end
+                local found = Purifier.findForRouterSquare(purifierSquare)
+                if found and not routerFeedsNetwork(purifierSquare) then
+                    found = nil
+                end
                 if not found then
                     for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
                         local routerSquare = World.squareAt(coord.x + offset.x,
