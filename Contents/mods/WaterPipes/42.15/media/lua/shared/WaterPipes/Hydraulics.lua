@@ -10,7 +10,6 @@ require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Purifier"
 require "WaterPipes/Router"
-require "WaterPipes/World"
 
 local Adapter = WaterPipes.ContainerAdapter
 local Constants = WaterPipes.Constants
@@ -72,7 +71,16 @@ local function elevation(z)
     return Pressure.levelHead() * (z or 0)
 end
 
-local getCellSquare = WaterPipes.World.squareAt
+local function getCellSquare(x, y, z)
+    if not getCell then
+        return nil
+    end
+    local cell = getCell()
+    if not cell or not cell.getGridSquare then
+        return nil
+    end
+    return cell:getGridSquare(x, y, z)
+end
 
 local function keyOf(x, y, z)
     return tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)
@@ -853,52 +861,6 @@ local function discoverTopology(seedSquare)
     }
 end
 
--- THE SHAPE, and now in one place.
---
--- A solve has two answers -- the priced one and the dry one, for a zone nothing supplies -- and they
--- were two hand-written table literals that had to agree by eye. They stopped agreeing: `feeders` went
--- missing from the dry one, floodFrom indexes it without a guard, and a farm nobody had filled yet
--- threw instead of answering. Which is the ordinary state of a farm.
---
--- So both answers are built here. The seven fields that come off the topology are read from it rather
--- than passed, so a caller cannot hand over a mismatched pair; the four the search fills in default to
--- empty; `supplyStale` is written false rather than left absent, which makes the one field assigned
--- after construction part of the declared shape too. Adding a field is one edit, not two.
-local function makeSolution(topology, computed)
-    return {
-        -- Carried on the solution so the next supply change can re-price without going to the world.
-        topology = topology,
-        nodes = topology.nodes,
-        order = topology.order,
-        adjacency = topology.adjacency,
-        routers = topology.routers,
-        feeders = topology.feeders,
-        purifierOutlets = topology.purifierOutlets,
-
-        -- Carried so the field can be re-priced with ONE extra consumer switched on (see headIfDrawing).
-        parents = computed.parents,
-        viaRouter = computed.viaRouter,
-
-        supply = computed.supply,
-        sequence = computed.sequence,
-        sources = computed.sources,
-        demand = computed.demand,
-        kinds = computed.kinds,
-        supplyFloor = computed.supplyFloor,
-        pumps = computed.pumps,
-        stats = computed.stats,
-
-        -- What the search produces. Empty is the dry answer, not a missing one.
-        head = computed.head or {},
-        flow = computed.flow or {},
-        depth = computed.depth or {},
-        starved = computed.starved or {},
-        iterations = computed.iterations or 0,
-
-        supplyStale = false,
-    }
-end
-
 local function solveWithTopology(topology, zoneKey)
     local nodes = topology.nodes
     local order = topology.order
@@ -920,12 +882,18 @@ local function solveWithTopology(topology, zoneKey)
     sincePhase("solve/order", mark)
     if not sequence then
         -- Nothing supplies this zone: every node is dry, which is a real answer and not a failure.
-        return makeSolution(topology, {
+        -- THE SHAPE, not most of it. `feeders` was once missing here and floodFrom indexes it without a guard,
+        -- so a dry network -- the ordinary state of a farm nobody has filled yet -- threw instead of answering.
+        return {
+            topology = topology,
+            nodes = nodes, order = order, adjacency = adjacency, routers = routers,
+            feeders = feeders, purifierOutlets = purifierOutlets,
             parents = parents, viaRouter = viaRouter,
             supply = supply, sequence = nil,
             sources = sources, demand = demand, kinds = kinds,
-            supplyFloor = supplyFloor, pumps = pumps, stats = stats,
-        })
+            head = {}, flow = {}, depth = {}, supplyFloor = supplyFloor, pumps = pumps, stats = stats,
+            starved = {}, iterations = 0,
+        }
     end
 
     -- ===== Who actually gets to draw =====
@@ -1082,23 +1050,32 @@ local function solveWithTopology(topology, zoneKey)
         starved[ordered[index]] = true
     end
 
-    return makeSolution(topology, {
+    return {
+        -- Carried on the solution so the next supply change can re-price without going to the world.
+        topology = topology,
+        nodes = nodes,
+        order = order,
+        adjacency = adjacency,
+        routers = routers,
+        feeders = feeders,
+        -- Carried so the field can be re-priced with ONE extra consumer switched on (see headIfDrawing).
         parents = parents,
         viaRouter = viaRouter,
+        purifierOutlets = purifierOutlets,
         supply = supply,
         sequence = sequence,
         sources = sources,
         demand = demand,
         kinds = kinds,
-        supplyFloor = supplyFloor,
-        pumps = pumps,
-        stats = stats,
         head = head,
         flow = flow,
         depth = depth,
+        pumps = pumps,
+        supplyFloor = supplyFloor,
+        stats = stats,
         starved = starved,
         iterations = solves,
-    })
+    }
 end
 
 local function solveZone(seedSquare, zoneKey)
@@ -1488,116 +1465,6 @@ function Hydraulics.poweredPumps(solution)
     return solution._pumpList
 end
 
--- ===== Readouts about the zone itself =====
--- These exist because the alternative is what NetworkAccess used to do: reach into solution.stats,
--- .demand, .starved, .sources, .supply, .order, .kinds and .id and reassemble the answer by hand. The
--- record is this module's working state, and a second module reading nine of its fields means the
--- record IS the interface -- so a field renamed here breaks a readout over there, silently, because
--- an absent key in Lua is nil rather than an error.
-
--- The zone's identity, for callers that memoise per zone.
-function Hydraulics.zoneIdOf(solution)
-    return solution and solution.id or nil
-end
-
--- How many pipe tiles the zone has.
-function Hydraulics.nodeCount(solution)
-    return solution and solution.order and #solution.order or 0
-end
-
--- The UTILITY floor: town mains or an open hydrant. Not the pump head, which is a different number
--- and lives in the zone report -- a pump does not raise this one.
-function Hydraulics.supplyHead(solution)
-    return solution and solution.stats and solution.stats.supplyHead or 0
-end
-
--- The purifier OUT buffers on this zone, as the solve recorded them during the walk.
-function Hydraulics.purifierOutlets(solution)
-    return solution and solution.purifierOutlets or {}
-end
-
--- What kind of consumer the solve thinks stands on this square, if any.
-function Hydraulics.kindAt(solution, square)
-    if not solution or not solution.kinds or not square then
-        return nil
-    end
-    return solution.kinds[Hydraulics.nodeKeyOf(square)]
-end
-
--- Everything a gauge needs about the zone as a whole, measured from `square`: what supplies it, what
--- is asking for water, how much of that is being served, and every source with its distance from here.
--- One call, because a caller assembling this out of the record has to know which fields exist on a dry
--- answer and which do not.
-function Hydraulics.zoneReport(solution, square)
-    local report = {
-        pipeCount = Hydraulics.nodeCount(solution),
-        pumpCount = 0, poweredPumps = 0, mainsCount = 0, hydrantCount = 0,
-        pumpHead = 0, mainsHead = 0, supplyHead = 0,
-        emitterCount = 0, starvedCount = 0, totalDemand = 0, servedDemand = 0,
-        iterations = 0,
-        sources = {}, containerCount = 0,
-    }
-    if not solution then
-        return report
-    end
-
-    local stats = solution.stats or {}
-    report.pumpCount = stats.pumpCount or 0
-    report.poweredPumps = stats.poweredPumps or 0
-    report.mainsCount = stats.mainsCount or 0
-    report.hydrantCount = stats.hydrantCount or 0
-    report.pumpHead = stats.pumpHead or 0
-    report.mainsHead = (stats.mainsCount or 0) > 0 and Mains.head() or 0
-    report.supplyHead = stats.supplyHead or 0
-
-    -- Load: what the zone is being asked for, and how much of it is actually being served.
-    for key, litres in pairs(solution.demand or {}) do
-        report.emitterCount = report.emitterCount + 1
-        report.totalDemand = report.totalDemand + litres
-        if solution.starved[key] then
-            report.starvedCount = report.starvedCount + 1
-        else
-            report.servedDemand = report.servedDemand + litres
-        end
-    end
-    report.iterations = solution.iterations
-
-    if report.pipeCount == 0 or not square then
-        return report
-    end
-
-    -- Hop counts are measured over the solved adjacency, which costs no world access at all.
-    local distance = Hydraulics.distancesFrom(solution, square)
-    local consumerZ = square:getZ()
-    local levelHead = Pressure.levelHead()
-    local containerBase = Pressure.containerBase()
-
-    local seen = {}
-    for _, descriptor in ipairs(solution.sources or {}) do
-        if not seen[descriptor.key] then
-            seen[descriptor.key] = true
-            local nodeSupply = descriptor.nodeKey and solution.supply[descriptor.nodeKey] or nil
-            report.sources[#report.sources + 1] = {
-                key = tostring(descriptor.key),
-                z = descriptor.z,
-                hops = distance[descriptor.nodeKey],
-                amount = descriptor.waterAmount,
-                capacity = descriptor.capacity,
-                fluidType = descriptor.fluidType,
-                -- Two different numbers. `staticHead` is what gravity alone gives this vessel here;
-                -- `supplyHead` is the pressure it actually pushes at, pumps included. Without the
-                -- second, every barrel on a farm with two pumps read the same figure and looked like
-                -- the reason the far end was dry.
-                staticHead = containerBase + levelHead * ((descriptor.z or 0) - consumerZ),
-                supplyHead = nodeSupply and (nodeSupply - levelHead * (descriptor.z or 0)) or nil,
-            }
-        end
-    end
-    report.containerCount = #report.sources
-
-    return report
-end
-
 function Hydraulics.distancesFrom(solution, square)
     if not solution or not square then
         return {}
@@ -1918,8 +1785,15 @@ end
 -- crossing between empty and not, so the per-minute pass drops it as well, bounding staleness at one
 -- in-game minute. No water can be conjured by that: every draw still reads the real vessels through
 -- NetworkAccess.
--- The world events that drop this field are registered in Invalidate, with the other three caches.
--- Scoped, not global: they fire for every object the world streams in as the player walks and almost
--- none of them are ours, and the global drop meant the per-zone cache never lived long enough to be one.
+if Events then
+    -- Scoped, not global. These fire for every object the world streams in as the player walks, and almost
+    -- none of them are ours; the global drop here meant the per-zone cache never lived long enough to be one.
+    if Events.OnObjectAdded then
+        Events.OnObjectAdded.Add(Hydraulics.invalidateAroundObject)
+    end
+    if Events.OnObjectAboutToBeRemoved then
+        Events.OnObjectAboutToBeRemoved.Add(Hydraulics.invalidateAroundObject)
+    end
+end
 
 return Hydraulics

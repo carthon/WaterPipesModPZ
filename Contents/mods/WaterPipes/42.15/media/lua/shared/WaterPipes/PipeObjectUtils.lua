@@ -1,5 +1,4 @@
 require "WaterPipes/Constants"
-require "WaterPipes/World"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.PipeObjectUtils = WaterPipes.PipeObjectUtils or {}
@@ -203,7 +202,13 @@ function PipeObjectUtils.getPipeOnSquare(square)
     return PipeObjectUtils.getPipeObjectsOnSquare(square)[1]
 end
 
-local squareAt = WaterPipes.World.squareAt
+local function squareAt(x, y, z)
+    if not getCell then
+        return nil
+    end
+    local cell = getCell()
+    return cell and cell.getGridSquare and cell:getGridSquare(x, y, z) or nil
+end
 
 -- Which wall edges have a riser (vertical pipe) on square (x,y,z).
 local function riserEdgesAt(x, y, z)
@@ -265,7 +270,22 @@ end
 -- clears a square the world has just rebuilt underneath us, which is the case the per-frame clear was
 -- really guarding and the only one it caught that these do not. The per-minute pass drops the lot as a
 -- backstop for anything not thought of here.
--- The world events that drop this memo are registered in Invalidate, with the other three caches.
+if Events then
+    local function invalidateForObject(object)
+        local square = object and object.getSquare and object:getSquare() or nil
+        if square then
+            PipeObjectUtils.invalidateSquareScan(square)
+        else
+            PipeObjectUtils.invalidateScanCache()
+        end
+    end
+
+    if Events.OnObjectAdded then Events.OnObjectAdded.Add(invalidateForObject) end
+    if Events.OnObjectAboutToBeRemoved then Events.OnObjectAboutToBeRemoved.Add(invalidateForObject) end
+    if Events.LoadGridsquare then
+        Events.LoadGridsquare.Add(function(square) pcall(PipeObjectUtils.invalidateSquareScan, square) end)
+    end
+end
 
 function PipeObjectUtils.getSquareFromWorldObjects(worldobjects)
     if not worldobjects then

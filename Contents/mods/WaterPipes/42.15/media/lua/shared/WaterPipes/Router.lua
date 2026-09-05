@@ -1,23 +1,12 @@
 WaterPipes = WaterPipes or {}
 WaterPipes.Router = WaterPipes.Router or {}
 
-require "WaterPipes/Invalidate"
 require "WaterPipes/Constants"
 require "WaterPipes/PipeObjectUtils"
-require "WaterPipes/State"
-require "WaterPipes/Purifier"
-require "WaterPipes/Pressure"
-require "WaterPipes/Logger"
-require "WaterPipes/World"
 
-local Invalidate = WaterPipes.Invalidate
 local Constants = WaterPipes.Constants
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Router = WaterPipes.Router
-local Purifier = WaterPipes.Purifier
-local Pressure = WaterPipes.Pressure
-local Logger = WaterPipes.Logger
-local World = WaterPipes.World
 
 -- A fluid router is a floor pipe flagged in modData, and it is two devices in one depending on what
 -- sits on its tile:
@@ -137,127 +126,9 @@ function Router.setPressureCeiling(worldObject, value)
     -- prices the old setting. Resolved off the WaterPipes table rather than required at the top:
     -- NetworkAccess already requires this module, and closing that loop is a recursive require.
     local NetworkAccess = WaterPipes.NetworkAccess
-    Invalidate.flowPathChanged()
-end
-
--- ===== The per-tick step =====
--- Moved here from WaterPipeSystem, where the behaviour of a router lived while the module that knows
--- what a router IS held only its direction and its ceiling. The tick still decides WHICH routers run
--- and in what order -- that is scheduling, and it reads the registry -- but what one router does with
--- a minute is a property of the router.
---
--- It matters more than tidiness: this body was hand-copied, byte for byte, into four scripts under
--- tools/conservation, each captioned "exactly as WaterPipeSystem runs it", because the real one could
--- not be called from outside the server file. Four copies of a rule is four chances to diagnose a stall
--- against a model of the code instead of the code.
-
--- Why a router moved nothing, said ONCE per router per stall rather than every minute. "It stopped and
--- the source still had water" is the report this exists to answer, and it has four possible causes that
--- look identical from outside the pipe: nothing to pull, nowhere to put it, a head too low to matter, or
--- a fluid the destination refuses. Guessing between them from a screenshot is not possible.
-local routerStallReason = {}
-
-local function noteRouterStall(inSquare, reason, detail)
-    if not inSquare or not inSquare.getX then
-        return
-    end
-    local key = WaterPipes.State.squareKey(inSquare:getX(), inSquare:getY(), inSquare:getZ())
-    if routerStallReason[key] == reason then
-        return
-    end
-    routerStallReason[key] = reason
-    Logger.log(string.format("router at %d:%d:%d moved nothing: %s%s",
-        inSquare:getX(), inSquare:getY(), inSquare:getZ(), reason, detail or ""))
-end
-
-local function noteRouterRunning(inSquare)
-    if not inSquare or not inSquare.getX then
-        return
-    end
-    local key = WaterPipes.State.squareKey(inSquare:getX(), inSquare:getY(), inSquare:getZ())
-    if routerStallReason[key] then
-        routerStallReason[key] = nil
-        Logger.log(string.format("router at %d:%d:%d moving again.",
-            inSquare:getX(), inSquare:getY(), inSquare:getZ()))
-    end
-end
-
--- No purifier on the tile: one-way passthrough of the IN network's single fluid into the OUT network.
--- What a bare router moves from its IN side to its OUT side in `dt` in-game minutes. Returns whether
--- anything actually moved.
---
--- PUBLIC, and that is the point of it being public: this body was hand-copied byte for byte into four
--- diagnostic scripts under tools/conservation, each captioned "exactly as WaterPipeSystem runs it",
--- because the real one lived inside the server file and could not be called. The scripts that exist to
--- explain a stall were explaining a copy of the rule. They call this now.
-function Router.transfer(inSquare, outSquare, dt)
-    -- Resolved off the WaterPipes table rather than required: NetworkAccess requires this
-    -- module, so closing the loop would be a recursive require.
-    local NetworkAccess = WaterPipes.NetworkAccess
-    local avail, fluidType, pressure = NetworkAccess.availableToPull(inSquare)
-    if not fluidType or avail <= 0 then
-        -- A MIXED source reads exactly like an empty one here, and is the likelier of the two when the
-        -- player can see water in the tank: availableToPull refuses a network holding two fluids.
-        noteRouterStall(inSquare, "nothing to pull",
-            string.format(" (available %.2f, fluid %s)", avail or 0, tostring(fluidType)))
-        return false
-    end
-    local headroom = NetworkAccess.availableToPush(outSquare, fluidType)
-    if headroom <= 0 then
-        noteRouterStall(inSquare, "destination full or refusing this fluid",
-            string.format(" (%s, %.2f available to send)", tostring(fluidType), avail))
-        return false
-    end
-    -- The rate is what the IN side can actually deliver to the router tile, not a flat ceiling: the head
-    -- was already solved for this square and until now was read only as a pass/fail gate. Free to use.
-    local factor = Pressure.flowFactor(pressure)
-    local rate = Constants.ROUTER_TRANSFER_RATE * dt * factor
-    local transfer = math.min(rate, avail, headroom)
-    if transfer <= 0 then
-        noteRouterStall(inSquare, "no head to move it with",
-            string.format(" (pressure %s, flow factor %.3f)",
-                pressure and string.format("%.2f", pressure) or "nil", factor))
-        return false
-    end
-    local drawn = NetworkAccess.drawFluidAtSquare(inSquare, fluidType, transfer)
-    if drawn and drawn > 0 then
-        NetworkAccess.fillFluidAtSquare(outSquare, fluidType, drawn)
-        noteRouterRunning(inSquare)
-        return true
-    end
-    noteRouterStall(inSquare, "the draw returned nothing",
-        string.format(" (wanted %.2f of %s from %.2f available)", transfer, tostring(fluidType), avail))
-    return false
-end
-
--- Fluid routers actively move fluid across their boundary in the OUT direction each server tick. A
--- purifier-container on the tile purifies in transit; otherwise it is a plain one-way passthrough.
--- Returns whether it actually moved fluid, which processRouters uses to decide whether the next router
--- on the same source network gets a turn this tick.
-function Router.step(router, rx, ry, rz, dt)
-    dt = dt or 1.0
-    local out = Router.getOutOffset(router)
-    if not out then
-        return false
-    end
-
-    local inSquare = getSquare(rx - out.dx, ry - out.dy, rz)
-    local outSquare = getSquare(rx + out.dx, ry + out.dy, rz)
-    if not inSquare or not outSquare then
-        return false
-    end
-
-    -- Scan the whole purifier footprint from the router tile: the tank's modData may live on a footprint
-    -- tile other than the anchor. Missing it here would silently run a plain passthrough.
-    local purifier = Purifier.findForRouterSquare(World.squareAt(rx, ry, rz))
-    if purifier then
-        Purifier.step(purifier, inSquare, outSquare, dt)
-        -- A purifier router is never sequenced: it is a hard boundary with its own buffers, not a queue
-        -- position on somebody's tank.
-        return false
-    end
-
-    return Router.transfer(inSquare, outSquare, dt)
+    if NetworkAccess and NetworkAccess.invalidateTraversalCache then
+        NetworkAccess.invalidateTraversalCache()
+    end
 end
 
 return Router

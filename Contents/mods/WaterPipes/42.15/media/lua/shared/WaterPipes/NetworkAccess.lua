@@ -13,7 +13,6 @@ require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Purifier"
 require "WaterPipes/Router"
-require "WaterPipes/World"
 
 local Adapter = WaterPipes.ContainerAdapter
 local Constants = WaterPipes.Constants
@@ -62,7 +61,18 @@ local function routerIsHardBoundary(routerSquare)
     return Adapter.hasSquareContainers(routerSquare)
 end
 
-local getCellSquare = WaterPipes.World.squareAt
+local function getCellSquare(x, y, z)
+    if not getCell then
+        return nil
+    end
+
+    local cell = getCell()
+    if not cell or not cell.getGridSquare then
+        return nil
+    end
+
+    return cell:getGridSquare(x, y, z)
+end
 
 local function keyOf(x, y, z)
     return tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)
@@ -726,7 +736,7 @@ local function squaresFromSolution(solution, originSquare)
     local pumps = Hydraulics.poweredPumps(solution)
 
     local outlets = {}
-    for _, outlet in pairs(Hydraulics.purifierOutlets(solution)) do
+    for _, outlet in pairs(solution.purifierOutlets or {}) do
         outlets[#outlets + 1] = {
             purifier = outlet.purifier,
             routerKey = outlet.routerKey,
@@ -741,7 +751,7 @@ local function squaresFromSolution(solution, originSquare)
         hydrants = {},
         purifierOutlets = outlets,
         -- The RELATIVE utility pressure, not the field's absolute floor: this feeds the lift gate.
-        supplyHead = Hydraulics.supplyHead(solution),
+        supplyHead = (solution.stats and solution.stats.supplyHead) or 0,
     }
 end
 
@@ -1069,25 +1079,81 @@ function NetworkAccess.getPressureReport(square)
     end
 
     local solution = Hydraulics.solveAt(square)
-
-    -- Everything about the zone itself comes back in one call. This used to reach into nine fields of
-    -- the solution record and reassemble the answer here, which made Hydraulics' working state part of
-    -- this module's interface.
-    local report = Hydraulics.zoneReport(solution, square)
-    report.enabled = Pressure.isEnabled()
-    report.model = Pressure.model()
-    report.demandScale = Hydraulics.demandScale()
-    report.kinds = {}
+    local report = {
+        enabled = Pressure.isEnabled(),
+        model = Pressure.model(),
+        pipeCount = solution and #solution.order or 0,
+        sources = {},
+        kinds = {},
+        demandScale = Hydraulics.demandScale(),
+    }
 
     if not solution then
+        report.pumpCount, report.poweredPumps = 0, 0
+        report.mainsCount, report.hydrantCount = 0, 0
+        report.pumpHead, report.mainsHead, report.supplyHead = 0, 0, 0
         return report
     end
 
+    local stats = solution.stats or {}
+    report.pumpCount = stats.pumpCount or 0
+    report.poweredPumps = stats.poweredPumps or 0
+    report.mainsCount = stats.mainsCount or 0
+    report.hydrantCount = stats.hydrantCount or 0
+    report.pumpHead = stats.pumpHead or 0
+    report.mainsHead = (stats.mainsCount or 0) > 0 and Mains.head() or 0
+    report.supplyHead = stats.supplyHead or 0
+
+    -- Load: what the zone is being asked for, and how much of it is actually being served.
+    local totalDemand, servedDemand, emitterCount, starvedCount = 0, 0, 0, 0
+    for key, litres in pairs(solution.demand or {}) do
+        emitterCount = emitterCount + 1
+        totalDemand = totalDemand + litres
+        if solution.starved[key] then
+            starvedCount = starvedCount + 1
+        else
+            servedDemand = servedDemand + litres
+        end
+    end
+    report.emitterCount = emitterCount
+    report.starvedCount = starvedCount
+    report.totalDemand = totalDemand
+    report.servedDemand = servedDemand
+    report.iterations = solution.iterations
     report.flow = Hydraulics.flowAt(solution, square) or 0
 
     if report.pipeCount == 0 then
         return report
     end
+
+    -- Hop counts are measured over the solved adjacency, which costs no world access at all.
+    local distance = Hydraulics.distancesFrom(solution, square)
+    local consumerZ = square:getZ()
+    local levelHead = Pressure.levelHead()
+    local containerBase = Pressure.containerBase()
+
+    local seen = {}
+    for _, descriptor in ipairs(solution.sources or {}) do
+        if not seen[descriptor.key] then
+            seen[descriptor.key] = true
+            report.sources[#report.sources + 1] = {
+                key = tostring(descriptor.key),
+                z = descriptor.z,
+                hops = distance[descriptor.nodeKey],
+                amount = descriptor.waterAmount,
+                capacity = descriptor.capacity,
+                fluidType = descriptor.fluidType,
+                -- Two different numbers. `staticHead` is what gravity alone gives this vessel here; `supplyHead` is
+                -- the pressure it actually pushes at, pumps included. Without the second, every barrel on a farm with
+                -- two pumps read the same figure and looked like the reason the far end was dry.
+                staticHead = containerBase + levelHead * ((descriptor.z or 0) - consumerZ),
+                supplyHead = descriptor.nodeKey and solution.supply[descriptor.nodeKey]
+                    and (solution.supply[descriptor.nodeKey] - levelHead * (descriptor.z or 0))
+                    or nil,
+            }
+        end
+    end
+    report.containerCount = #report.sources
 
     -- Reported separately from the head, because the two can disagree and that disagreement is the whole
     -- story: a starved tile reads a comfortable head, since the field it reads excludes its own draw.
@@ -1098,7 +1164,7 @@ function NetworkAccess.getPressureReport(square)
     -- be served every consumer after it is dropped too -- including ones that would have been fine. This
     -- is what tells "the line cannot carry it" from "the search gave up before reaching it".
     if report.starvedHere and Hydraulics.couldServeAlso then
-        local kindHere = Hydraulics.kindAt(solution, square)
+        local kindHere = solution.kinds and solution.kinds[Hydraulics.nodeKeyOf(square)] or nil
         local servable, blocker = Hydraulics.couldServeAlso(solution, square, kindHere)
         report.couldServeHere = servable
         report.serveBlockedBy = blocker
@@ -1194,7 +1260,7 @@ function NetworkAccess.getStatusSummary(square, kind)
     end
 
     kind = kind or Constants.PRESSURE_KIND_TAP
-    local key = tostring(Hydraulics.zoneIdOf(solution)) .. "|" .. tostring(square:getZ()) .. "|" .. tostring(kind)
+    local key = tostring(solution.id) .. "|" .. tostring(square:getZ()) .. "|" .. tostring(kind)
     local cached = statusSummaryMemo[key]
     if cached ~= nil then
         return cached or nil          -- `false` is a remembered "there is nothing here"
@@ -1386,26 +1452,6 @@ function NetworkAccess.hasWater(endpointObject)
     return NetworkAccess.hasFluid(endpointObject)
 end
 
--- Every vessel an endpoint's network can draw from, with its level, as one line. For diagnosis: a draw
--- that reports success while the vessel the player watches never moves is only decidable by reading the
--- vessels themselves, on both sides of the draw. Amounts are read fresh, never from a memo.
-function NetworkAccess.describeVessels(endpointObject)
-    local summary = buildSummary(endpointObject)
-    if not summary or #summary.descriptors == 0 then
-        return "no vessels"
-    end
-
-    local parts = {}
-    for _, descriptor in ipairs(summary.descriptors) do
-        parts[#parts + 1] = string.format("%s@%s %.2f/%.2f %s",
-            tostring(descriptor.kind or "?"), tostring(descriptor.squareKey or "?"),
-            descriptor.waterAmount or 0, descriptor.capacity or 0,
-            tostring(descriptor.fluidType or "-"))
-    end
-    return string.format("%.2f L across %d: %s",
-        summary.totalAmount or 0, #summary.descriptors, table.concat(parts, " | "))
-end
-
 function NetworkAccess.useFluid(endpointObject, amount)
     local summary = NetworkAccess.getUsableWaterSummary(endpointObject)
     if not summary then
@@ -1424,8 +1470,18 @@ end
 -- Anything that changes what the walk would FIND has to drop it. The object events do it by tile;
 -- router direction, ceilings and hydrant toggles call the global drop directly.
 -- OnTick drops only the two memos that hold fluid or are keyed to a solve.
--- The world events that drop these walks are registered in Invalidate, with the other three caches.
--- OnTick stays here: dropFrameMemos is a frame-scoped memo of this module's own, not invalidation.
-if Events and Events.OnTick then
-    Events.OnTick.Add(dropFrameMemos)
+if Events then
+    if Events.OnObjectAdded then
+        Events.OnObjectAdded.Add(NetworkAccess.invalidateAroundObject)
+    end
+    if Events.OnObjectAboutToBeRemoved then
+        Events.OnObjectAboutToBeRemoved.Add(NetworkAccess.invalidateAroundObject)
+    end
+    -- A square the engine rebuilt while streaming: its objects were never announced one by one.
+    if Events.LoadGridsquare then
+        Events.LoadGridsquare.Add(NetworkAccess.invalidateAroundSquare)
+    end
+    if Events.OnTick then
+        Events.OnTick.Add(dropFrameMemos)
+    end
 end

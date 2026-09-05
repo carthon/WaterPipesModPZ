@@ -133,7 +133,8 @@ end
 -- Still guarded, and loud about it: a tag-only entry that fails to resolve matches NOTHING, which would
 -- leave the filter permanently unrepairable with no clue why.
 local warnedMissingTags = {}
-function Constants.itemTag(name)
+function Constants.repairTag(entry)
+    local name = entry and entry.tag
     if not name then
         return nil
     end
@@ -148,15 +149,11 @@ function Constants.itemTag(name)
         warnedMissingTags[name] = true
         if WaterPipes.Logger and WaterPipes.Logger.warn then
             WaterPipes.Logger.warn("ItemTag." .. tostring(name)
-                .. " did not resolve -- anything matching only that tag will never be satisfied")
+                .. " did not resolve -- any repair entry matching only that tag will never be satisfied")
         end
     end
 
     return value
-end
-
-function Constants.repairTag(entry)
-    return Constants.itemTag(entry and entry.tag)
 end
 
 -- How many of `entry` the inventory holds. The MAXIMUM of the type count and the tag count, never the
@@ -205,63 +202,6 @@ function Constants.takeRepairItem(inventory, entry)
     end
 
     return nil
-end
-
--- ===== The pipe wrench =====
--- ONE rule, because there were three and they disagreed. The menu decided whether to SHOW an entry
--- with a type-only check that ignored broken items; the action decided whether to DO it with a
--- type-and-tag check that filtered them; two more call sites used a third rule again. A broken
--- wrench therefore showed "Unplumb" and then silently did nothing.
-Constants.PIPE_WRENCH_TAG = "PIPE_WRENCH"
-
-local function usableTool(item)
-    if not item then
-        return nil
-    end
-    if item.isBroken then
-        local ok, broken = pcall(item.isBroken, item)
-        if ok and broken then
-            return nil
-        end
-    end
-    return item
-end
-
--- One usable pipe wrench from this inventory, or nil. Types first, tag second -- the same order
--- takeRepairItem uses, and for the same reason: the type is the thing the recipes name, the tag is
--- the wider net that catches whatever another mod ships.
-function Constants.findPipeWrench(inventory)
-    if not inventory then
-        return nil
-    end
-
-    if inventory.getFirstTypeEvalRecurse then
-        local ok, item = pcall(inventory.getFirstTypeEvalRecurse, inventory,
-            Constants.PIPE_TOOL_TYPE, usableTool)
-        if ok and item then
-            return item
-        end
-    end
-
-    local tag = Constants.itemTag(Constants.PIPE_WRENCH_TAG)
-    if tag and inventory.getFirstTagEvalRecurse then
-        local ok, item = pcall(inventory.getFirstTagEvalRecurse, inventory, tag, usableTool)
-        if ok and item then
-            return item
-        end
-    end
-
-    -- No Eval variants to filter with: take the first of the type and judge it here. Best effort --
-    -- it cannot look past a broken one at a good one further down the bag.
-    if inventory.getFirstTypeRecurse then
-        return usableTool(inventory:getFirstTypeRecurse(Constants.PIPE_TOOL_TYPE))
-    end
-    return nil
-end
-
--- Defined as "the find found something", never reimplemented: that split is what caused the bug.
-function Constants.hasPipeWrench(inventory)
-    return Constants.findPipeWrench(inventory) ~= nil
 end
 Constants.PURIFIER_REPAIR_TIME = 150                       -- timed-action ticks (build is 200)
 -- Purifier-container is a NON-pipe object placed on a router tile. It holds two internal buffers

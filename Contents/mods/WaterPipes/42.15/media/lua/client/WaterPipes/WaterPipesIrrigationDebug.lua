@@ -4,13 +4,11 @@ WaterPipes.IrrigationDebug = WaterPipes.IrrigationDebug or {}
 require "WaterPipes/Constants"
 require "WaterPipes/Irrigation"
 require "WaterPipes/WaterPipesTileRegistry"
-require "WaterPipes/World"
 
 local Constants = WaterPipes.Constants
 local Irrigation = WaterPipes.Irrigation
 local Registry = WaterPipes.TileRegistry
 local IrrigationDebug = WaterPipes.IrrigationDebug
-local World = WaterPipes.World
 
 -- A debug overlay that makes irrigation visible. Every crop near the player is tinted by its water
 -- level (red = dry, green = full) and every emitter by whether it can water right now (green = active,
@@ -106,6 +104,11 @@ local function refresh()
     if not player then
         return
     end
+    local cell = getCell()
+    if not cell or not cell.getGridSquare then
+        return
+    end
+
     local playerNum = player:getPlayerNum()
     local px, py, pz = player:getX(), player:getY(), player:getZ()
     local nextHighlighted = {}
@@ -130,7 +133,7 @@ local function refresh()
     -- Crops still need the area sweep: they are not pipe objects and nothing indexes them.
     for dx = -SCAN_RADIUS, SCAN_RADIUS do
         for dy = -SCAN_RADIUS, SCAN_RADIUS do
-            local square = World.squareAt(math.floor(px) + dx, math.floor(py) + dy, math.floor(pz))
+            local square = cell:getGridSquare(math.floor(px) + dx, math.floor(py) + dy, math.floor(pz))
             if square then
                 if square.getObjects then
                     local ok, objects = pcall(square.getObjects, square)

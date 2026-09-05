@@ -12,7 +12,6 @@
 require "WaterPipes/Constants"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Logger"
-require "WaterPipes/World"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.Build = WaterPipes.Build or {}
@@ -21,7 +20,6 @@ local Constants = WaterPipes.Constants
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Logger = WaterPipes.Logger
 local Build = WaterPipes.Build
-local World = WaterPipes.World
 
 -- The vertical pipe is a single rotatable entity: facing "w" -> West wall, anything else -> North.
 local function edgeFromFacing(params)
@@ -383,7 +381,14 @@ end
 -- The tall tank clips through anything overhead: refuse placement if a floor sits on the tile directly
 -- above. (Pipes and routers are floor-level and CAN hide under structures; the visible tank cannot.)
 local function hasStructureAbove(square)
-    local above = World.above(square)
+    if not square or not getCell then
+        return false
+    end
+    local cell = getCell()
+    if not cell or not cell.getGridSquare then
+        return false
+    end
+    local above = cell:getGridSquare(square:getX(), square:getY(), square:getZ() + 1)
     if not above or not above.getFloor then
         return false
     end

@@ -411,7 +411,14 @@ end
 -- Nothing else announces it -- a modData change fires no object event, and the periodic passes stopped
 -- dropping the field on a timer.
 local function noteHydraulicChange(worldObject)
-    pcall(WaterPipes.Invalidate.headAroundSquare, registrySquare(worldObject))
+    local Hydraulics = WaterPipes.Hydraulics
+    if not Hydraulics or not Hydraulics.invalidateAroundSquare then
+        return
+    end
+    local square = registrySquare(worldObject)
+    if square then
+        pcall(Hydraulics.invalidateAroundSquare, square)
+    end
 end
 
 function EndpointPlumbing.isPlumbed(worldObject)

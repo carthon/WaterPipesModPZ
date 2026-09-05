@@ -12,6 +12,14 @@ local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local State = WaterPipes.State
 
+local function getSquareAt(x, y, z)
+    if not getCell then
+        return nil
+    end
+    local cell = getCell()
+    return cell and cell.getGridSquare and cell:getGridSquare(x, y, z) or nil
+end
+
 local fallbackState = nil
 
 local function getRawState()

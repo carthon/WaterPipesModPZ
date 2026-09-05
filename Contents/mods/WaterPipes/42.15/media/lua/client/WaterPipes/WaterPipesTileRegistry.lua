@@ -23,7 +23,6 @@ require "WaterPipes/Irrigation"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Profiler"
 require "WaterPipes/Purifier"
-require "WaterPipes/World"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.TileRegistry = WaterPipes.TileRegistry or {}
@@ -71,7 +70,13 @@ local function nowMs()
     return ok and type(ms) == "number" and ms or nil
 end
 
-local getCellSquare = WaterPipes.World.squareAt
+local function getCellSquare(x, y, z)
+    if not getCell then
+        return nil
+    end
+    local cell = getCell()
+    return cell and cell.getGridSquare and cell:getGridSquare(x, y, z) or nil
+end
 
 -- ===== Population =====
 

@@ -7,7 +7,6 @@
 require "ISUI/ISCollapsableWindow"
 require "WaterPipes/Constants"
 require "WaterPipes/Purifier"
-require "WaterPipes/World"
 
 WaterPipes = WaterPipes or {}
 
@@ -39,7 +38,13 @@ local function lineH()
     return getTextManager():getFontHeight(font())
 end
 
-local getSquareAt = WaterPipes.World.squareAt
+local function getSquareAt(x, y, z)
+    if x == nil or not getCell then
+        return nil
+    end
+    local cell = getCell()
+    return cell and cell.getGridSquare and cell:getGridSquare(x, y, z) or nil
+end
 
 -- ===== instance identity: one window per purifier tile (keyed by square, not by object ref) =====
 

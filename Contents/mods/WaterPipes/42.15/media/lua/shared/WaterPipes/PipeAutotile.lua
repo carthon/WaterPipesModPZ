@@ -5,7 +5,6 @@ require "WaterPipes/Constants"
 require "WaterPipes/Logger"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Router"
-require "WaterPipes/World"
 
 local Constants = WaterPipes.Constants
 local Logger = WaterPipes.Logger
@@ -52,7 +51,16 @@ local function isRenderingSide()
     return true
 end
 
-local getSquare = WaterPipes.World.squareAt
+local function getSquare(x, y, z)
+    if not getCell then
+        return nil
+    end
+    local cell = getCell()
+    if not cell or not cell.getGridSquare then
+        return nil
+    end
+    return cell:getGridSquare(x, y, z)
+end
 
 local function getFloorPipeOnSquare(square, exclude)
     if not square then
@@ -422,41 +430,7 @@ local function onPipeObjectRemoved(object)
     end
 end
 
--- Chunk streamed in / joined a server: repaint any pipe on the loaded square (floor connection +
--- riser/concealed visibility). Deferred one tick, NOT done in the event: when LoadGridsquare fires the
--- objects are on the square but their modData is not attached yet, so a scan finds no pipe -- and the
--- per-tile scan memo remembers that answer. The next endpoint refresh then saw no pipe under a plumbed
--- sink and unplumbed it, every time its chunk came back (issue #23). The square's memo is dropped
--- again right before the deferred scan, so it is rebuilt from the loaded objects.
-local pendingStreamed = {}
-local function onLoadGridsquare(square)
-    if not isRenderingSide() or not square then
-        return
-    end
-    pendingStreamed[#pendingStreamed + 1] = { x = square:getX(), y = square:getY(), z = square:getZ() }
-end
-
-local function refreshStreamedSquare(coord)
-    local square = getSquare(coord.x, coord.y, coord.z)
-    if not square then
-        return
-    end
-    PipeObjectUtils.invalidateSquareScan(square)
-    PipeAutotile.refreshFloorPipeAt(coord.x, coord.y, coord.z)
-    for _, pipe in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
-        refreshRiserVisibility(pipe)
-    end
-end
-
 local function onTickProcessPending()
-    if #pendingStreamed > 0 then
-        local streamed = pendingStreamed
-        pendingStreamed = {}
-        for _, coord in ipairs(streamed) do
-            refreshStreamedSquare(coord)
-        end
-    end
-
     if #pendingRefresh == 0 then
         return
     end
@@ -464,6 +438,18 @@ local function onTickProcessPending()
     pendingRefresh = {}
     for _, coord in ipairs(list) do
         PipeAutotile.refreshAround(coord.x, coord.y, coord.z)
+    end
+end
+
+-- Chunk streamed in / joined a server: repaint any pipe on the loaded square (floor connection +
+-- riser/concealed visibility).
+local function onLoadGridsquare(square)
+    if not isRenderingSide() or not square then
+        return
+    end
+    PipeAutotile.refreshFloorPipeAt(square:getX(), square:getY(), square:getZ())
+    for _, pipe in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+        refreshRiserVisibility(pipe)
     end
 end
 

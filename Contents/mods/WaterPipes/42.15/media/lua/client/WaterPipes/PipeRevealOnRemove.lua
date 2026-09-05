@@ -4,12 +4,10 @@
 
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/PipeAutotile"
-require "WaterPipes/World"
 
 WaterPipes = WaterPipes or {}
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local PipeAutotile = WaterPipes.PipeAutotile
-local World = WaterPipes.World
 
 local REVEAL_RADIUS = 12   -- tiles around the player scanned while a removal cursor is up
 local THROTTLE_TICKS = 8   -- only re-check every N ticks (the scan only runs during removal mode)
@@ -45,6 +43,11 @@ local function concealAll()
 end
 
 local function revealAround(playerObj)
+    local cell = getCell()
+    if not cell then
+        return
+    end
+
     local px = math.floor(playerObj:getX())
     local py = math.floor(playerObj:getY())
     local pz = math.floor(playerObj:getZ())
@@ -52,7 +55,7 @@ local function revealAround(playerObj)
 
     for dx = -REVEAL_RADIUS, REVEAL_RADIUS do
         for dy = -REVEAL_RADIUS, REVEAL_RADIUS do
-            local square = World.squareAt(px + dx, py + dy, pz)
+            local square = cell:getGridSquare(px + dx, py + dy, pz)
             if square then
                 for _, pipe in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
                     if PipeAutotile.isPipeHidden(pipe) then
