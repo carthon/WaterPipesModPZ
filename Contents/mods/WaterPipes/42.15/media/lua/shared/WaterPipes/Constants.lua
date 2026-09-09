@@ -572,6 +572,18 @@ Constants.GAUGE_SPRITE_N = "waterpipes_01_30"   -- vented wall box, North wall (
 Constants.GAUGE_SPRITE_W = "waterpipes_01_31"   -- ...and the West wall mirror
 Constants.GAUGE_READ_DISTANCE = 2             -- matches ISFluidUtil.isoMaxPanelDist
 
+-- ===== Building plumbing =====
+-- How many NEW pipe tiles one pass of the building generator may lay. A ceiling on save size and on
+-- the length of the pass, not a difficulty dial, which is why it lives here and not in Sandbox.
+-- It does not REFUSE over the cap: the pass takes the fixtures it reaches most cheaply and stops, and
+-- re-running extends. A Louisville hospital is a single BuildingDef of thousands of tiles, so without
+-- this one click would plant thousands of objects in the save.
+Constants.BUILDING_PLUMB_MAX_TILES = 200
+-- Marks a pipe the generator laid. A LABEL, not a material: it feeds the report and the idempotent
+-- re-run, and never changes what dismantling one pays back -- a generated pipe is an ordinary metal
+-- pipe removed through the ordinary path.
+Constants.PIPE_GENERATED_MODDATA_KEY = "waterpipesGenerated"
+
 -- ===== Shut-off valve =====
 -- A NON-pipe device built onto a tile that already carries a floor pipe -- the gauge's pattern, not the
 -- emitters'. That is what lets a valve be fitted to an existing run (a building's concealed plumbing
