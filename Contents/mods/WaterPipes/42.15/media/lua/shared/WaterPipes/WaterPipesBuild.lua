@@ -102,6 +102,25 @@ local function squareHasGauge(square)
     return false
 end
 
+-- The shut-off valve is not a pipe either; same scan as the gauge above. Kept local rather than going
+-- through WaterPipes.Valve because this file must be loaded before the entity scripts are parsed.
+local function squareHasValve(square)
+    if not square or not square.getObjects then
+        return false
+    end
+    local ok, objects = pcall(square.getObjects, square)
+    if not ok or not objects then
+        return false
+    end
+    for i = 0, objects:size() - 1 do
+        local modData = getModData(objects:get(i))
+        if modData and modData[Constants.VALVE_MODDATA_KEY] then
+            return true
+        end
+    end
+    return false
+end
+
 -- ===== OnIsValid (both sides) =====
 
 -- One floor pipe per square (any orientation) -- they auto-connect.
@@ -454,6 +473,31 @@ function Build.gaugeOnCreate(params)
     local modData = getModData(thumpable)
     if modData then
         modData[Constants.GAUGE_MODDATA_KEY] = true
+    end
+    if thumpable.transmitModData then
+        pcall(thumpable.transmitModData, thumpable)
+    end
+end
+
+-- The shut-off valve follows the gauge exactly: a device fitted ONTO an existing floor pipe, which is
+-- what lets it be added to a run (a building's concealed plumbing included) without dismantling it.
+-- It never registers as a pipe; what it changes is whether its tile conducts, and that is read off the
+-- world by State.rebuildGraph through the registry.
+function Build.valveOnIsValid(params)
+    local square = params and params.square
+    return squareHasFloorPipe(square) and not squareHasValve(square)
+end
+
+-- Built OPEN, always: no closed key. Placing a valve must never change how the network behaves until
+-- the player deliberately closes it.
+function Build.valveOnCreate(params)
+    local thumpable = params and params.thumpable
+    if not thumpable then
+        return
+    end
+    local modData = getModData(thumpable)
+    if modData then
+        modData[Constants.VALVE_MODDATA_KEY] = true
     end
     if thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)

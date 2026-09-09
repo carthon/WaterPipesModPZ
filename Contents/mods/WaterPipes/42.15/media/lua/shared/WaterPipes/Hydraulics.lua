@@ -10,6 +10,7 @@ require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Purifier"
 require "WaterPipes/Router"
+require "WaterPipes/Valve"
 require "WaterPipes/World"
 
 local Adapter = WaterPipes.ContainerAdapter
@@ -22,6 +23,7 @@ local Pressure = WaterPipes.Pressure
 local Pump = WaterPipes.Pump
 local Purifier = WaterPipes.Purifier
 local Router = WaterPipes.Router
+local Valve = WaterPipes.Valve
 
 -- The demand-aware pressure solver: one head field per NETWORK, propagated in the water's direction
 -- from the sources outward, instead of one arithmetic answer per (source, consumer) pair. That is what
@@ -228,6 +230,10 @@ local function discover(seedSquare)
 
         local function consider(neighbourSquare)
             if not neighbourSquare then
+                return
+            end
+            -- A closed shut-off valve carries no head across: the neighbour is simply not reachable.
+            if Valve.isClosedOnSquare(neighbourSquare) then
                 return
             end
             if Router.hasRouterOnSquare(neighbourSquare) then
@@ -1341,7 +1347,8 @@ function Hydraulics.solveAt(square)
     -- The seed must be a pipe tile: a fixture has no pipe of its own, so the zone it belongs to is
     -- whichever one its neighbours are on.
     local seed = nil
-    if hasPipeOnSquare(square) and not Router.hasRouterOnSquare(square) then
+    if hasPipeOnSquare(square) and not Router.hasRouterOnSquare(square)
+        and not Valve.isClosedOnSquare(square) then
         seed = square
     else
         local x, y, z = square:getX(), square:getY(), square:getZ()
@@ -1350,7 +1357,8 @@ function Hydraulics.solveAt(square)
                 return
             end
             if neighbour and hasPipeOnSquare(neighbour)
-                and not Router.hasRouterOnSquare(neighbour) then
+                and not Router.hasRouterOnSquare(neighbour)
+                and not Valve.isClosedOnSquare(neighbour) then
                 seed = neighbour
             end
         end

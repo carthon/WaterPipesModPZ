@@ -15,6 +15,7 @@ require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Purifier"
 require "WaterPipes/GravityFlow"
 require "WaterPipes/Router"
+require "WaterPipes/Valve"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/Mains"
 require "WaterPipes/Pressure"
@@ -43,6 +44,7 @@ local PipeAutotile = WaterPipes.PipeAutotile
 local Purifier = WaterPipes.Purifier
 local GravityFlow = WaterPipes.GravityFlow
 local Router = WaterPipes.Router
+local Valve = WaterPipes.Valve
 local NetworkAccess = WaterPipes.NetworkAccess
 local Mains = WaterPipes.Mains
 local Pressure = WaterPipes.Pressure
@@ -182,6 +184,14 @@ function System.scanContainersAroundPipes()
                 end
             end
 
+            -- The shut-off valve is a NON-pipe object, so it is not in the loop above; but the gate is the
+            -- same one -- a pipe object carrying our key proves this square's modData has arrived.
+            -- Read in the SAFE direction: a valve whose own modData has not landed yet reads as absent,
+            -- so the tile conducts. An accidental open costs nothing; an accidental closed splits a base.
+            if derived then
+                derived.valveClosed = Valve.isClosedOnSquare(square) or nil
+            end
+
             if derived then
                 if metadata.kinds and (metadata.router or false) ~= (derived.router or false) then
                     Logger.warn(string.format(
@@ -195,6 +205,7 @@ function System.scanContainersAroundPipes()
                 metadata.pump = derived.pump
                 metadata.drip = derived.drip
                 metadata.sprinkler = derived.sprinkler
+                metadata.valveClosed = derived.valveClosed
                 metadata.kinds = true
             end
             pipeData.metadata = metadata
@@ -929,6 +940,64 @@ local function describeModDataKeys(modData)
     return "{" .. table.concat(keys, ",") .. "}"
 end
 
+-- Fittings a pipe CARRIES: the shut-off valve and the pressure gauge. Both are non-pipe devices whose
+-- OnIsValid demands a pipe on the tile, so a fitting left behind by a dismantled pipe is an object that
+-- could never have been built where it now stands. For the gauge that was merely a dial floating over
+-- bare floor; for a valve it is worse -- it keeps its state, so a pipe later run through that tile is
+-- born cut, with nothing on screen to say why.
+--
+-- Called only once the pipe is confirmed gone (see the caller), so a cancelled removal takes nothing.
+local FITTING_RETURNS = {
+    [Constants.VALVE_MODDATA_KEY] = { "Base.MetalPipe", "Base.IronBarHalf" },
+    [Constants.GAUGE_MODDATA_KEY] = { "Base.MetalPipe", "Base.ElectronicsScrap" },
+}
+
+local function takeDownFittingsOn(square, returnsMaterial)
+    if not square or not square.getObjects then
+        return
+    end
+    local objects = square:getObjects()
+    local doomed = {}
+    for index = 0, objects:size() - 1 do
+        local object = objects:get(index)
+        local ok, modData = pcall(object.getModData, object)
+        if ok and modData then
+            for key, returns in pairs(FITTING_RETURNS) do
+                if modData[key] == true then
+                    doomed[#doomed + 1] = { object = object, returns = returns }
+                    break
+                end
+            end
+        end
+    end
+    if #doomed == 0 then
+        return
+    end
+
+    for _, entry in ipairs(doomed) do
+        -- Mirrors what vanilla's own scrap does, so a dedicated server and its clients agree.
+        if isClient and isClient() then
+            pcall(square.transmitRemoveItemFromSquare, square, entry.object)
+        end
+        if isServer and isServer() then
+            pcall(square.transmitRemoveItemFromSquareOnClients, square, entry.object)
+        end
+        pcall(square.RemoveTileObject, square, entry.object)
+
+        -- ONE side pays, on the same rule as the pipe drops above.
+        if returnsMaterial and not (isClient and isClient()) then
+            for _, itemType in ipairs(entry.returns) do
+                if ZombRand and ZombRand(100) < DISMANTLE_RETURN_CHANCE then
+                    pcall(square.AddWorldInventoryItem, square, itemType, 0.5, 0.5, 0.0)
+                end
+            end
+        end
+    end
+
+    pcall(square.RecalcProperties, square)
+    pcall(square.RecalcAllWithNeighbours, square, true)
+end
+
 local function processPendingPipeRemovals()
     pendingRemovalScheduled = false
     if Events and Events.OnTick then
@@ -973,6 +1042,7 @@ local function processPendingPipeRemovals()
         -- Only unregister once the square is loaded and no pipe remains there.
         if square and PipeObjectUtils.getPipeOnSquare(square) == nil then
             System.unregisterPipeAt(position.x, position.y, position.z)
+            takeDownFittingsOn(square, position.returnsMaterial)
         end
     end
 end
@@ -988,7 +1058,12 @@ local function schedulePipeRemoval(object, returnsMaterial)
     end
 
     local x, y, z = square:getX(), square:getY(), square:getZ()
-    pendingPipeRemovals[tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)] = { x = x, y = y, z = z }
+    local key = tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)
+    local queued = pendingPipeRemovals[key]
+    -- OR-ed: a square whose pipe was DISMANTLED pays for its fittings even if a second event for the
+    -- same tile (a destroyed neighbour object) arrives claiming nothing comes back.
+    pendingPipeRemovals[key] = { x = x, y = y, z = z,
+        returnsMaterial = (queued and queued.returnsMaterial) or (returnsMaterial and true or false) }
 
     -- The material has to be read NOW: by the time the removal is confirmed next tick the object and its
     -- modData are gone.
@@ -1646,6 +1721,20 @@ local function onClientCommand(module, command, player, args)
             return
         end
         Hydrant.setOpen(hydrant, args and args.open)
+        return
+    end
+
+    -- Valve open/close: server-authoritative because it changes the SHAPE of the network. A client
+    -- deciding this for itself would leave two clients disagreeing about where the base is split.
+    if command == "setValveOpen" then
+        local square = resolveCommandSquare(args)
+        local valve = square and Valve.findOnSquare(square)
+        if not valve then
+            Logger.warn("Set valve command: no valve at "
+                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
+            return
+        end
+        Valve.setOpen(valve, args and args.open)
         return
     end
 

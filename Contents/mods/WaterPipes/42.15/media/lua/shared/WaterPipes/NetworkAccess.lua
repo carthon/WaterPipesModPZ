@@ -13,6 +13,7 @@ require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Purifier"
 require "WaterPipes/Router"
+require "WaterPipes/Valve"
 require "WaterPipes/World"
 
 local Adapter = WaterPipes.ContainerAdapter
@@ -28,6 +29,7 @@ local Pressure = WaterPipes.Pressure
 local Pump = WaterPipes.Pump
 local Purifier = WaterPipes.Purifier
 local Router = WaterPipes.Router
+local Valve = WaterPipes.Valve
 
 -- Bracket a stretch of work for the profiler, resolved off the global table so this module keeps no
 -- dependency on a debug tool. mark/since rather than Profiler.time, which forwards only two returns.
@@ -166,7 +168,10 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
     local outletSeen = {}
 
     local function tryAdd(square, distance, chain)
-        if not square or not hasPipeOnSquare(square) or Router.hasRouterOnSquare(square) then
+        -- A closed shut-off valve is a wall, not a boundary to be crossed: unlike a router there is
+        -- nothing on the far side a draw may reach through.
+        if not square or not hasPipeOnSquare(square) or Router.hasRouterOnSquare(square)
+            or Valve.isClosedOnSquare(square) then
             return
         end
 
@@ -295,6 +300,9 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
 
     local function visit(square, fromX, fromY, fromZ, distance, chain)
         if not square then
+            return
+        end
+        if Valve.isClosedOnSquare(square) then
             return
         end
         if Router.hasRouterOnSquare(square) then

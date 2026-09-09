@@ -379,4 +379,39 @@ module WaterPipes
             }
         }
     }
+
+    /* Inline shut-off valve. A device fitted ONTO an existing floor pipe (the gauge's pattern), so it
+       can be added to a run that already exists -- a building's concealed plumbing included -- without
+       dismantling anything. Symmetric, so it has a single face: it must read over a straight, a corner,
+       a T and a cross alike. Cell 47 is open; 48 (closed) is swapped in at runtime by Valve.setOpen and
+       is deliberately not a face, since every entity face sprite has to be unique. */
+    entity WaterPipeValve
+    {
+        component SpriteConfig
+        {
+            isThumpable = false,
+            OnCreate = WaterPipesBuild.valveOnCreate,
+            OnIsValid = WaterPipesBuild.valveOnIsValid,
+            face S
+            {
+                layer
+                {
+                    row = waterpipes_01_47,
+                }
+            }
+        }
+        component CraftRecipe
+        {
+            timedAction = BuildLowNoTool,
+            time = 80,
+            category = Piping,
+            Tooltip = Tooltip_craft_WaterPipeValveDesc,
+            inputs
+            {
+                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
+                item 1 [Base.MetalPipe],
+                item 1 tags[base:barstockhalf],
+            }
+        }
+    }
 }

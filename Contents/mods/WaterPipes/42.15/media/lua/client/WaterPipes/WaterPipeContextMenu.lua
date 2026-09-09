@@ -12,6 +12,8 @@ require "WaterPipes/NetworkAccess"
 require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Hydrant"
+require "WaterPipes/Valve"
+require "WaterPipes/ISToggleValve"
 require "WaterPipes/ISToggleHydrant"
 require "WaterPipes/ISTogglePump"
 require "WaterPipes/ISOpenWaterPump"
@@ -46,6 +48,7 @@ local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Purifier = WaterPipes.Purifier
 local Router = WaterPipes.Router
 local Hydrant = WaterPipes.Hydrant
+local Valve = WaterPipes.Valve
 local Pump = WaterPipes.Pump
 local Pressure = WaterPipes.Pressure
 local Irrigation = WaterPipes.Irrigation
@@ -1070,6 +1073,18 @@ local function findGaugeInWorldObjects(worldobjects)
     return nil
 end
 
+local function findValveInWorldObjects(worldobjects)
+    if not worldobjects then
+        return nil
+    end
+    for _, worldObject in ipairs(worldobjects) do
+        if Valve.isValve(worldObject) then
+            return worldObject
+        end
+    end
+    return nil
+end
+
 local function findHydrantInWorldObjects(worldobjects)
     if not worldobjects then
         return nil
@@ -1110,6 +1125,23 @@ function ContextMenu.setHydrantOpen(playerObj, hydrant, open)
     if luautils.walkAdj(playerObj, square, false) then
         ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
         ISTimedActionQueue.add(ISToggleHydrant:new(playerObj, hydrant, wrench, open))
+    end
+end
+
+-- Walk to the valve, equip the wrench, and turn it as a timed action -- the flip itself is
+-- server-authoritative (ISToggleValve sends the command; direct in SP).
+function ContextMenu.setValveOpen(playerObj, valve, open)
+    local square = valve and valve:getSquare()
+    if not square or not playerObj then
+        return
+    end
+    local wrench = getPipeWrench(playerObj)
+    if not wrench then
+        return
+    end
+    if luautils.walkAdj(playerObj, square, false) then
+        ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
+        ISTimedActionQueue.add(ISToggleValve:new(playerObj, valve, wrench, open))
     end
 end
 
@@ -1368,6 +1400,10 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     local gaugeObject = findGaugeInWorldObjects(worldobjects)
     local hasGaugeOption = gaugeObject ~= nil
 
+    -- Turning a valve is plumbing, so it needs the wrench -- the same gate the hydrant uses.
+    local valveObject = findValveInWorldObjects(worldobjects)
+    local hasValveOption = valveObject ~= nil and playerHasPipeWrench(playerObj)
+
     -- The pump's switch and readout stay available with the pressure model off, unlike the router
     -- regulator: the switch still stops the intake, and the readout still answers whether it has power.
     local pumpObject = findPumpInWorldObjects(worldobjects)
@@ -1390,6 +1426,7 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         and not hasPurifierOption
         and not hasRouterPressureOption and not hasGaugeOption and not hasDripRepairOption
         and not hasEmitterOption and not hasHydrantOption and not hasPumpOption
+        and not hasValveOption
         and not isDebugActive() then
         return false
     end
@@ -1460,6 +1497,13 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         local option = context:addOption(label, playerObj, ContextMenu.setHydrantOpen,
             hydrantObject, not open)
         option.toolTip = buildHydrantTooltip(hydrantObject)
+    end
+
+    if hasValveOption then
+        local open = Valve.isOpen(valveObject)
+        local label = open and getText("ContextMenu_WaterPipesCloseValve")
+            or getText("ContextMenu_WaterPipesOpenValve")
+        context:addOption(label, playerObj, ContextMenu.setValveOpen, valveObject, not open)
     end
 
     if hasGaugeOption then

@@ -572,6 +572,23 @@ Constants.GAUGE_SPRITE_N = "waterpipes_01_30"   -- vented wall box, North wall (
 Constants.GAUGE_SPRITE_W = "waterpipes_01_31"   -- ...and the West wall mirror
 Constants.GAUGE_READ_DISTANCE = 2             -- matches ISFluidUtil.isoMaxPanelDist
 
+-- ===== Shut-off valve =====
+-- A NON-pipe device built onto a tile that already carries a floor pipe -- the gauge's pattern, not the
+-- emitters'. That is what lets a valve be fitted to an existing run (a building's concealed plumbing
+-- included) without dismantling the pipe first.
+-- Closed, its square stops conducting entirely: State.rebuildGraph drops its edges and the network
+-- splits in two, so pressure, level, stagnation and contamination stop being shared across it. Pipe
+-- nodes carry no fluid of their own (water lives on container nodes), so cutting a tile out of the
+-- graph strands nothing -- which is why the valve can be a pure edge and never a node.
+Constants.VALVE_MODDATA_KEY = "waterpipesValve"
+-- ABSENT MEANS OPEN, the same idiom as PUMP_ENABLED_KEY: building a valve must never change how the
+-- network behaves until the player deliberately closes it.
+Constants.VALVE_CLOSED_KEY = "waterpipesValveClosed"
+-- PLACEHOLDER ART (tools/texturepack/gen_valve.py): a handwheel, flat and green when open, turned and
+-- red when closed. Cells 47/48 are the final indices, so the artist's drop replaces the pixels only.
+Constants.VALVE_SPRITE_OPEN = "waterpipes_01_47"
+Constants.VALVE_SPRITE_CLOSED = "waterpipes_01_48"
+
 -- Appliances that use water to run but manage it themselves (a washing machine only needs its own
 -- FluidContainer non-empty to start a cycle, and its cycle logic never touches fluid). They carry the
 -- waterPiped flag, but that flag is read from the live sprite and is unreliable on some washer models,

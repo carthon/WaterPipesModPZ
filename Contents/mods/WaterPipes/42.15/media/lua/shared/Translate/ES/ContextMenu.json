@@ -8,6 +8,8 @@
     "ContextMenu_WaterPipesCheckEmitter": "Comprobar emisor de riego",
     "ContextMenu_WaterPipesRepairDrip": "Reparar gotero",
     "ContextMenu_WaterPipesRouterPressureOpen": "Fijar límite de presión...",
+    "ContextMenu_WaterPipesOpenValve": "Abrir válvula",
+    "ContextMenu_WaterPipesCloseValve": "Cerrar válvula",
     "ContextMenu_WaterPipesOpenHydrant": "Abrir boca de incendios",
     "ContextMenu_WaterPipesCloseHydrant": "Cerrar boca de incendios",
     "ContextMenu_WaterPipesPumpTurnOn": "Encender",
