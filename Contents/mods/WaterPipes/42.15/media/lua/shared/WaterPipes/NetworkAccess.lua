@@ -151,6 +151,15 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
         return {}, {}, { pumps = {}, mains = {} }, {}
     end
 
+    -- A closed valve is a wall even when it is the square the question is ASKED from, and that has to
+    -- be settled here rather than in tryAdd. The origin's neighbours are seeded unconditionally below
+    -- (a fixture has no pipe of its own), so refusing only to add the origin let the walk step straight
+    -- over it. That is exactly what a router did: it asks availableToPush(outSquare), outSquare is the
+    -- valve's own tile, and it kept pouring into the tank behind a shut valve.
+    if Valve.isClosedOnSquare(originSquare) then
+        return {}, {}, { pumps = {}, mains = {}, hydrants = {}, purifierOutlets = {}, supplyHead = 0 }, {}
+    end
+
     verticalMode = verticalMode or "both"
 
     local visited = {}
