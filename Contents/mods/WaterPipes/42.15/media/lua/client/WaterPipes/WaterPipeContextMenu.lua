@@ -13,6 +13,8 @@ require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Hydrant"
 require "WaterPipes/Valve"
+require "WaterPipes/BuildingPlumbing"
+require "WaterPipes/ISPlumbBuilding"
 require "WaterPipes/ISToggleValve"
 require "WaterPipes/ISToggleHydrant"
 require "WaterPipes/ISTogglePump"
@@ -49,6 +51,7 @@ local Purifier = WaterPipes.Purifier
 local Router = WaterPipes.Router
 local Hydrant = WaterPipes.Hydrant
 local Valve = WaterPipes.Valve
+local BuildingPlumbing = WaterPipes.BuildingPlumbing
 local Pump = WaterPipes.Pump
 local Pressure = WaterPipes.Pressure
 local Irrigation = WaterPipes.Irrigation
@@ -1145,6 +1148,84 @@ function ContextMenu.setValveOpen(playerObj, valve, open)
     end
 end
 
+-- ===== Plumbing a whole building =====
+--
+-- The plan is built when the option is CHOSEN, never when the menu opens: planning floods the building
+-- and runs a Dijkstra over it, and a right-click has to stay cheap. So the tooltip states the rule and
+-- the answer arrives when the player commits.
+local function reportPlumbing(playerObj, plan, action)
+    local skipped = #plan.skipped
+    local text
+    if action and action.outOfPipes then
+        text = getText("IGUI_WaterPipesPlumbBuildingOutOfPipes", tostring(#action.laid))
+    elseif skipped > 0 then
+        text = getText("IGUI_WaterPipesPlumbBuildingPartial",
+            tostring(#plan.connected), tostring(skipped))
+    else
+        text = getText("IGUI_WaterPipesPlumbBuildingDone",
+            tostring(#plan.connected), tostring(plan.cost))
+    end
+    if HaloTextHelper then
+        HaloTextHelper.addText(playerObj, text)
+    end
+
+    -- The detail goes to console.txt: which fixture, where, and why. A halo line cannot carry it, and
+    -- "some of them" is not an answer the player can act on.
+    for _, entry in ipairs(plan.skipped) do
+        Logger.log(string.format("Building plumbing skipped %s at %d:%d:%d -- %s",
+            tostring(entry.fixture.name or "fixture"),
+            entry.fixture.x, entry.fixture.y, entry.fixture.z, entry.reason))
+    end
+end
+
+function ContextMenu.plumbBuilding(playerObj, square)
+    if not playerObj or not square then
+        return
+    end
+    local wrench = getPipeWrench(playerObj)
+    if not wrench then
+        return
+    end
+
+    local probe = BuildingPlumbing.probeAt(square)
+    if not probe then
+        if HaloTextHelper then
+            HaloTextHelper.addText(playerObj, getText("IGUI_WaterPipesPlumbBuildingNoBuilding"))
+        end
+        return
+    end
+
+    local plan = BuildingPlumbing.plan(
+        { x = square:getX(), y = square:getY(), z = square:getZ() }, probe)
+
+    if #plan.placements == 0 then
+        -- Either everything is already piped (the idempotent re-run) or nothing can be reached.
+        if HaloTextHelper then
+            HaloTextHelper.addText(playerObj, #plan.connected > 0
+                and getText("IGUI_WaterPipesPlumbBuildingNothingToDo")
+                or getText("IGUI_WaterPipesPlumbBuildingNoFixtures"))
+        end
+        return
+    end
+
+    local needed = ISPlumbBuilding.pipesFor(plan.cost)
+    local held = ISPlumbBuilding.countPipes(playerObj:getInventory())
+    if held < needed then
+        if HaloTextHelper then
+            HaloTextHelper.addText(playerObj,
+                getText("IGUI_WaterPipesPlumbBuildingNeedPipes", tostring(needed), tostring(held)))
+        end
+        return
+    end
+
+    if luautils.walkAdj(playerObj, square, true) then
+        ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
+        ISTimedActionQueue.add(ISPlumbBuilding:new(playerObj, plan, function(action)
+            reportPlumbing(playerObj, plan, action)
+        end))
+    end
+end
+
 -- ===== Water pump: switch + status =====
 
 -- Flipping the switch is a physical act, so the character walks over first and the state only changes
@@ -1418,6 +1499,13 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     local valveObject = findValveInWorldObjects(worldobjects)
     local hasValveOption = valveObject ~= nil and playerHasPipeWrench(playerObj)
 
+    -- Plumbing a whole building. Offered on ANY tile of a building, not only on a fixture: the root of
+    -- the tree is wherever the player clicked, so where they click is the decision they are making.
+    -- Deliberately cheap: whether a building is there is one call, and the plan waits for the click.
+    local plumbSquare = PipeObjectUtils.getSquareFromWorldObjects(worldobjects)
+    local hasPlumbBuildingOption = plumbSquare ~= nil and playerHasPipeWrench(playerObj)
+        and plumbSquare.getBuilding ~= nil and plumbSquare:getBuilding() ~= nil
+
     -- The pump's switch and readout stay available with the pressure model off, unlike the router
     -- regulator: the switch still stops the intake, and the readout still answers whether it has power.
     local pumpObject = findPumpInWorldObjects(worldobjects)
@@ -1440,7 +1528,7 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         and not hasPurifierOption
         and not hasRouterPressureOption and not hasGaugeOption and not hasDripRepairOption
         and not hasEmitterOption and not hasHydrantOption and not hasPumpOption
-        and not hasValveOption
+        and not hasValveOption and not hasPlumbBuildingOption
         and not isDebugActive() then
         return false
     end
@@ -1511,6 +1599,15 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         local option = context:addOption(label, playerObj, ContextMenu.setHydrantOpen,
             hydrantObject, not open)
         option.toolTip = buildHydrantTooltip(hydrantObject)
+    end
+
+    if hasPlumbBuildingOption then
+        local option = context:addOption(getText("ContextMenu_WaterPipesPlumbBuilding"), playerObj,
+            ContextMenu.plumbBuilding, plumbSquare)
+        local tooltip = ISWorldObjectContextMenu.addToolTip()
+        tooltip:setName(getText("ContextMenu_WaterPipesPlumbBuilding"))
+        tooltip.description = getText("IGUI_WaterPipesPlumbBuildingDesc")
+        option.toolTip = tooltip
     end
 
     if hasValveOption then

@@ -85,6 +85,14 @@ Constants.PIPE_RISER_EDGE_MODDATA_KEY = "waterpipesRiserEdge"
 -- Baked in at build time and never toggled at runtime, so no extra network sync is needed.
 Constants.PIPE_HIDDEN_MODDATA_KEY = "waterpipesHidden"
 Constants.PIPE_HIDDEN_SPRITE = "waterpipes_01_20"   -- fully transparent tile in the tileset
+-- The concealed entities' own FACE sprites. Distinct from the transparent tile above: the face is what
+-- the build cursor shows and, more importantly here, what SpriteConfigManager.getObjectInfoFromSprite
+-- resolves an entity script from -- which is how the generator creates a pipe without a build cursor.
+-- Every entity face must be unique across the mod or the world throws WorldDictionaryException, which
+-- is exactly why these three cells exist instead of borrowing the visible pipes'.
+Constants.PIPE_HIDDEN_FACE_SPRITE = "waterpipes_01_44"        -- WaterPipeHidden, face S
+Constants.PIPE_HIDDEN_RISER_FACE_N = "waterpipes_01_45"       -- WaterPipeRiserHidden, face N
+Constants.PIPE_HIDDEN_RISER_FACE_W = "waterpipes_01_46"       -- ...and face W
 -- Purifier: a NON-pipe tank on a router tile that cleans the connected network's tainted water while
 -- powered. The tier is baked in at build time. The legacy filter/fire tiers are still recognised by
 -- getTier so old saves keep working, but only the electric tier is buildable.
@@ -583,6 +591,17 @@ Constants.BUILDING_PLUMB_MAX_TILES = 200
 -- re-run, and never changes what dismantling one pays back -- a generated pipe is an ordinary metal
 -- pipe removed through the ordinary path.
 Constants.PIPE_GENERATED_MODDATA_KEY = "waterpipesGenerated"
+-- How far from the clicked tile the building scan may wander, in tiles. A hospital is one BuildingDef
+-- of thousands of tiles, and the scan has to be bounded BEFORE the plan is, or a single click pays to
+-- walk the whole thing just to discover it cannot lay most of it. A box rather than a node count so
+-- the answer does not depend on the order squares happen to be visited in.
+Constants.BUILDING_PLUMB_MAX_RADIUS = 32
+-- How long one frame may spend laying pipe. Stated in milliseconds rather than a tile count for the
+-- same reason IRRIGATION_MS_PER_TICK is: a count is a proxy for cost and drifts the moment anything
+-- underneath it changes. At least one tile is always laid, so a pass advances however expensive one
+-- turns out to be; after that the clock decides. Eight leaves room under the ~16 ms where a stutter
+-- becomes visible.
+Constants.BUILDING_PLUMB_MS_PER_TICK = 8
 
 -- ===== Shut-off valve =====
 -- A NON-pipe device built onto a tile that already carries a floor pipe -- the gauge's pattern, not the

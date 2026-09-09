@@ -2,8 +2,13 @@ WaterPipes = WaterPipes or {}
 WaterPipes.BuildingPlumbing = WaterPipes.BuildingPlumbing or {}
 
 require "WaterPipes/Constants"
+require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/EndpointObjects"
+require "WaterPipes/World"
 
 local Constants = WaterPipes.Constants
+local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local EndpointObjects = WaterPipes.EndpointObjects
 local BuildingPlumbing = WaterPipes.BuildingPlumbing
 
 -- Plans the concealed pipe tree that connects a building's fixtures to one root tile.
@@ -248,6 +253,308 @@ function BuildingPlumbing.plan(origin, probe, opts)
     end)
 
     return plan
+end
+
+-- ===== The world-facing half =====
+-- Everything above is pure. This builds the probe it reads, and it is the only part that touches PZ.
+
+local function squareAt(x, y, z)
+    local World = WaterPipes.World
+    return World and World.squareAt and World.squareAt(x, y, z) or nil
+end
+
+local function hasFlag(square, flagName)
+    if not IsoFlagType or IsoFlagType[flagName] == nil then
+        return false
+    end
+    local props = square.getProperties and square:getProperties() or nil
+    if not props or not props.has then
+        return false
+    end
+    local ok, value = pcall(props.has, props, IsoFlagType[flagName])
+    return ok and value or false
+end
+
+-- The wall THIS tile owns. In PZ a tile owns only its North and West walls -- the South and East ones
+-- belong to the neighbouring tiles -- which is why the mod's risers exist for those two edges alone.
+local function wallEdgeOf(square)
+    if hasFlag(square, "WallN") or hasFlag(square, "WallNW") then
+        return "N"
+    end
+    if hasFlag(square, "WallW") then
+        return "W"
+    end
+    return nil
+end
+
+local function squareHasFloorPipe(square)
+    for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+        if PipeObjectUtils.getPipePlacement(worldObject).surface == Constants.PIPE_SURFACE_FLOOR then
+            return true
+        end
+    end
+    return false
+end
+
+-- Can a floor pipe stand here? The same questions the engine's own build validity asks
+-- (ISBuildIsoEntity): a floor to stand on, and nothing solid or placement-blocking in the way. A tile
+-- that already carries a pipe still passes -- the plan reuses it.
+local function canHoldPipe(square)
+    if not square.hasFloor then
+        return false
+    end
+    local okFloor, floored = pcall(square.hasFloor, square)
+    if not okFloor or not floored then
+        return false
+    end
+    if square.isSolid then
+        local ok, solid = pcall(square.isSolid, square)
+        if ok and solid then
+            return false
+        end
+    end
+    if square.isSolidTrans then
+        local ok, solid = pcall(square.isSolidTrans, square)
+        if ok and solid then
+            return false
+        end
+    end
+    if IsoPropertyType and IsoPropertyType.BLOCKS_PLACEMENT and square.getProperties then
+        local props = square:getProperties()
+        if props and props.has then
+            local ok, blocked = pcall(props.has, props, IsoPropertyType.BLOCKS_PLACEMENT)
+            if ok and blocked then
+                return false
+            end
+        end
+    end
+    return true
+end
+
+-- Read the building ONCE, by flooding out from the clicked tile over squares belonging to the same
+-- IsoBuilding. A flood rather than walking the BuildingDef's room rectangles: it visits only tiles
+-- that are really there, it handles every floor and every irregular shape without needing the room
+-- geometry, and `square:getBuilding()` is the primitive vanilla itself uses.
+--
+-- Returns a probe for BuildingPlumbing.plan, or nil when the tile is not inside a building.
+function BuildingPlumbing.probeAt(originSquare, radius)
+    if not originSquare or not originSquare.getBuilding then
+        return nil
+    end
+    local okBuilding, building = pcall(originSquare.getBuilding, originSquare)
+    if not okBuilding or not building then
+        return nil
+    end
+
+    radius = radius or Constants.BUILDING_PLUMB_MAX_RADIUS
+    local ox, oy = originSquare:getX(), originSquare:getY()
+
+    local tiles = {}         -- key -> true, every tile a pipe may stand on
+    local walls = {}         -- key -> "N"/"W"
+    local piped = {}         -- key -> true, a floor pipe is already there
+    local fixtures = {}
+
+    local function admit(square)
+        local x, y, z = square:getX(), square:getY(), square:getZ()
+        local key = keyOf(x, y, z)
+        tiles[key] = true
+        walls[key] = wallEdgeOf(square)
+        piped[key] = squareHasFloorPipe(square)
+        for _, endpointObject in ipairs(EndpointObjects.collectOnSquare(square)) do
+            fixtures[#fixtures + 1] = {
+                x = x, y = y, z = z,
+                object = endpointObject,
+                name = endpointObject.getName and endpointObject:getName() or nil,
+            }
+        end
+    end
+
+    local seen = {}
+    local queue = { originSquare }
+    seen[keyOf(ox, oy, originSquare:getZ())] = true
+
+    local index = 1
+    while index <= #queue do
+        local square = queue[index]
+        index = index + 1
+        admit(square)
+
+        local x, y, z = square:getX(), square:getY(), square:getZ()
+        local function consider(nx, ny, nz)
+            if math.abs(nx - ox) > radius or math.abs(ny - oy) > radius then
+                return
+            end
+            local key = keyOf(nx, ny, nz)
+            if seen[key] then
+                return
+            end
+            seen[key] = true
+            local neighbour = squareAt(nx, ny, nz)
+            if not neighbour then
+                return
+            end
+            local okNeighbourBuilding, neighbourBuilding = pcall(neighbour.getBuilding, neighbour)
+            if not okNeighbourBuilding or neighbourBuilding ~= building then
+                return
+            end
+            if not canHoldPipe(neighbour) then
+                return
+            end
+            queue[#queue + 1] = neighbour
+        end
+
+        for _, offset in ipairs(CARDINALS) do
+            consider(x + offset.dx, y + offset.dy, z)
+        end
+        -- Floors are part of the building whether or not a riser can reach them; whether a pipe may
+        -- actually climb is the planner's rule, not this one's.
+        consider(x, y, z + 1)
+        consider(x, y, z - 1)
+    end
+
+    -- The origin has to be usable itself, or there is nothing to root the tree on.
+    if not canHoldPipe(originSquare) then
+        return nil
+    end
+
+    return {
+        isBuildingTile = function(x, y, z) return tiles[keyOf(x, y, z)] == true end,
+        hasPipe = function(x, y, z) return piped[keyOf(x, y, z)] == true end,
+        wallEdge = function(x, y, z) return walls[keyOf(x, y, z)] end,
+        fixtures = function() return fixtures end,
+        tileCount = function()
+            local n = 0
+            for _ in pairs(tiles) do n = n + 1 end
+            return n
+        end,
+    }
+end
+
+-- ===== Laying it =====
+-- Creating a built object without a build cursor, the way vanilla's own map-object scripts do it
+-- (server/Map/MapObjects/MORainCollectorBarrel.lua): build the IsoThumpable, resolve its entity script
+-- from its FACE sprite, and associate the two. That association is the step that cannot be skipped --
+-- an object without it comes back from a chunk reload as "EntityScript not found", which is exactly
+-- the bug the pump and the gauge hit when their art sat on a vanilla cell.
+
+local FACE_FOR = {
+    [FLOOR] = function() return Constants.PIPE_HIDDEN_FACE_SPRITE end,
+    [RISER] = function(edge)
+        return edge == "W" and Constants.PIPE_HIDDEN_RISER_FACE_W or Constants.PIPE_HIDDEN_RISER_FACE_N
+    end,
+}
+
+-- Health of a generated pipe. Matched to a hand-built one so a zombie does not find the building's
+-- plumbing softer than the player's own line.
+local GENERATED_HEALTH = 200
+
+-- Lay ONE pipe. Returns the object (or true, when the server was asked to do it), or nil and a reason.
+--
+-- Creating world objects belongs to the server -- vanilla's own map-object scripts bail on isClient()
+-- for exactly this reason -- so on a client each tile is asked for rather than made. One command per
+-- tile rather than one for the whole plan: it keeps the progressive laying and the interruption
+-- semantics identical in both, and the traffic is bounded by BUILDING_PLUMB_MAX_TILES and spread over
+-- the pass by its millisecond budget.
+function BuildingPlumbing.place(placement, player)
+    if isClient and isClient() then
+        if not player then
+            return nil, "noPlayer"
+        end
+        sendClientCommand(player, "WaterPipes", "placeBuildingPipe", {
+            x = placement.x, y = placement.y, z = placement.z,
+            kind = placement.kind, edge = placement.edge,
+        })
+        return true
+    end
+
+    local square = squareAt(placement.x, placement.y, placement.z)
+    if not square then
+        return nil, "noSquare"
+    end
+
+    local faceSprite = FACE_FOR[placement.kind](placement.edge)
+    local info = SpriteConfigManager and SpriteConfigManager.getObjectInfoFromSprite
+        and SpriteConfigManager.getObjectInfoFromSprite(faceSprite) or nil
+    local script = info and info.getScript and info:getScript() or nil
+    local parent = script and script.getParent and script:getParent() or nil
+    if not parent then
+        -- Without the entity script there is no point creating the object: it would not survive a
+        -- reload, and a base full of pipes that vanish on relog is worse than a refusal.
+        return nil, "noEntityScript"
+    end
+
+    local north = placement.kind == RISER and placement.edge == "N" or false
+    local object = IsoThumpable.new(getWorld():getCell(), square, faceSprite, north, {})
+    object:setIsThumpable(true)
+    object:setIsDismantable(true)
+    object:setCanPassThrough(true)
+    object:setCanBarricade(false)
+    object:setIsContainer(false)
+    object:setIsDoor(false)
+    object:setIsDoorFrame(false)
+    object:setBlockAllTheSquare(false)
+    object:setName(Constants.PIPE_OBJECT_NAME)
+    object:setMaxHealth(GENERATED_HEALTH)
+    object:setHealth(GENERATED_HEALTH)
+
+    -- The SAME stamp a hand-built pipe gets, so the two cannot drift apart. Registration is NOT done
+    -- here: the pass owes the network one rebuild at the end, never one per tile.
+    WaterPipes.Build.stampPipeModData(object, {
+        surface = placement.kind == RISER and Constants.PIPE_SURFACE_WALLCOVER
+            or Constants.PIPE_SURFACE_FLOOR,
+        riser = placement.kind == RISER or nil,
+        edge = placement.kind == RISER and placement.edge or nil,
+        hidden = true,
+        generated = true,
+    })
+
+    GameEntityFactory.CreateIsoObjectEntity(object, parent, true)
+    square:AddSpecialObject(object)
+    if object.transmitCompleteItemToClients then
+        pcall(object.transmitCompleteItemToClients, object)
+    end
+
+    -- Registry only. State.registerPipe does not rebuild; BuildingPlumbing.finish does, once.
+    WaterPipes.State.registerPipe(placement.x, placement.y, placement.z, {
+        kinds = true, riser = placement.kind == RISER or nil,
+    })
+
+    return object
+end
+
+-- Everything the network owes after a pass, paid ONCE. Laying N pipes through the ordinary
+-- registerPipeAt would rebuild the graph and refresh every plumbed endpoint N times -- the pattern
+-- that cost processPumps 56 ms before it was fixed.
+function BuildingPlumbing.finish(placements, player)
+    if isClient and isClient() then
+        -- The server owns the graph; ask it to settle once, then repaint locally (sprites are always
+        -- derived client-side and never transmitted -- see PipeAutotile).
+        if player then
+            sendClientCommand(player, "WaterPipes", "finishBuildingPlumbing", {})
+        end
+        local PipeAutotile = WaterPipes.PipeAutotile
+        if PipeAutotile and PipeAutotile.refreshAround then
+            for _, placement in ipairs(placements or {}) do
+                PipeAutotile.refreshAround(placement.x, placement.y, placement.z)
+            end
+        end
+        return
+    end
+
+    local System = WaterPipes.System
+    if System and System.rebuild then
+        System.rebuild()
+        if System.refreshPlumbedEndpoints then
+            System.refreshPlumbedEndpoints()
+        end
+    end
+
+    local PipeAutotile = WaterPipes.PipeAutotile
+    if PipeAutotile and PipeAutotile.refreshAround then
+        for _, placement in ipairs(placements or {}) do
+            PipeAutotile.refreshAround(placement.x, placement.y, placement.z)
+        end
+    end
 end
 
 BuildingPlumbing.FLOOR = FLOOR

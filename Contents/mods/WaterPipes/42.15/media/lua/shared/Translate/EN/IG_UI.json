@@ -65,5 +65,13 @@
     "IGUI_WaterPipesValveOpenName": "Valve: open",
     "IGUI_WaterPipesValveClosedName": "Valve: closed",
     "IGUI_WaterPipesValveOpenDesc": "Water passes through. This side and the far side are one network.",
-    "IGUI_WaterPipesValveClosedDesc": "Nothing passes, either way. The two sides are separate networks and share no water, pressure or contamination."
+    "IGUI_WaterPipesValveClosedDesc": "Nothing passes, either way. The two sides are separate networks and share no water, pressure or contamination.",
+    "IGUI_WaterPipesPlumbBuildingDesc": "Runs a concealed pipe tree from the tile you clicked to every sink, toilet and washer in the building, climbing to other floors through the walls. Costs one metal pipe per tile laid, spent as the work goes. Pipes you already laid are reused, never built over.",
+    "IGUI_WaterPipesPlumbBuildingNoBuilding": "Not inside a building.",
+    "IGUI_WaterPipesPlumbBuildingNoFixtures": "Nothing here to plumb.",
+    "IGUI_WaterPipesPlumbBuildingNothingToDo": "This building is already plumbed.",
+    "IGUI_WaterPipesPlumbBuildingNeedPipes": "Needs %1 metal pipes; you have %2.",
+    "IGUI_WaterPipesPlumbBuildingDone": "Plumbed %1 fixtures, %2 tiles of pipe.",
+    "IGUI_WaterPipesPlumbBuildingPartial": "Plumbed %1 fixtures; %2 left out (see console.txt). Run it again to extend.",
+    "IGUI_WaterPipesPlumbBuildingOutOfPipes": "Ran out of metal pipe after %1 tiles. Run it again with more."
 }

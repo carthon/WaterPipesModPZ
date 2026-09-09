@@ -14,5 +14,6 @@
     "ContextMenu_WaterPipesCloseHydrant": "Cerrar boca de incendios",
     "ContextMenu_WaterPipesPumpTurnOn": "Encender",
     "ContextMenu_WaterPipesPumpTurnOff": "Apagar",
-    "ContextMenu_WaterPipesPumpStatus": "Ver estado de la bomba"
+    "ContextMenu_WaterPipesPumpStatus": "Ver estado de la bomba",
+    "ContextMenu_WaterPipesPlumbBuilding": "Fontanear el edificio"
 }

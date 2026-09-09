@@ -16,6 +16,7 @@ require "WaterPipes/Purifier"
 require "WaterPipes/GravityFlow"
 require "WaterPipes/Router"
 require "WaterPipes/Valve"
+require "WaterPipes/BuildingPlumbing"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/Mains"
 require "WaterPipes/Pressure"
@@ -45,6 +46,7 @@ local Purifier = WaterPipes.Purifier
 local GravityFlow = WaterPipes.GravityFlow
 local Router = WaterPipes.Router
 local Valve = WaterPipes.Valve
+local BuildingPlumbing = WaterPipes.BuildingPlumbing
 local NetworkAccess = WaterPipes.NetworkAccess
 local Mains = WaterPipes.Mains
 local Pressure = WaterPipes.Pressure
@@ -1776,6 +1778,28 @@ local function onClientCommand(module, command, player, args)
             return
         end
         Hydrant.setOpen(hydrant, args and args.open)
+        return
+    end
+
+    -- Building plumbing lays world objects, and creating those belongs to the server -- vanilla's own
+    -- map-object scripts bail on isClient() for the same reason. One command per tile, spread over the
+    -- pass by its millisecond budget and bounded by BUILDING_PLUMB_MAX_TILES.
+    if command == "placeBuildingPipe" then
+        local placed, reason = BuildingPlumbing.place({
+            x = args and args.x, y = args and args.y, z = args and args.z,
+            kind = args and args.kind, edge = args and args.edge,
+        })
+        if not placed then
+            Logger.warn("Place building pipe: refused at "
+                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":"
+                .. tostring(args and args.z) .. " (" .. tostring(reason) .. ")")
+        end
+        return
+    end
+
+    -- ...and the single settle the whole pass owes, once it is done.
+    if command == "finishBuildingPlumbing" then
+        BuildingPlumbing.finish({})
         return
     end
 

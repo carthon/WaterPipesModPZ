@@ -65,5 +65,13 @@
     "IGUI_WaterPipesValveOpenName": "阀门：已打开",
     "IGUI_WaterPipesValveClosedName": "阀门：已关闭",
     "IGUI_WaterPipesValveOpenDesc": "水可以通过。两侧属于同一个管网。",
-    "IGUI_WaterPipesValveClosedDesc": "两个方向都不通。两侧是独立的管网，不共享水量、压力与污染。"
+    "IGUI_WaterPipesValveClosedDesc": "两个方向都不通。两侧是独立的管网，不共享水量、压力与污染。",
+    "IGUI_WaterPipesPlumbBuildingDesc": "从你点击的格子开始，铺设一棵隐藏管道树，连接建筑内每个水槽、马桶与洗衣机，并沿墙体上行到其他楼层。每铺一格消耗一根金属管，随施工进度扣除。已有的管道会被复用，绝不覆盖。",
+    "IGUI_WaterPipesPlumbBuildingNoBuilding": "你不在建筑内。",
+    "IGUI_WaterPipesPlumbBuildingNoFixtures": "这里没有可布管的东西。",
+    "IGUI_WaterPipesPlumbBuildingNothingToDo": "这栋建筑已经布好管了。",
+    "IGUI_WaterPipesPlumbBuildingNeedPipes": "需要 %1 根金属管，你有 %2 根。",
+    "IGUI_WaterPipesPlumbBuildingDone": "已为 %1 个设备布管，共 %2 格管道。",
+    "IGUI_WaterPipesPlumbBuildingPartial": "已为 %1 个设备布管；%2 个未能连接（详见 console.txt）。再次执行可以继续扩展。",
+    "IGUI_WaterPipesPlumbBuildingOutOfPipes": "铺设 %1 格后金属管用完了。备足后再次执行。"
 }

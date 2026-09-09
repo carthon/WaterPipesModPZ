@@ -259,10 +259,14 @@ end
 
 -- ===== OnCreate (server / single-player) =====
 
--- opts: surface, riser, edge, hidden, router, routerDirection, pump, drip, sprinkler, axis.
--- Every pipe variant goes through here so they all land on the network the same way; what makes a
--- router / pump / drip / sprinkler special is one extra modData flag, never a separate object type.
-local function markAndRegister(thumpable, opts)
+-- What a pipe's modData IS.
+-- opts: surface, riser, edge, hidden, generated, router, routerDirection, pump, drip, sprinkler, axis.
+-- Every pipe variant is stamped here, so what makes a router / pump / drip / sprinkler special is one
+-- extra modData flag and never a separate object type.
+-- Split out of markAndRegister so the building generator can stamp exactly the same thing without the
+-- per-pipe registration below: it lays hundreds at once and owes the network ONE rebuild at the end,
+-- not one per tile. One definition, so the two paths cannot drift.
+function Build.stampPipeModData(thumpable, opts)
     if not thumpable then
         return
     end
@@ -293,10 +297,22 @@ local function markAndRegister(thumpable, opts)
             modData[Constants.DRIP_CONDITION_KEY] = Constants.DRIP_MAX_CONDITION
         end
         modData[Constants.SPRINKLER_MODDATA_KEY] = opts.sprinkler and true or nil
+        -- Laid by the building generator rather than by hand. A LABEL: it feeds the report and the
+        -- idempotent re-run, and never changes what dismantling one pays back.
+        modData[Constants.PIPE_GENERATED_MODDATA_KEY] = opts.generated and true or nil
     end
     if thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)
     end
+end
+
+-- Stamp one pipe and put it on the network, the path every hand-built pipe takes.
+local function markAndRegister(thumpable, opts)
+    if not thumpable then
+        return
+    end
+    opts = opts or {}
+    Build.stampPipeModData(thumpable, opts)
 
     local square = thumpable.getSquare and thumpable:getSquare() or nil
     if square and WaterPipes.System and WaterPipes.System.registerPipeAt then

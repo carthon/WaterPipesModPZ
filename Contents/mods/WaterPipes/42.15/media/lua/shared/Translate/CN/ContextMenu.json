@@ -14,5 +14,6 @@
     "ContextMenu_WaterPipesCloseHydrant": "关闭消防栓",
     "ContextMenu_WaterPipesPumpTurnOn": "开启",
     "ContextMenu_WaterPipesPumpTurnOff": "关闭",
-    "ContextMenu_WaterPipesPumpStatus": "查看水泵状态"
+    "ContextMenu_WaterPipesPumpStatus": "查看水泵状态",
+    "ContextMenu_WaterPipesPlumbBuilding": "为这栋建筑布管"
 }
