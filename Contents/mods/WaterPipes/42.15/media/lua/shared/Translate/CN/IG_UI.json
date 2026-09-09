@@ -61,5 +61,9 @@
     "IGUI_WaterPipesPumpInlet": "进水压力：%1 米水柱",
     "IGUI_WaterPipesPumpOutlet": "出水压力：%1 米水柱",
     "IGUI_WaterPipesPumpAdding": "为此管线提供 %1 米。",
-    "IGUI_WaterPipesPumpWouldGain": "开启后可增加 %1 米。"
+    "IGUI_WaterPipesPumpWouldGain": "开启后可增加 %1 米。",
+    "IGUI_WaterPipesValveOpenName": "阀门：已打开",
+    "IGUI_WaterPipesValveClosedName": "阀门：已关闭",
+    "IGUI_WaterPipesValveOpenDesc": "水可以通过。两侧属于同一个管网。",
+    "IGUI_WaterPipesValveClosedDesc": "两个方向都不通。两侧是独立的管网，不共享水量、压力与污染。"
 }

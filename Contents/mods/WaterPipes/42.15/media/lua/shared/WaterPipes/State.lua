@@ -81,10 +81,11 @@ function State.setPipeValveClosed(x, y, z, closed)
     local state = State.ensure()
     local pipeData = state.pipes[State.squareKey(x, y, z)]
     if not pipeData then
-        return
+        return false
     end
     pipeData.metadata = pipeData.metadata or {}
     pipeData.metadata.valveClosed = closed and true or nil
+    return true
 end
 
 function State.setHydrantOpen(x, y, z, open)

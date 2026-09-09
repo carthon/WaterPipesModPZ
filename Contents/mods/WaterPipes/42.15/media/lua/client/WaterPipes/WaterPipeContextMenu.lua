@@ -1300,6 +1300,20 @@ end
 
 -- What the hydrant will do if opened: mains-fed and bottomless while the town service runs, or the
 -- finite local reserve once it is cut. Reminds the player a pipe on the tile is what connects it.
+-- The valve's state must be READABLE, not inferred from the art. Its sprite is the only other clue,
+-- and a sprite that fails to resolve (a pack added but the game not restarted) leaves a shut valve
+-- looking open -- which reads to the player as "the network is broken", not "the valve is closed".
+local function buildValveTooltip(valve)
+    local tooltip = ISWorldObjectContextMenu.addToolTip()
+    local open = Valve.isOpen(valve)
+    tooltip:setName(getText(open and "IGUI_WaterPipesValveOpenName" or "IGUI_WaterPipesValveClosedName"))
+    local lines = {
+        getText(open and "IGUI_WaterPipesValveOpenDesc" or "IGUI_WaterPipesValveClosedDesc"),
+    }
+    tooltip.description = table.concat(lines, " <LINE> ")
+    return tooltip
+end
+
 local function buildHydrantTooltip(hydrant)
     local tooltip = ISWorldObjectContextMenu.addToolTip()
     tooltip:setName(getText("ContextMenu_WaterPipesOpenHydrant"))
@@ -1503,7 +1517,8 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         local open = Valve.isOpen(valveObject)
         local label = open and getText("ContextMenu_WaterPipesCloseValve")
             or getText("ContextMenu_WaterPipesOpenValve")
-        context:addOption(label, playerObj, ContextMenu.setValveOpen, valveObject, not open)
+        local option = context:addOption(label, playerObj, ContextMenu.setValveOpen, valveObject, not open)
+        option.toolTip = buildValveTooltip(valveObject)
     end
 
     if hasGaugeOption then

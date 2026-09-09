@@ -61,5 +61,9 @@
     "IGUI_WaterPipesPumpInlet": "Presión de entrada: %1 m de columna",
     "IGUI_WaterPipesPumpOutlet": "Presión de salida: %1 m de columna",
     "IGUI_WaterPipesPumpAdding": "Aporta %1 m a esta línea.",
-    "IGUI_WaterPipesPumpWouldGain": "Encenderla añadiría %1 m."
+    "IGUI_WaterPipesPumpWouldGain": "Encenderla añadiría %1 m.",
+    "IGUI_WaterPipesValveOpenName": "Válvula: abierta",
+    "IGUI_WaterPipesValveClosedName": "Válvula: cerrada",
+    "IGUI_WaterPipesValveOpenDesc": "El agua pasa. Este lado y el otro son una sola red.",
+    "IGUI_WaterPipesValveClosedDesc": "No pasa nada, en ningún sentido. Los dos lados son redes separadas y no comparten agua, presión ni contaminación."
 }

@@ -87,20 +87,35 @@ function Valve.setOpen(worldObject, open)
         pcall(worldObject.transmitModData, worldObject)
     end
 
-    if worldObject.setSprite and getSprite then
-        local sprite = getSprite(Valve.spriteFor(worldObject))
-        if sprite then
-            pcall(worldObject.setSprite, worldObject, sprite)
-        end
+    -- The sprite IS the state, as far as the player can see. A silent failure here leaves a valve that
+    -- looks open while it is shut -- indistinguishable from the network being broken, and the reason
+    -- the context menu now spells the state out in a tooltip rather than trusting the art.
+    local spriteName = Valve.spriteFor(worldObject)
+    local sprite = getSprite and getSprite(spriteName) or nil
+    if sprite and worldObject.setSprite then
+        pcall(worldObject.setSprite, worldObject, sprite)
+    else
+        Logger.warn("Valve sprite " .. tostring(spriteName) .. " did not resolve -- the valve is "
+            .. (open and "open" or "CLOSED") .. " but will not look it. Restart the game fully: "
+            .. "tilesets load only at boot, so a pack added this session is not there yet.")
     end
 
     local square = worldObject.getSquare and worldObject:getSquare() or nil
     if square then
         -- State.rebuildGraph decides where a network ENDS from the registry, not from the world, so the
         -- flag has to be there before the rebuild runs -- exactly as `metadata.router` does.
-        State.setPipeValveClosed(square:getX(), square:getY(), square:getZ(), not open)
+        local recorded = State.setPipeValveClosed(square:getX(), square:getY(), square:getZ(), not open)
         Logger.log(string.format("Valve at %d:%d:%d is now %s",
             square:getX(), square:getY(), square:getZ(), open and "open" or "closed"))
+        -- The registry is what State.rebuildGraph reads to decide where a network ends. If the tile has
+        -- no entry the walks would cut while the graph did not, which is a split only half the mod can
+        -- see. scanContainersAroundPipes re-derives it within the minute, but say so.
+        if not recorded then
+            Logger.warn(string.format(
+                "Valve at %d:%d:%d has no pipe in the registry: the graph will not agree with the walks "
+                .. "until the next container scan re-derives it.",
+                square:getX(), square:getY(), square:getZ()))
+        end
     end
 
     -- Closing a valve changes the SHAPE of the network, not just what a walk costs, so this is a

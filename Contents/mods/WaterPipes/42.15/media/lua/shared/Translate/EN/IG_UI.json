@@ -61,5 +61,9 @@
     "IGUI_WaterPipesPumpInlet": "Pressure in: %1 m of head",
     "IGUI_WaterPipesPumpOutlet": "Pressure out: %1 m of head",
     "IGUI_WaterPipesPumpAdding": "Adding %1 m to this line.",
-    "IGUI_WaterPipesPumpWouldGain": "Turning it on would add %1 m."
+    "IGUI_WaterPipesPumpWouldGain": "Turning it on would add %1 m.",
+    "IGUI_WaterPipesValveOpenName": "Valve: open",
+    "IGUI_WaterPipesValveClosedName": "Valve: closed",
+    "IGUI_WaterPipesValveOpenDesc": "Water passes through. This side and the far side are one network.",
+    "IGUI_WaterPipesValveClosedDesc": "Nothing passes, either way. The two sides are separate networks and share no water, pressure or contamination."
 }
