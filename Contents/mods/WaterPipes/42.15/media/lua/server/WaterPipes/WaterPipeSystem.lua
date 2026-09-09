@@ -952,6 +952,24 @@ local FITTING_RETURNS = {
     [Constants.GAUGE_MODDATA_KEY] = { "Base.MetalPipe", "Base.ElectronicsScrap" },
 }
 
+-- Fittings this pass is taking down right now. RemoveTileObject raises the very event that pays for a
+-- dismantled fitting (the purifier's footprint sweep learned the same lesson), so without this a valve
+-- pulled off by its own pipe would be paid for twice.
+local fittingsComingDown = {}
+
+local function fittingReturnsFor(object)
+    local ok, modData = pcall(object.getModData, object)
+    if not ok or not modData then
+        return nil
+    end
+    for key, returns in pairs(FITTING_RETURNS) do
+        if modData[key] == true then
+            return returns
+        end
+    end
+    return nil
+end
+
 local function takeDownFittingsOn(square, returnsMaterial)
     if not square or not square.getObjects then
         return
@@ -975,6 +993,7 @@ local function takeDownFittingsOn(square, returnsMaterial)
     end
 
     for _, entry in ipairs(doomed) do
+        fittingsComingDown[entry.object] = true
         -- Mirrors what vanilla's own scrap does, so a dedicated server and its clients agree.
         if isClient and isClient() then
             pcall(square.transmitRemoveItemFromSquare, square, entry.object)
@@ -983,6 +1002,7 @@ local function takeDownFittingsOn(square, returnsMaterial)
             pcall(square.transmitRemoveItemFromSquareOnClients, square, entry.object)
         end
         pcall(square.RemoveTileObject, square, entry.object)
+        fittingsComingDown[entry.object] = nil
 
         -- ONE side pays, on the same rule as the pipe drops above.
         if returnsMaterial and not (isClient and isClient()) then
@@ -1279,6 +1299,40 @@ end
 System.schedulePurifierRemoval = schedulePurifierRemoval
 System.processPurifierRemovals = processPendingPurifierRemovals
 
+-- A fitting dismantled BY ITSELF, rather than taken down with the pipe under it. Vanilla pays nothing
+-- for it: WaterPipeScrap registers the material at zero chance on purpose, so the Disassemble option
+-- exists without vanilla ever paying twice for a pipe. That left a valve costing a metal pipe and half
+-- a bar of stock to build and returning nothing at all when taken off.
+-- Same next-tick confirmation as the pipe drops, and for the same reason: the event fires BEFORE the
+-- object leaves, so a cancelled removal must pay nothing.
+local function scheduleFittingRemoval(object)
+    if not object or fittingsComingDown[object] then
+        return
+    end
+    local returns = fittingReturnsFor(object)
+    if not returns then
+        return
+    end
+    local square = object.getSquare and object:getSquare() or nil
+    if not square then
+        return
+    end
+
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    for _, itemType in ipairs(returns) do
+        pendingMaterialDrops[#pendingMaterialDrops + 1] = {
+            x = x, y = y, z = z, object = object, itemType = itemType,
+        }
+    end
+
+    if not pendingRemovalScheduled and Events and Events.OnTick then
+        pendingRemovalScheduled = true
+        Events.OnTick.Add(processPendingPipeRemovals)
+    elseif not (Events and Events.OnTick) then
+        processPendingPipeRemovals()
+    end
+end
+
 local function onDestroyIsoThumpable(thump, player)
     -- Sledgehammer: destruction, not dismantling -- nothing comes back, as before.
     schedulePipeRemoval(thump, false)
@@ -1291,6 +1345,7 @@ end
 local function onObjectAboutToBeRemoved(object)
     schedulePipeRemoval(object, true)
     schedulePurifierRemoval(object, true)
+    scheduleFittingRemoval(object)
 end
 
 -- Rotates through state.pipes a few tiles at a time, so every tile is checked eventually and no
