@@ -1148,6 +1148,24 @@ function ContextMenu.setValveOpen(playerObj, valve, open)
     end
 end
 
+-- Halo notes in the colour the message deserves. addGoodText / addBadText are vanilla's own; the
+-- fallback to the neutral addText is kept because a refusal that renders is worth more than one that
+-- throws on a build where the coloured variants are missing.
+--   good -> the whole thing worked        bad -> refused, or stopped partway
+--   neutral -> it happened, and there was nothing to celebrate or fix
+local function halo(playerObj, text, tone)
+    if not playerObj or not HaloTextHelper then
+        return
+    end
+    if tone == "good" and HaloTextHelper.addGoodText then
+        HaloTextHelper.addGoodText(playerObj, text)
+    elseif tone == "bad" and HaloTextHelper.addBadText then
+        HaloTextHelper.addBadText(playerObj, text)
+    else
+        HaloTextHelper.addText(playerObj, text)
+    end
+end
+
 -- ===== Plumbing a whole building =====
 --
 -- The plan is built when the option is CHOSEN, never when the menu opens: planning floods the building
@@ -1155,19 +1173,22 @@ end
 -- the answer arrives when the player commits.
 local function reportPlumbing(playerObj, plan, action)
     local skipped = #plan.skipped
-    local text
+    local text, tone
     if action and action.outOfPipes then
+        -- Stopped partway for want of materials: the player has something to go and fix.
         text = getText("IGUI_WaterPipesPlumbBuildingOutOfPipes", tostring(#action.laid))
+        tone = "bad"
     elseif skipped > 0 then
+        -- It worked, but not on everything. Neither a win nor a refusal.
         text = getText("IGUI_WaterPipesPlumbBuildingPartial",
             tostring(#plan.connected), tostring(skipped))
+        tone = nil
     else
         text = getText("IGUI_WaterPipesPlumbBuildingDone",
             tostring(#plan.connected), tostring(plan.cost))
+        tone = "good"
     end
-    if HaloTextHelper then
-        HaloTextHelper.addText(playerObj, text)
-    end
+    halo(playerObj, text, tone)
 
     Logger.log(string.format(
         "Building plumbing finished: %d fixture(s) reached, %d connected, %d tile(s) of pipe, %d skipped",
@@ -1193,9 +1214,7 @@ function ContextMenu.plumbBuilding(playerObj, square)
 
     local probe = BuildingPlumbing.probeAt(square)
     if not probe then
-        if HaloTextHelper then
-            HaloTextHelper.addText(playerObj, getText("IGUI_WaterPipesPlumbBuildingNoBuilding"))
-        end
+        halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingNoBuilding"), "bad")
         return
     end
 
@@ -1204,10 +1223,11 @@ function ContextMenu.plumbBuilding(playerObj, square)
 
     if #plan.placements == 0 then
         -- Either everything is already piped (the idempotent re-run) or nothing can be reached.
-        if HaloTextHelper then
-            HaloTextHelper.addText(playerObj, #plan.connected > 0
-                and getText("IGUI_WaterPipesPlumbBuildingNothingToDo")
-                or getText("IGUI_WaterPipesPlumbBuildingNoFixtures"))
+        if #plan.connected > 0 then
+            -- Already plumbed: nothing happened, and nothing is wrong either.
+            halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingNothingToDo"))
+        else
+            halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingNoFixtures"), "bad")
         end
         return
     end
@@ -1215,10 +1235,8 @@ function ContextMenu.plumbBuilding(playerObj, square)
     local needed = ISPlumbBuilding.pipesFor(plan.cost)
     local held = ISPlumbBuilding.countPipes(playerObj:getInventory())
     if held < needed then
-        if HaloTextHelper then
-            HaloTextHelper.addText(playerObj,
-                getText("IGUI_WaterPipesPlumbBuildingNeedPipes", tostring(needed), tostring(held)))
-        end
+        halo(playerObj,
+            getText("IGUI_WaterPipesPlumbBuildingNeedPipes", tostring(needed), tostring(held)), "bad")
         return
     end
 
