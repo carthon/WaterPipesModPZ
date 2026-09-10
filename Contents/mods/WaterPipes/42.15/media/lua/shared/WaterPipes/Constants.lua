@@ -14,7 +14,10 @@ Constants.REDISTRIBUTION_INTERVAL_MINUTES = 10
 Constants.PIPE_OBJECT_NAME = "Water Pipe"
 Constants.PIPE_BUILD_ENTITY_NAME = "WaterPipe"
 Constants.PIPE_BUILD_ENTITY_FULL_NAME = "WaterPipes.WaterPipe"
-Constants.PIPE_ITEM_TYPE = "Base.Pipe"
+-- The item a pipe is BUILT FROM. It said Base.Pipe for a long time and nothing ever read it, so the
+-- lie went unnoticed until the building generator counted the player's stock with it and found none:
+-- every recipe in this mod consumes Base.MetalPipe (or Base.ClayPipeSegment).
+Constants.PIPE_ITEM_TYPE = "Base.MetalPipe"
 Constants.PIPE_TOOL_TYPE = "Base.PipeWrench"
 Constants.PIPE_MODDATA_KEY = "waterpipesPipe"
 Constants.PIPE_SURFACE_MODDATA_KEY = "waterpipesSurface"

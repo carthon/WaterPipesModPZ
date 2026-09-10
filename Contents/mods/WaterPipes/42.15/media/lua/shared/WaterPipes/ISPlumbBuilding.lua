@@ -38,6 +38,11 @@ function ISPlumbBuilding.pipesFor(tiles)
     return math.ceil((tiles or 0) * ISPlumbBuilding.costPerTile() - 0.000001)
 end
 
+-- METAL ONLY, deliberately -- the hand-build recipes also take a clay segment, this does not.
+-- A generated pipe is stamped metal and so pays a metal pipe back at 90%% when it is dismantled. Let
+-- the pass be paid for in clay, which is spent for good the moment it is laid, and plumbing a house
+-- and stripping it would turn clay into metal. The per-tile cost only balances while both sides
+-- measure the same thing.
 function ISPlumbBuilding.countPipes(inventory)
     if not inventory or not inventory.getCountTypeRecurse then
         return 0
