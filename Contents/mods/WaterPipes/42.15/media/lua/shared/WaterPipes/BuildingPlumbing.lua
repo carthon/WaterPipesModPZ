@@ -5,10 +5,13 @@ require "WaterPipes/Constants"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/EndpointObjects"
 require "WaterPipes/World"
+require "WaterPipes/Logger"
+require "WaterPipes/State"
 
 local Constants = WaterPipes.Constants
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local EndpointObjects = WaterPipes.EndpointObjects
+local Logger = WaterPipes.Logger
 local BuildingPlumbing = WaterPipes.BuildingPlumbing
 
 -- Plans the concealed pipe tree that connects a building's fixtures to one root tile.
@@ -296,39 +299,25 @@ local function squareHasFloorPipe(square)
     return false
 end
 
--- Can a floor pipe stand here? The same questions the engine's own build validity asks
--- (ISBuildIsoEntity): a floor to stand on, and nothing solid or placement-blocking in the way. A tile
--- that already carries a pipe still passes -- the plan reuses it.
+-- Can a floor pipe stand here? A floor to stand on, and that is the whole rule.
+--
+-- It is NOT "nothing solid or placement-blocking in the way", which is what this asked at first and
+-- what broke it. The engine's own check (ISBuildIsoEntity.lua:335) rejects a blocked square only when
+-- the thing being PLACED is itself solidtrans or BlocksPlacement:
+--
+--     if (square blocks) and (tileInfoSpriteProps:has(solidtrans) or has("BlocksPlacement")) then
+--
+-- A floor pipe is neither, so a blocked square is irrelevant to it -- and the mod's own validity says
+-- the same: Build.floorOnIsValid asks only whether a floor pipe is already there. Taking the left half
+-- of that condition and dropping the right rejected exactly the tiles that matter most: a sink's own
+-- tile, which is where the player clicks AND where the mod requires a pipe before a fixture can be
+-- plumbed at all.
 local function canHoldPipe(square)
-    if not square.hasFloor then
+    if not square or not square.hasFloor then
         return false
     end
     local okFloor, floored = pcall(square.hasFloor, square)
-    if not okFloor or not floored then
-        return false
-    end
-    if square.isSolid then
-        local ok, solid = pcall(square.isSolid, square)
-        if ok and solid then
-            return false
-        end
-    end
-    if square.isSolidTrans then
-        local ok, solid = pcall(square.isSolidTrans, square)
-        if ok and solid then
-            return false
-        end
-    end
-    if IsoPropertyType and IsoPropertyType.BLOCKS_PLACEMENT and square.getProperties then
-        local props = square:getProperties()
-        if props and props.has then
-            local ok, blocked = pcall(props.has, props, IsoPropertyType.BLOCKS_PLACEMENT)
-            if ok and blocked then
-                return false
-            end
-        end
-    end
-    return true
+    return okFloor and floored or false
 end
 
 -- Read the building ONCE, by flooding out from the clicked tile over squares belonging to the same
@@ -343,6 +332,10 @@ function BuildingPlumbing.probeAt(originSquare, radius)
     end
     local okBuilding, building = pcall(originSquare.getBuilding, originSquare)
     if not okBuilding or not building then
+        -- Silence here is what left a player with an empty log and a refusal they could not explain.
+        Logger.warn(string.format("Building plumbing: no building at %d:%d:%d (getBuilding %s)",
+            originSquare:getX(), originSquare:getY(), originSquare:getZ(),
+            okBuilding and "returned nil" or "threw"))
         return nil
     end
 
@@ -414,8 +407,16 @@ function BuildingPlumbing.probeAt(originSquare, radius)
 
     -- The origin has to be usable itself, or there is nothing to root the tree on.
     if not canHoldPipe(originSquare) then
+        Logger.warn(string.format(
+            "Building plumbing: %d:%d:%d is in a building but cannot take a pipe (no floor).",
+            ox, oy, originSquare:getZ()))
         return nil
     end
+
+    local tileCount = 0
+    for _ in pairs(tiles) do tileCount = tileCount + 1 end
+    Logger.log(string.format("Building plumbing scan at %d:%d:%d -> %d tile(s), %d fixture(s)",
+        ox, oy, originSquare:getZ(), tileCount, #fixtures))
 
     return {
         isBuildingTile = function(x, y, z) return tiles[keyOf(x, y, z)] == true end,
