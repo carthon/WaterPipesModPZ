@@ -131,16 +131,25 @@ function ISPlumbBuilding:start()
     self.sound = self.character:playSound("RepairWithWrench")
 end
 
+-- Settle the network, then connect what the pass reached. In that order, always: plumbing reads the
+-- network, and until finish() has rebuilt it the new pipes do not exist as far as a fixture is
+-- concerned.
+function ISPlumbBuilding:settle()
+    BuildingPlumbing.finish(self.laid, self.character)
+    self.plumbed = BuildingPlumbing.plumbFixtures(self.plan, self.character)
+end
+
 function ISPlumbBuilding:stop()
     self.character:stopOrTriggerSound(self.sound)
-    -- Whatever went in is a connected tree, so it is owed the same settling as a completed pass.
-    BuildingPlumbing.finish(self.laid, self.character)
+    -- Whatever went in is a connected tree, so it is owed the same settling as a completed pass --
+    -- including the fixtures it did reach.
+    self:settle()
     ISBaseTimedAction.stop(self)
 end
 
 function ISPlumbBuilding:perform()
     self.character:stopOrTriggerSound(self.sound)
-    BuildingPlumbing.finish(self.laid, self.character)
+    self:settle()
     if self.onFinished then
         self.onFinished(self)
     end
@@ -156,6 +165,7 @@ function ISPlumbBuilding:new(character, plan, onFinished)
     o.laid = {}
     o.debt = 0
     o.failed = 0
+    o.plumbed = 0
     o.outOfPipes = false
     o.reportedReasons = {}
     o.stopOnWalk = true

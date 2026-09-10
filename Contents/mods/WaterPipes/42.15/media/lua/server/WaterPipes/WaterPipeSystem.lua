@@ -1711,6 +1711,25 @@ local function onClientCommand(module, command, player, args)
         return
     end
 
+    -- Every endpoint on one square, for the building pass. Distinct from plumbEndpoint above, which
+    -- takes the FIRST endpoint it finds: a tile carrying both a sink and a washer would leave one of
+    -- them behind, and the generator connects what it reached rather than one of what it reached.
+    if command == "plumbEndpointsOnSquare" then
+        local square = resolveCommandSquare(args)
+        local endpoints = square and EndpointObjects.collectOnSquare(square) or {}
+        if #endpoints == 0 then
+            Logger.warn("Plumb endpoints command: none at "
+                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
+            return
+        end
+        for _, endpoint in ipairs(endpoints) do
+            if not EndpointPlumbing.isPlumbed(endpoint) then
+                EndpointPlumbing.plumb(endpoint)
+            end
+        end
+        return
+    end
+
     -- Generator plumb/unplumb runs authoritatively on the server as well.
     if command == "plumbGenerator" or command == "unplumbGenerator" then
         local square = resolveCommandSquare(args)

@@ -1169,6 +1169,10 @@ local function reportPlumbing(playerObj, plan, action)
         HaloTextHelper.addText(playerObj, text)
     end
 
+    Logger.log(string.format(
+        "Building plumbing finished: %d fixture(s) reached, %d connected, %d tile(s) of pipe, %d skipped",
+        #plan.connected, action and action.plumbed or 0, plan.cost, skipped))
+
     -- The detail goes to console.txt: which fixture, where, and why. A halo line cannot carry it, and
     -- "some of them" is not an answer the player can act on.
     for _, entry in ipairs(plan.skipped) do

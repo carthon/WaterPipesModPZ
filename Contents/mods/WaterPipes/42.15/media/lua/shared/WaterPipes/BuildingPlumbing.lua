@@ -7,6 +7,7 @@ require "WaterPipes/EndpointObjects"
 require "WaterPipes/World"
 require "WaterPipes/Logger"
 require "WaterPipes/State"
+require "WaterPipes/EndpointPlumbing"
 
 local Constants = WaterPipes.Constants
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
@@ -556,6 +557,57 @@ function BuildingPlumbing.finish(placements, player)
             PipeAutotile.refreshAround(placement.x, placement.y, placement.z)
         end
     end
+end
+
+-- Connect the fixtures the pass reached.
+--
+-- Laying pipe to a sink is not the same as plumbing it: the pipe is on its tile, but the fixture still
+-- draws from vanilla's own water until EndpointPlumbing.plumb swaps it over. Doing that by hand for
+-- every sink in the house right after asking for the house to be plumbed is busywork with no decision
+-- in it, so the pass finishes the job.
+--
+-- MUST run after BuildingPlumbing.finish: plumbing reads the network, and until the rebuild the
+-- network does not know the new pipes exist.
+--
+-- Per SQUARE rather than per fixture, and every endpoint on it: that is what the server command can
+-- address, so single-player and multiplayer connect exactly the same set.
+function BuildingPlumbing.plumbFixtures(plan, player)
+    local EndpointPlumbing = WaterPipes.EndpointPlumbing
+    local EndpointObjectsModule = WaterPipes.EndpointObjects
+    if not EndpointPlumbing or not EndpointObjectsModule then
+        return 0
+    end
+
+    local seen = {}
+    local plumbed = 0
+
+    for _, fixture in ipairs(plan and plan.connected or {}) do
+        local key = keyOf(fixture.x, fixture.y, fixture.z)
+        if not seen[key] then
+            seen[key] = true
+            local square = squareAt(fixture.x, fixture.y, fixture.z)
+            -- A pass that ran out of pipe partway can have "connected" a fixture in the plan whose
+            -- branch never reached the floor. No pipe on its tile, nothing to plumb.
+            if square and PipeObjectUtils.getPipeOnSquare(square) then
+                if isClient and isClient() then
+                    if player then
+                        sendClientCommand(player, "WaterPipes", "plumbEndpointsOnSquare",
+                            { x = fixture.x, y = fixture.y, z = fixture.z })
+                        plumbed = plumbed + 1
+                    end
+                else
+                    for _, endpointObject in ipairs(EndpointObjectsModule.collectOnSquare(square)) do
+                        if not EndpointPlumbing.isPlumbed(endpointObject) then
+                            EndpointPlumbing.plumb(endpointObject)
+                            plumbed = plumbed + 1
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return plumbed
 end
 
 BuildingPlumbing.FLOOR = FLOOR
