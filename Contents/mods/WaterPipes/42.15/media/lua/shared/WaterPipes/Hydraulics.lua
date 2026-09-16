@@ -396,21 +396,19 @@ local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets, regi
     -- buffer -- a purifier with no barrel behind it, which is how most people first build one -- could
     -- take dirty water in and let nobody draw the clean water out. The comment on the settle even
     -- promised the opposite: "with no barrels it is a no-op and a tap can still reach it".
-    -- Boostable for the same reason a vessel is: a pump lifts stored water.
-    --
-    -- The head it supplies is NOT a flat container base. It was, and that was the whole of the clean
-    -- side's pressure however hard the dirty side pushed -- so a purified line ran at sqrt(1/3) = 58 %
-    -- of rate off town mains, and a sprinkler behind a purifier could never be fed at all. A purifier
-    -- cannot carry head the way a pipe does (it is two tanks with a filter between them), but neither is
-    -- it a barrel that has forgotten where its water came from: Purifier.outletHead passes a fixed share
-    -- of the inlet, floored at the container base so an inlet that has run dry costs the clean side its
-    -- boost and not its supply.
+    -- Same base head as a vessel, and boostable for the same reason: a pump lifts stored water.
+    -- The share passed through from the dirty side is a separate floor, applied after the pumps.
+    local passedFloor = {}
     for _, outlet in pairs(purifierOutlets or {}) do
         local node = outlet.nodeKey and nodes[outlet.nodeKey]
         if node and Purifier and Purifier.getOutAmount
             and (Purifier.getOutAmount(outlet.purifier) or 0) > 0 then
-            local outletHead = Purifier.outletHead and Purifier.outletHead(outlet.purifier) or containerBase
-            raise(outlet.nodeKey, elevation(node.z) + outletHead, true)
+            raise(outlet.nodeKey, elevation(node.z) + containerBase, true)
+            local passed = Purifier.passedHead and Purifier.passedHead(outlet.purifier) or 0
+            if passed > 0 then
+                passedFloor[outlet.nodeKey] = math.max(passedFloor[outlet.nodeKey] or 0,
+                    elevation(node.z) + passed)
+            end
         end
     end
 
@@ -485,6 +483,14 @@ local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets, regi
             if boost and boost > 0 then
                 supply[key] = supply[key] + boost
             end
+        end
+    end
+
+    -- Never lifted by a pump: head that came through a purifier is a floor, like the mains. Lifting it
+    -- lets a bypass around the purifier feed its own output back in and climb without bound.
+    for key, floor in pairs(passedFloor) do
+        if floor > supply[key] then
+            supply[key] = floor
         end
     end
 

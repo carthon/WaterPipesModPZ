@@ -212,17 +212,12 @@ function Purifier.setInletHead(worldObject, head)
     return true
 end
 
--- Head the CLEAN side is supplied at, relative to the outlet's own floor.
--- Never below a container's base: the OUT buffer is a tank holding water whatever the dirty side is
--- doing, so an inlet that has run dry costs the clean side its boost, not its supply. That floor is also
--- what makes this change unable to regress a save -- it is exactly the head the clean side had before.
-function Purifier.outletHead(worldObject)
-    local base = Pressure.containerBase()
+-- Head passed through to the clean side (m.c.a.). Hydraulics uses it as a floor, never as a base to pump.
+function Purifier.passedHead(worldObject)
     if not Pressure.isEnabled() then
-        return base
+        return 0
     end
-    local passed = Purifier.getInletHead(worldObject) * Pressure.purifierHeadTransfer()
-    return math.max(base, passed)
+    return Purifier.getInletHead(worldObject) * Pressure.purifierHeadTransfer()
 end
 
 function Purifier.isProcessing(worldObject)
