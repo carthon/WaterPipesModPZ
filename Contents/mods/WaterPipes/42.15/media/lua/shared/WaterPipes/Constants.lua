@@ -353,11 +353,6 @@ Constants.MAX_FINITE_FLUID_CAPACITY = 9999
 -- Solved by the demand-aware head field in Hydraulics; see the block below.
 Constants.PRESSURE_PER_LEVEL = 3.0          -- a PZ floor is ~2.4-3 m tall; 1 m of water = 0.098 bar
 Constants.CONTAINER_BASE_PRESSURE = 1.0     -- a full ~1 m tall barrel pushes 1 m.c.a. at its base
--- Calibration only, read by no code: HYDRAULIC_FRICTION_K below is derived from these.
--- The live dial is PressureFrictionScale.
-Constants.PRESSURE_FRICTION_DRIP = 0.02     -- trickle flow
-Constants.PRESSURE_FRICTION_TAP = 0.05      -- taps, generators: low flow
-Constants.PRESSURE_FRICTION_SPRINKLER = 0.2 -- wide-open flow through scavenged pipe
 -- Minimum pressure a consumer needs to draw at all.
 Constants.PRESSURE_MIN_TAP = 0.0
 Constants.PRESSURE_MIN_DRIP = 0.0
@@ -372,10 +367,8 @@ Constants.PRESSURE_MODEL_SIMPLE = 2         -- height only: no distance loss
 Constants.PRESSURE_MODEL_OFF = 3            -- pre-pressure behaviour: pure gravity reachability
 
 -- ===== Hydraulic solver (demand-aware head field) =====
--- The block above prices a run as friction(kind) * hops, where `kind` is the CONSUMER'S OWN flow rate.
--- That is right for one consumer and wrong for a field: thirty sprinklers each computed their loss as
--- if they were alone on the line. The pipe cares how many litres an hour go through it, not who is
--- asking, so the loss belongs to the EDGE.
+-- Loss belongs to the EDGE: it is priced from the litres per hour crossing it, so consumers sharing a
+-- line share its loss.
 --
 --     H[node]                              -- total head at a node, m.c.a. above the z=0 datum
 --     H[source] = PRESSURE_PER_LEVEL * z + CONTAINER_BASE_PRESSURE
@@ -385,19 +378,14 @@ Constants.PRESSURE_MODEL_OFF = 3            -- pre-pressure behaviour: pure grav
 -- Elevation drops out of the loss term entirely (it lives in the datum), which is what lets one forward
 -- sweep price height, distance, pumps and regulators in a single pass.
 --
--- CALIBRATION. Q is litres per in-game hour, and K is read back out of the friction constants above
--- rather than invented: a sprinkler draws 1.8 L/h and was priced at 0.2/tile, a drip draws 0.2 L/h at
--- 0.02/tile -- 0.111 and 0.100, so the old table was already almost exactly LINEAR in flow. K = 0.111
--- with exponent 1 reproduces both to within 11%, and the promise that buys is worth stating: A NETWORK
--- WITH ONE EMITTER BEHAVES EXACTLY AS IT DID BEFORE. What changed is that the thirty-first sprinkler
--- now costs the thirty before it something.
+-- CALIBRATION. Q is litres per in-game hour. Per-tile loss targets: sprinkler 1.8 L/h -> 0.2, drip
+-- 0.2 L/h -> 0.02, tap 0.45 L/h -> 0.05. K = 0.111 with exponent 1 matches all three within 11 %.
 Constants.HYDRAULIC_FRICTION_K = 0.111      -- m.c.a. lost per tile, per litre/hour through it
--- Real pipe loss is superlinear (Hazen-Williams uses 1.85, Darcy-Weisbach 2). Left at 1 because that
--- is what the constants it replaces actually encode, and because raising it makes a shared line
--- collapse far faster than it makes it realistic. Exposed so a save can ask for the harsher curve.
+-- Real pipe loss is superlinear (Hazen-Williams 1.85, Darcy-Weisbach 2). Left at 1 to match the
+-- calibration above; raising it collapses a shared line far faster than it adds realism.
 Constants.HYDRAULIC_FRICTION_EXPONENT = 1.0
 -- Nominal flow for a consumer with no rate of its own (taps, generators, the router's own transfers).
--- Back-derived the same way: PRESSURE_FRICTION_TAP / HYDRAULIC_FRICTION_K = 0.05 / 0.111.
+-- Chosen so a tap loses the calibrated 0.05 per tile: 0.05 / HYDRAULIC_FRICTION_K.
 Constants.HYDRAULIC_TAP_FLOW = 0.45         -- litres per in-game hour
 
 -- Head at which a pressure-throttled transfer runs at its FULL rate; below it the rate falls off as
