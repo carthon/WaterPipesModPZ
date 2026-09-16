@@ -348,8 +348,12 @@ local function classifySites(nodes, order)
     return sites
 end
 
-local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets)
+local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets, regions)
     local supply = {}        -- key -> head at that node (m.c.a., absolute)
+    -- Which side of a regulator a node is on, and the pumping standing on each side. A zone with no
+    -- regulator in it is one region, which is the old arithmetic exactly.
+    local function regionOf(key) return (regions and regions[key]) or 1 end
+    local pumpHeadInRegion = {}
     local boostable = {}     -- key -> true when a pump may lift this supply (see the end of the pass)
     local demand = {}        -- key -> litres/hour drawn there
     local kinds = {}         -- key -> the consumer kind occupying it
@@ -446,7 +450,12 @@ local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets)
                 stats.poweredPumps = stats.poweredPumps + 1
                 pumps[key] = pumps[key] or {}
                 pumps[key][#pumps[key] + 1] = pump
-                stats.pumpHead = stats.pumpHead + Pump.headForPumps({ pump })
+                -- Zone total, for the readout. What actually lifts a vessel is the per-REGION figure:
+                -- a pump does not push past a regulator, and a supply term is never capped.
+                local head = Pump.headForPumps({ pump })
+                stats.pumpHead = stats.pumpHead + head
+                local side = regionOf(key)
+                pumpHeadInRegion[side] = (pumpHeadInRegion[side] or 0) + head
                 if Pump.findSource and Pump.findSource(pump) then
                     raise(key, elevation(node.z) + containerBase, true)
                 end
@@ -472,7 +481,10 @@ local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets)
     -- stacks onto.
     if stats.pumpHead > 0 then
         for key in pairs(boostable) do
-            supply[key] = supply[key] + stats.pumpHead
+            local boost = pumpHeadInRegion[regionOf(key)]
+            if boost and boost > 0 then
+                supply[key] = supply[key] + boost
+            end
         end
     end
 
@@ -491,6 +503,10 @@ local function orderBySupply(nodes, adjacency, routers, supply, adjacencyOrder)
     local sequence = {}
 
     -- Router crossings are directed edges: water leaves by the OUT side. Indexed by the downstream node.
+    -- STRICTLY directional, and it has to stay that way: drawReachableFrom reads this same table as "who
+    -- may reach through to whom", so an entry pointing the other way is a one-way valve that conducts
+    -- backwards. The head cap needs both directions, and gets them by looking this table up the other way
+    -- round rather than by growing a second meaning here (see propagate).
     local viaRouter = {}
     -- ...and the same edges from the UPSTREAM side, for the walk below. Built here rather than scanned
     -- per node: the walk used to look at every router in the zone for each of its nodes. Sorted for the
@@ -643,6 +659,71 @@ local function buildFeeders(nodes, adjacency, routers)
     return feeders
 end
 
+-- Which side of a REGULATOR each node sits on.
+-- A router with a ceiling set is a pressure-reducing valve, and the one thing a player buys with it is
+-- that pressure behind it does not turn up in front of it. That has to be enforced on the PUMP term and
+-- not only on the edge: pumps enter the field as a property of the SUPPLY (see the note where they are
+-- applied), and a supply value is never capped by anything. So a pump anywhere in the zone lifted every
+-- vessel in the zone, including the ones the valve existed to protect -- measured at 26 m.c.a. sitting
+-- behind a ceiling of 5, with the pump on the far side of it.
+--
+-- A router WITHOUT a ceiling is transparent and joins its two ends: it is an edge, not a boundary, and
+-- splitting on it would strand a pump from the run it is actually pressurising.
+--
+-- Structural, so it belongs to the topology: the ceiling is captured into `routers` at discovery, and
+-- setting one drops the topology with the walks.
+local function partitionByRegulators(nodes, order, adjacency, routers, adjacencyOrder)
+    local region = {}
+
+    -- Transparent router edges, as extra adjacency. Sorted for the reason the walk in orderBySupply is:
+    -- nothing here may depend on Lua's per-process string hashing.
+    local joins = {}
+    local function join(a, b)
+        joins[a] = joins[a] or {}
+        joins[a][#joins[a] + 1] = b
+    end
+    for _, router in pairs(routers or {}) do
+        if not router.ceiling then
+            join(router.inKey, router.outKey)
+            join(router.outKey, router.inKey)
+        end
+    end
+    for _, list in pairs(joins) do
+        table.sort(list)
+    end
+
+    local count = 0
+    for _, seed in ipairs(order) do
+        if not region[seed] then
+            count = count + 1
+            region[seed] = count
+            local queue = { seed }
+            local index = 1
+            while index <= #queue do
+                local key = queue[index]
+                index = index + 1
+
+                local function step(neighbourKey)
+                    if nodes[neighbourKey] and not region[neighbourKey] then
+                        region[neighbourKey] = count
+                        queue[#queue + 1] = neighbourKey
+                    end
+                end
+
+                local neighbours = adjacencyOrder and adjacencyOrder[key]
+                if neighbours then
+                    for _, neighbourKey in ipairs(neighbours) do step(neighbourKey) end
+                else
+                    for neighbourKey in pairs(adjacency[key] or {}) do step(neighbourKey) end
+                end
+                for _, neighbourKey in ipairs(joins[key] or {}) do step(neighbourKey) end
+            end
+        end
+    end
+
+    return region
+end
+
 -- ===== Phase 5: propagate head away from the supply =====
 -- RELAXATION, not a topological sweep. The BFS seeds EVERY supplied node at depth 0, so a barrel on the
 -- line has no parents -- and a sweep that only takes head from a node's parents pinned each barrel to
@@ -704,7 +785,14 @@ local function propagate(nodes, sequence, parents, feeders, supply, flow, peak, 
                     -- A regulator on this edge fixes the head at ITS OUTLET; past it the water keeps paying friction and
                     -- height like any other run. The cap is a constant of the edge, so the elevation() behind it -- which
                     -- reads a sandbox value -- is computed once, not per pass.
-                    local router = routersHere and routersHere[list[order]]
+                    -- Both ends of the edge. A regulator caps head crossing it in EITHER direction:
+                    -- the relaxation takes head from feeders both ways (buildFeeders links both), and
+                    -- capping only the forward one let a pump past the valve re-pressurise the run in
+                    -- front of it -- 26 m.c.a. upstream of a ceiling of 5. viaRouter is keyed by the
+                    -- downstream node, so the reverse lookup is the same table read the other way round.
+                    local feederKey = list[order]
+                    local router = (routersHere and routersHere[feederKey])
+                        or ((viaRouter[feederKey] or {})[key])
                     if router and router.ceiling then
                         caps = caps or {}
                         caps[#mapped] = elevation(router.z) + router.ceiling
@@ -848,6 +936,9 @@ local function discoverTopology(seedSquare)
         return nil
     end
 
+    -- Each node's neighbours in a fixed order. Hoisted out of the table below, which now needs it twice.
+    local adjacencyOrder = sortedAdjacency(nodes, adjacency)
+
     -- Every node that can hand head to another. Derived from the adjacency and the routers, so it belongs
     -- to the topology rather than to the solve that reads it.
     return {
@@ -861,7 +952,10 @@ local function discoverTopology(seedSquare)
         -- reason: a re-pricing must not pay to rediscover the shape. Built here, the walk's determinism
         -- costs the discovery once instead of every solve -- measured at +17 % on a re-price when it was
         -- sorted per solve, which is the common path.
-        adjacencyOrder = sortedAdjacency(nodes, adjacency),
+        adjacencyOrder = adjacencyOrder,
+        -- Which side of a regulator each node is on. Structural like the rest of this table, and built
+        -- from the order above so it cannot depend on hash iteration.
+        regions = partitionByRegulators(nodes, order, adjacency, routers, adjacencyOrder),
         -- Where the vessels, inlets, pumps and emitters stand. Structural, so it belongs here rather than being
         -- rediscovered by every re-pricing.
         sites = classifySites(nodes, order),
@@ -926,7 +1020,7 @@ local function solveWithTopology(topology, zoneKey)
 
     local mark = markPhase()
     local supply, demand, kinds, pumps, sources, supplyFloor, stats =
-        collectSupplyAndDemand(nodes, order, topology.sites, purifierOutlets)
+        collectSupplyAndDemand(nodes, order, topology.sites, purifierOutlets, topology.regions)
     sincePhase("solve/supply", mark)
 
     mark = markPhase()
