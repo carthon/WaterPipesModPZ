@@ -106,8 +106,14 @@ end
 -- A router already stops pressure crossing it, which makes it the one place a player can put a ceiling
 -- on a zone. The setting is the head AT THE VALVE OUTLET; from there the water loses head over distance
 -- and height like any other run, so a branch does not sit at the setting all the way to its far end.
--- It can only ever REDUCE, and pumps BEHIND the valve stay behind it while one in front re-pressurises
--- its own branch. The arithmetic is Pressure.atRegulator; this module only stores the number.
+-- It can only ever REDUCE. The arithmetic is the head field's: Hydraulics treats the crossing as an
+-- edge with a cap of elevation(z) + ceiling, and this module only stores the number.
+--
+-- KNOWN LIMIT, so nobody reads a promise into the setting that it does not keep: the cap is applied to
+-- head ARRIVING over the IN->OUT edge and to nothing else. Head that ORIGINATES past the valve ignores
+-- it -- and a powered pump is a zone-wide supply term in that solver, so one standing on the IN side
+-- still lifts vessels on the OUT side. A bare router does not split a zone. Fixing it means splitting
+-- the pump term by side of the valve, which is a change to the field and not to this file.
 
 function Router.getPressureCeiling(worldObject)
     local modData = getModData(worldObject)
@@ -133,10 +139,8 @@ function Router.setPressureCeiling(worldObject, value)
         pcall(worldObject.transmitModData, worldObject)
     end
 
-    -- The ceiling is baked into the regulator chains the network walk builds, so a cached walk still
-    -- prices the old setting. Resolved off the WaterPipes table rather than required at the top:
-    -- NetworkAccess already requires this module, and closing that loop is a recursive require.
-    local NetworkAccess = WaterPipes.NetworkAccess
+    -- The walks are cached and the head field rides on them, so a cached one would still price the old
+    -- setting.
     Invalidate.flowPathChanged()
 end
 

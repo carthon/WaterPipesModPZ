@@ -135,20 +135,13 @@ end
 -- verticalMode gates riser links: "both" (topology), "up" (sources that drain down to origin),
 -- "down" (where water introduced at origin would fall). Horizontal links always conduct both ways.
 
--- A regulator chain node is one router crossing; `parent` walks back toward the consumer. A node also
--- owns the pumps on the squares it covers, which is what keeps a pump from pushing past a valve.
-local function newChain(parent, ceiling, hops, z)
-    return { parent = parent, ceiling = ceiling, hops = hops, z = z, pumps = {}, supplyHead = 0 }
-end
-
-
 -- Returns (pipeSquares, hopsByKey, zone). hopsByKey is the min hop count from originSquare to each
--- pipe square, which is all the pressure model needs: loss is friction * hops.
+-- pipe square, which is what orders a draw: nearest vessel first.
 -- `zone` carries the powered pumps and bounding routers, gathered as the walk goes.
 -- `conduct` ("draw" or "fill") lets the walk cross bare routers; nil keeps every router a wall.
 local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
     if not originSquare then
-        return {}, {}, { pumps = {}, mains = {} }, {}
+        return {}, {}, { pumps = {}, mains = {} }
     end
 
     -- A closed valve is a wall even when it is the square the question is ASKED from, and that has to
@@ -157,7 +150,7 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
     -- over it. That is exactly what a router did: it asks availableToPush(outSquare), outSquare is the
     -- valve's own tile, and it kept pouring into the tank behind a shut valve.
     if Valve.isClosedOnSquare(originSquare) then
-        return {}, {}, { pumps = {}, mains = {}, hydrants = {}, purifierOutlets = {}, supplyHead = 0 }, {}
+        return {}, {}, { pumps = {}, mains = {}, hydrants = {}, purifierOutlets = {}, supplyHead = 0 }
     end
 
     verticalMode = verticalMode or "both"
@@ -165,18 +158,15 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
     local visited = {}
     local queue = {}
     local hops = {}
-    local chains = {}   -- regulator chain each square was reached through (see newChain)
     local pipeSquares = {}
-    local rootChain = newChain(nil, nil, 0, originSquare:getZ())
     -- purifierOutlets: purifiers whose CLEAN side empties into this network (see recordPurifierOutlet).
-    local zone = { pumps = {}, mains = {}, hydrants = {}, purifierOutlets = {},
-                   supplyHead = 0, rootChain = rootChain }
+    local zone = { pumps = {}, mains = {}, hydrants = {}, purifierOutlets = {}, supplyHead = 0 }
     -- Two tables, not one: a router is visited from each neighbour, but whether its outlet is recorded
     -- depends on which side we arrived from.
     local purifierAt = {}
     local outletSeen = {}
 
-    local function tryAdd(square, distance, chain)
+    local function tryAdd(square, distance)
         -- A closed shut-off valve is a wall, not a boundary to be crossed: unlike a router there is
         -- nothing on the far side a draw may reach through.
         if not square or not hasPipeOnSquare(square) or Router.hasRouterOnSquare(square)
@@ -191,20 +181,16 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
         local key = squareKey(square)
         queue[#queue + 1] = square
         hops[key] = distance
-        chains[key] = chain
         pipeSquares[#pipeSquares + 1] = square
 
         local pump = Pump.findOnSquare(square)
         if pump then
             zone.pumps[#zone.pumps + 1] = pump
-            chain.pumps[#chain.pumps + 1] = pump
         end
 
-        -- Municipal supplies floor the run at their pressure; a regulator holds them down like a pump.
+        -- Municipal supplies floor the run at their pressure, for the whole zone: a bare router does not
+        -- split one, and pricing the crossing is the head field's job in Hydraulics.
         local function addSupply(head)
-            if head > (chain.supplyHead or 0) then
-                chain.supplyHead = head
-            end
             if head > zone.supplyHead then
                 zone.supplyHead = head
             end
@@ -226,7 +212,7 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
     -- The purifier's OUT buffer is storage belonging to the network on its clean side. Recorded during
     -- the walk, the one place that has the router and its direction in hand. Topology only -- the amount
     -- is read fresh every query.
-    local function recordPurifierOutlet(routerSquare, fromX, fromY, fromZ, distance, chain)
+    local function recordPurifierOutlet(routerSquare, fromX, fromY, fromZ, distance)
         local key = squareKey(routerSquare)
         if outletSeen[key] then
             return
@@ -260,12 +246,11 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
             x = fromX, y = fromY, z = fromZ,
             -- The water lands on the square we came from, one hop closer to the consumer.
             hops = math.max((distance or 1) - 1, 0),
-            chain = chain,
         }
     end
 
-    local function tryCrossRouter(routerSquare, fromX, fromY, fromZ, distance, chain)
-        recordPurifierOutlet(routerSquare, fromX, fromY, fromZ, distance, chain)
+    local function tryCrossRouter(routerSquare, fromX, fromY, fromZ, distance)
+        recordPurifierOutlet(routerSquare, fromX, fromY, fromZ, distance)
 
         if not conduct or routerIsHardBoundary(routerSquare) then
             return
@@ -297,17 +282,13 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
             nextX, nextY = rx + out.dx, ry + out.dy
         end
 
-        local nextChain = chain
-        local ceilingHere = Router.getPressureCeiling(router)
-        if ceilingHere then
-            nextChain = newChain(chain, ceilingHere, distance, rz)
-        end
-
         -- +1 for the router tile itself, which sits in the run but is never a network square.
-        tryAdd(getCellSquare(nextX, nextY, rz), distance + 1, nextChain)
+        -- The router's pressure CEILING is not read here: this walk answers reachability, and the head
+        -- a regulated crossing lands at is solved by the field in Hydraulics.
+        tryAdd(getCellSquare(nextX, nextY, rz), distance + 1)
     end
 
-    local function visit(square, fromX, fromY, fromZ, distance, chain)
+    local function visit(square, fromX, fromY, fromZ, distance)
         if not square then
             return
         end
@@ -315,16 +296,16 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
             return
         end
         if Router.hasRouterOnSquare(square) then
-            tryCrossRouter(square, fromX, fromY, fromZ, distance, chain)
+            tryCrossRouter(square, fromX, fromY, fromZ, distance)
             return
         end
-        tryAdd(square, distance, chain)
+        tryAdd(square, distance)
     end
 
     -- Same-floor cardinal neighbours (both ways) + cross-floor riser neighbours filtered by gravity.
-    local function addNeighborsOf(x, y, z, distance, chain)
+    local function addNeighborsOf(x, y, z, distance)
         for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
-            visit(getCellSquare(x + offset.x, y + offset.y, z), x, y, z, distance, chain)
+            visit(getCellSquare(x + offset.x, y + offset.y, z), x, y, z, distance)
         end
         for _, coord in ipairs(PipeObjectUtils.getRiserVerticalNeighborCoords(x, y, z)) do
             local keep = true
@@ -334,29 +315,27 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
                 keep = coord.z < z
             end
             if keep then
-                visit(getCellSquare(coord.x, coord.y, coord.z), x, y, z, distance, chain)
+                visit(getCellSquare(coord.x, coord.y, coord.z), x, y, z, distance)
             end
         end
     end
 
     -- The origin is often a fixture with no pipe of its own, so its neighbours are seeded unconditionally.
-    tryAdd(originSquare, 0, rootChain)
-    addNeighborsOf(originSquare:getX(), originSquare:getY(), originSquare:getZ(), 1, rootChain)
+    tryAdd(originSquare, 0)
+    addNeighborsOf(originSquare:getX(), originSquare:getY(), originSquare:getZ(), 1)
 
     local index = 1
     while index <= #queue do
         local current = queue[index]
         index = index + 1
         local key = squareKey(current)
-        addNeighborsOf(current:getX(), current:getY(), current:getZ(),
-            (hops[key] or 0) + 1, chains[key])
+        addNeighborsOf(current:getX(), current:getY(), current:getZ(), (hops[key] or 0) + 1)
     end
 
-    return pipeSquares, hops, zone, chains
+    return pipeSquares, hops, zone
 end
 
--- Per-origin cache of walk TOPOLOGY only: which squares, how far, the regulator chains, the pumps
--- and inlets passed. The fluid is never cached, so a draw always sees real amounts.
+-- Per-origin cache of walk TOPOLOGY only: which squares, how far, and the pumps and inlets passed. The fluid is never cached, so a draw always sees real amounts.
 -- Keyed per origin because hop counts are measured FROM the consumer.
 local traversalCache = {}
 
@@ -493,18 +472,18 @@ end
 
 local function collectPipeSquaresCached(originSquare, verticalMode, conduct)
     if not originSquare then
-        return {}, {}, { pumps = {}, mains = {} }, {}
+        return {}, {}, { pumps = {}, mains = {} }
     end
 
     local key = traversalKey(originSquare, verticalMode, conduct)
     local hit = traversalCache[key]
     if hit then
         NetworkAccess.counters.hits = NetworkAccess.counters.hits + 1
-        return hit.pipeSquares, hit.hops, hit.zone, hit.chains, hit
+        return hit.pipeSquares, hit.hops, hit.zone, hit
     end
 
     NetworkAccess.counters.walks = NetworkAccess.counters.walks + 1
-    local pipeSquares, hops, zone, chains =
+    local pipeSquares, hops, zone =
         collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
 
     -- The halo: this walk's tiles plus their neighbours, precomputed so invalidation is one lookup.
@@ -535,13 +514,13 @@ local function collectPipeSquaresCached(originSquare, verticalMode, conduct)
     end
 
     local entry = {
-        pipeSquares = pipeSquares, hops = hops, zone = zone, chains = chains, halo = halo,
+        pipeSquares = pipeSquares, hops = hops, zone = zone, halo = halo,
         -- vessels: filled in on first use by vesselSquaresOfWalk. A visualization query wants the tile set
         -- and should not pay to classify every tile for containers it will not look at.
         vessels = nil,
     }
     traversalCache[key] = entry
-    return pipeSquares, hops, zone, chains, entry
+    return pipeSquares, hops, zone, entry
 end
 
 local function collectConnectedPipeSquares(endpointObject)
@@ -579,18 +558,16 @@ local function vesselSquaresOfWalk(entry, pipeSquares)
 end
 
 -- The original walk, kept for fills and visualization: they ask where water can GO from here.
-local function collectStorageDescriptorsByWalk(pipeSquares, hops, chains, entry)
+local function collectStorageDescriptorsByWalk(pipeSquares, hops, entry)
     local descriptors = {}
 
     -- A container counts only when it shares its tile with a pipe (same square), not by adjacency.
     for _, vessel in ipairs(vesselSquaresOfWalk(entry, pipeSquares)) do
         local key = vessel.key
-        -- How far this container sits from the origin, and the regulators standing between the two.
+        -- How far this container sits from the origin, which is what orders the draw.
         local distance = hops and hops[key] or 0
-        local chain = chains and chains[key] or nil
         for descriptorKey, descriptor in pairs(Adapter.collectSquareContainers(vessel.square)) do
             descriptor.pipeHops = distance
-            descriptor.pressureChain = chain
             descriptors[descriptorKey] = descriptor
         end
     end
@@ -606,7 +583,7 @@ end
 -- Safe to take by reference: only the hop counts are measured from the asking tile, and those are
 -- stamped onto the descriptors below, never onto this list.
 
-local function collectStorageDescriptors(pipeSquares, hops, chains, solution, entry)
+local function collectStorageDescriptors(pipeSquares, hops, solution, entry)
     local pooled = solution and Hydraulics.vesselSquares(solution) or nil
     if pooled then
         -- The amounts stay live, per emitter, on purpose: an earlier emitter's draw has to be visible to
@@ -620,10 +597,8 @@ local function collectStorageDescriptors(pipeSquares, hops, chains, solution, en
             -- impossible here (the old walk reached everything) and now carries that meaning.
             local distance = hops and hops[entry.key]
             if distance or not hops then
-                local chain = chains and chains[entry.key] or nil
                 for descriptorKey, descriptor in pairs(Adapter.collectSquareContainers(entry.square)) do
                     descriptor.pipeHops = distance or 0
-                    descriptor.pressureChain = chain
                     descriptors[descriptorKey] = descriptor
                 end
             end
@@ -631,7 +606,7 @@ local function collectStorageDescriptors(pipeSquares, hops, chains, solution, en
         return descriptors
     end
 
-    return collectStorageDescriptorsByWalk(pipeSquares, hops, chains, entry)
+    return collectStorageDescriptorsByWalk(pipeSquares, hops, entry)
 end
 
 
@@ -666,7 +641,6 @@ local function addPurifierOutletDescriptors(descriptorMap, zone)
             fluidMode = "purifierOut",
             object = outlet.purifier,
             pipeHops = outlet.hops,
-            pressureChain = outlet.chain,
         }
     end
 end
@@ -789,7 +763,7 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, st
 
     -- A DRAW query takes its topology from the hydraulic solve, shared by every consumer on the zone.
     -- Fills and visualization keep the per-origin walk: they ask where water can GO from here.
-    local pipeSquares, hops, zone, chains, walkEntry
+    local pipeSquares, hops, zone, walkEntry
     local solution = nil
     if kind and not fill then
         solution = Hydraulics.solveAt(originSquare)
@@ -799,7 +773,7 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, st
         pipeSquares, hops, zone = squaresFromSolution(solution, originSquare)
     else
         local mark = fill and markPhase() or nil
-        pipeSquares, hops, zone, chains, walkEntry =
+        pipeSquares, hops, zone, walkEntry =
             collectPipeSquaresCached(originSquare, verticalMode, conduct)
         sincePhase("fill/walk", mark)
     end
@@ -810,7 +784,7 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, st
     -- Split under the profiler so its cost can be located, not guessed at. The DRAW path was left
     -- untimed and that hid where a tap's summary spends its time -- 7.6 ms of it, once a minute.
     local descriptorMark = markPhase()
-    local descriptorMap = collectStorageDescriptors(pipeSquares, hops, chains, solution, walkEntry)
+    local descriptorMap = collectStorageDescriptors(pipeSquares, hops, solution, walkEntry)
     sincePhase(fill and "fill/descriptors" or "draw/descriptors", descriptorMark)
     addPurifierOutletDescriptors(descriptorMap, zone)
     local descriptors = normalizeDescriptorList(descriptorMap)

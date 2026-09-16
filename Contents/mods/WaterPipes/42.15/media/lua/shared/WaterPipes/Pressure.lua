@@ -7,11 +7,16 @@ local Constants = WaterPipes.Constants
 local Pressure = WaterPipes.Pressure
 
 -- Hydraulic head, in metres of water column (m.c.a.). See the pressure block in Constants.lua for
--- the model and why the unit is real. This module owns the arithmetic and the per-save tunables;
--- the traversal that supplies (z, hops) lives in NetworkAccess.
+-- the model and why the unit is real.
 --
--- Everything here is pure: no world access, no caching. NetworkAccess already re-floods the network
--- per query, and pressure rides along on that same BFS rather than adding a pass of its own.
+-- What this module owns is the per-save TUNABLES and the two pieces of arithmetic that are not a
+-- property of the network: the flow curve and the lift gate. Solving the head itself belongs to
+-- Hydraulics, which prices loss per EDGE from the litres actually crossing it -- this module used to
+-- carry a closed-form source-to-consumer model (`delivered` / `atRegulator` / `canReach`) beside it,
+-- and it was left standing, uncalled, when the field solver replaced it. Two models for one number is
+-- one too many, and the stale one was the one the surrounding comments described.
+--
+-- Everything here is pure: no world access, no caching.
 
 -- ===== Per-save tunables (Sandbox Options), all falling back to the constants =====
 
@@ -56,24 +61,6 @@ end
 
 function Pressure.containerBase()
     return sandboxTenths("PressureContainerBase", Constants.CONTAINER_BASE_PRESSURE)
-end
-
--- Friction per pipe tile for a given consumer kind, scaled by WaterPipes.PressureFrictionScale
--- (a percentage: 100 = default, 0 = distance never costs anything).
--- SIMPLE model = height only, so friction is zero whatever the scale says.
-function Pressure.frictionFor(kind)
-    if Pressure.model() == Constants.PRESSURE_MODEL_SIMPLE then
-        return 0
-    end
-
-    local base = Constants.PRESSURE_FRICTION_TAP
-    if kind == Constants.PRESSURE_KIND_DRIP then
-        base = Constants.PRESSURE_FRICTION_DRIP
-    elseif kind == Constants.PRESSURE_KIND_SPRINKLER then
-        base = Constants.PRESSURE_FRICTION_SPRINKLER
-    end
-
-    return base * sandboxPercent("PressureFrictionScale", 1)
 end
 
 -- Head at which a throttled transfer reaches its full rate.
@@ -140,45 +127,7 @@ function Pressure.suctionLimit()
     return sandboxTenths("PumpSuctionLimit", Constants.PUMP_SUCTION_LIMIT)
 end
 
--- ===== The model =====
-
--- Head delivered by a source sitting `hops` pipe tiles away at z = sourceZ, to a consumer at
--- z = consumerZ drawing at `kind`'s flow rate, with `pumpHead` m.c.a. of pumping in the zone.
--- Falling water gains head, climbing spends it, distance always costs, pumps add. May be negative,
--- which means the source cannot reach the consumer at all.
--- Pumps are counted PER ZONE, not per path: every powered pump between the same pair of routers lifts
--- the whole zone. Routers are already the only network boundary the mod has.
-function Pressure.delivered(sourceZ, consumerZ, hops, kind, pumpHead)
-    return Pressure.containerBase()
-        + Pressure.levelHead() * ((sourceZ or 0) - (consumerZ or 0))
-        - Pressure.frictionFor(kind) * math.max(hops or 0, 0)
-        + math.max(pumpHead or 0, 0)
-end
-
--- Head that a pressure-reducing valve set to `ceiling` lands with, `hops` tiles downstream of itself at
--- z = regulatorZ.
--- A regulator fixes the head at ITS OUTLET, not everywhere behind it: past the valve the water keeps
--- paying friction and height exactly as it does coming off a source, so the valve is priced as a fresh
--- source that happens to deliver `ceiling`. Capping the finished head instead made a whole regulated
--- branch sit at the setting no matter how long it was, which no real pipe does.
--- `pumpHead` is only the pumps BETWEEN the valve and the consumer. One upstream cannot push past it --
--- that is what a regulator is for -- but one downstream re-pressurises its own branch.
-function Pressure.atRegulator(ceiling, regulatorZ, consumerZ, hops, kind, pumpHead)
-    return (ceiling or 0)
-        + Pressure.levelHead() * ((regulatorZ or 0) - (consumerZ or 0))
-        - Pressure.frictionFor(kind) * math.max(hops or 0, 0)
-        + math.max(pumpHead or 0, 0)
-end
-
--- Can a source at (sourceZ, hops) drive a `kind` consumer at consumerZ?
--- With the model off every physically-connected source qualifies, which restores the behaviour from
--- before pressure existed.
-function Pressure.canReach(sourceZ, consumerZ, hops, kind, pumpHead)
-    if not Pressure.isEnabled() then
-        return true
-    end
-    return Pressure.delivered(sourceZ, consumerZ, hops, kind, pumpHead) >= Pressure.minimumFor(kind)
-end
+-- ===== The lift gate =====
 
 -- The FILL side: can fluid entering the network at originZ reach a container at targetZ? Only lift is
 -- priced, not distance -- filling is the network settling, not a consumer drawing.

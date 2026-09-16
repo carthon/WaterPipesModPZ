@@ -361,17 +361,17 @@ Constants.MAX_FINITE_FLUID_CAPACITY = 9999
 -- Municipal mains run 20-40, a garden sprinkler needs ~20, gravity drip works at 1-2. Keeping the unit
 -- real means every constant below can be sanity-checked against a plumbing table.
 --
---     P = CONTAINER_BASE_PRESSURE
---       + PRESSURE_PER_LEVEL * (z_source - z_consumer)     -- falling gains, climbing costs
---       - friction(consumer) * hops                        -- distance always costs
---
--- The elevation term telescopes, so the only path-dependent term is friction and minimising loss is
--- just minimising hops. This stops holding once pumps add head at a node; see the block below.
+-- HOW IT IS SOLVED: by the demand-aware head field in Hydraulics, described in the block below. There
+-- is no second model. There used to be -- a closed-form `P = base + level*dz - friction(kind)*hops`
+-- evaluated per source, which is where the three friction figures below come from -- and it survived,
+-- uncalled, for long enough that the comments around it were still describing a mod that no longer ran
+-- it. It is gone; what remains of it is the calibration.
 Constants.PRESSURE_PER_LEVEL = 3.0          -- a PZ floor is ~2.4-3 m tall; 1 m of water = 0.098 bar
 Constants.CONTAINER_BASE_PRESSURE = 1.0     -- a full ~1 m tall barrel pushes 1 m.c.a. at its base
--- Friction scales with flow squared (Darcy-Weisbach), so a barely-open tap loses far less head per
--- tile than a sprinkler running wide open. Modelling that is what keeps existing bases alive: a tap
--- reaches 20 tiles on the flat (1.0 / 0.05), where one flat rate would have cut it to 5.
+-- CALIBRATION, not configuration: no code reads these three. They are the per-tile loss the old
+-- closed-form model charged each consumer kind, and HYDRAULIC_FRICTION_K below was derived from them
+-- (see its own note) so that a network with one emitter kept behaving exactly as it had. Kept because
+-- deleting them would leave that derivation pointing at nothing; the live dial is PressureFrictionScale.
 Constants.PRESSURE_FRICTION_DRIP = 0.02     -- trickle flow
 Constants.PRESSURE_FRICTION_TAP = 0.05      -- taps, generators: low flow
 Constants.PRESSURE_FRICTION_SPRINKLER = 0.2 -- wide-open flow through scavenged pipe
@@ -379,7 +379,7 @@ Constants.PRESSURE_FRICTION_SPRINKLER = 0.2 -- wide-open flow through scavenged 
 Constants.PRESSURE_MIN_TAP = 0.0
 Constants.PRESSURE_MIN_DRIP = 0.0
 Constants.PRESSURE_MIN_SPRINKLER = 20.0     -- a real sprinkler head needs ~2 bar
--- Consumer kinds, used to pick a friction coefficient.
+-- Consumer kinds: what a tile DRAWS, which sets its demand and the head it needs.
 Constants.PRESSURE_KIND_TAP = "tap"
 Constants.PRESSURE_KIND_DRIP = "drip"
 Constants.PRESSURE_KIND_SPRINKLER = "sprinkler"
