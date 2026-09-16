@@ -2,13 +2,17 @@ WaterPipes = WaterPipes or {}
 WaterPipes.Purifier = WaterPipes.Purifier or {}
 
 require "WaterPipes/Constants"
+require "WaterPipes/Invalidate"
 require "WaterPipes/Logger"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/Pressure"
 require "WaterPipes/World"
 
 local Constants = WaterPipes.Constants
+local Invalidate = WaterPipes.Invalidate
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local Pressure = WaterPipes.Pressure
 local Purifier = WaterPipes.Purifier
 local World = WaterPipes.World
 
@@ -172,6 +176,55 @@ end
 
 -- Was fluid actually moving on the last server tick? Distinct from isWorking, which only says the
 -- tile has electricity.
+-- ===== Inlet head =====
+-- What the DIRTY side delivers to the router's IN tile, in m.c.a. relative to that tile's floor.
+-- Recorded by Purifier.step, which is the one place that already has the number: a purifier severs the
+-- head field, so the clean zone cannot read the dirty zone's solve without a cross-zone recursion that
+-- two purifiers aimed at each other would close into a loop.
+function Purifier.getInletHead(worldObject)
+    local modData = getModData(worldObject)
+    local value = modData and modData[Constants.PURIFIER_INLET_HEAD_KEY]
+    if type(value) == "number" and value > 0 then
+        return value
+    end
+    return 0
+end
+
+-- Store the head just measured on the IN side. Returns whether it moved enough to be worth re-pricing
+-- the clean zone: the field is cached, so every material move has to be announced, and a line whose head
+-- jitters by a hundredth must not drop that field once a minute forever.
+function Purifier.setInletHead(worldObject, head)
+    local modData = getModData(worldObject)
+    if not modData then
+        return false
+    end
+
+    local value = math.max(head or 0, 0)
+    local previous = Purifier.getInletHead(worldObject)
+    if math.abs(value - previous) <= Constants.PURIFIER_INLET_HEAD_EPSILON then
+        return false
+    end
+
+    modData[Constants.PURIFIER_INLET_HEAD_KEY] = value > 0 and value or nil
+    if worldObject.transmitModData then
+        pcall(worldObject.transmitModData, worldObject)
+    end
+    return true
+end
+
+-- Head the CLEAN side is supplied at, relative to the outlet's own floor.
+-- Never below a container's base: the OUT buffer is a tank holding water whatever the dirty side is
+-- doing, so an inlet that has run dry costs the clean side its boost, not its supply. That floor is also
+-- what makes this change unable to regress a save -- it is exactly the head the clean side had before.
+function Purifier.outletHead(worldObject)
+    local base = Pressure.containerBase()
+    if not Pressure.isEnabled() then
+        return base
+    end
+    local passed = Purifier.getInletHead(worldObject) * Pressure.purifierHeadTransfer()
+    return math.max(base, passed)
+end
+
 function Purifier.isProcessing(worldObject)
     local modData = getModData(worldObject)
     return modData and modData[Constants.PURIFIER_PROCESSING_KEY] == true or false
@@ -388,7 +441,16 @@ function Purifier.step(purifier, inSquare, outSquare, dt)
     -- 3. Intake: pull ONLY TAINTED water, and ONLY from the router's IN side. The purifier never draws
     -- clean water and never pulls anything back off the OUT side. Runs with or without power; only
     -- converting it later needs power and filter life.
-    local avail, fluidType = NetworkAccess.availableToPull(inSquare)
+    local avail, fluidType, inletHead = NetworkAccess.availableToPull(inSquare)
+
+    -- Record what the dirty side is pushing at, because the clean side is priced from it. This is the
+    -- only read of it: the two sides are separate head fields and the summary above already carries the
+    -- number, so it costs nothing here and cannot be had at all from the clean side's solve.
+    -- Announced when it moves, since that field is cached and nothing else would drop it.
+    if Purifier.setInletHead(purifier, inletHead) then
+        pcall(Invalidate.supplyChangedAt, outSquare)
+    end
+
     if fluidType == "TaintedWater" and avail > 0 then
         local curIn = Purifier.getInAmount(purifier)
         -- Pull into an empty buffer or one already holding tainted water (it is always tainted now).

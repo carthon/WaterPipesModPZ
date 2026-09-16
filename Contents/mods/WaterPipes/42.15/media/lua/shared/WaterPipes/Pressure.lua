@@ -124,6 +124,16 @@ function Pressure.pumpHead()
     return sandboxTenths("PumpHead", Constants.PUMP_HEAD)
 end
 
+-- Share of the head reaching a purifier's dirty side that survives to its clean side.
+-- A purifier is a hard boundary -- two tanks with a filter between them -- so the clean side is priced
+-- as a fresh source rather than as a continuation of the run. It used to be priced as a BARE one, at a
+-- container's base and nothing else, which capped every purified line at 58 % of rate and put a
+-- sprinkler permanently out of reach. This is the fraction that crosses. 1.0 makes the purifier
+-- transparent to pressure; 0 restores the old flat container base.
+function Pressure.purifierHeadTransfer()
+    return sandboxPercent("PurifierHeadTransfer", Constants.PURIFIER_HEAD_TRANSFER)
+end
+
 -- How far below itself a pump can still lift a source. Atmospheric pressure is the real cap here,
 -- not motor power -- which is why this number is so much smaller than pumpHead().
 function Pressure.suctionLimit()

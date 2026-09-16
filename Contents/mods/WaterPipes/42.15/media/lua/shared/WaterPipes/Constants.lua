@@ -283,6 +283,11 @@ Constants.PURIFIER_OUT_AMOUNT_KEY = "waterpipesPurOut"
 -- Did the purifier move any fluid on the last server tick? The readout used to infer this from the
 -- buffer levels, which reported a tank sitting full while busy pushing clean water out as "Stopped".
 Constants.PURIFIER_PROCESSING_KEY = "waterpipesPurBusy"
+-- Head (m.c.a.) last measured on the router's IN side, written by the purifier's own step.
+-- Stored rather than solved on demand: the clean side is its own zone, and asking for the dirty zone's
+-- field from inside the clean zone's solve is a cross-zone recursion nothing bounds -- two purifiers
+-- pointed at each other close the loop. The step already holds the number.
+Constants.PURIFIER_INLET_HEAD_KEY = "waterpipesPurInHead"
 Constants.PURIFIER_BUFFER_CAPACITY = 50
 -- Rates are per IN-GAME MINUTE (the server sub-steps them by elapsed game time, so throughput does not
 -- depend on framerate). Intake is FASTER than convert on purpose, so the IN buffer visibly holds a level
@@ -291,6 +296,18 @@ Constants.PURIFIER_BUFFER_CAPACITY = 50
 -- simply evens out with whatever else is on that side. The convert rate still limits throughput.
 Constants.PURIFIER_INTAKE_RATE = 20
 Constants.PURIFIER_CONVERT_RATE = 10
+-- Share of the head arriving at the IN side that survives to the clean side. A purifier is two tanks
+-- with a filter between them, so it cannot carry pressure the way a length of pipe does -- but pricing
+-- the clean side at a bare container base meant every purified line ran at sqrt(1/3) = 58 % of rate and
+-- a sprinkler (20 m.c.a.) was out of reach for good, however hard the dirty side was pushing. This is
+-- what crosses; the rest is the price of the crossing. At 0.6, mains at 25 leave 15 on the clean side:
+-- taps and drips run at full rate, a sprinkler still wants a pump.
+Constants.PURIFIER_HEAD_TRANSFER = 0.6
+-- How far the measured inlet head must move before the clean zone is re-priced. The head field is
+-- cached, so a material move has to be announced -- and a dirty side whose head wanders by a hundredth
+-- must not drop that field every minute for the rest of the save. A quarter of a metre of column is
+-- below anything a player can read off the gauge.
+Constants.PURIFIER_INLET_HEAD_EPSILON = 0.25
 -- Electric purifier tank: a 2x2 multi-tile object. The vanilla industry_02 cylinder is split into
 -- four perspective quadrants (industry 72/73/74/75), tinted electric-blue and packed into atlas
 -- cells 36-39. The entity script (WaterPurifierElectric, face S) lays them on the footprint:

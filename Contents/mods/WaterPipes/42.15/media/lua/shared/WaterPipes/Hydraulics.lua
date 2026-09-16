@@ -392,12 +392,21 @@ local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets)
     -- buffer -- a purifier with no barrel behind it, which is how most people first build one -- could
     -- take dirty water in and let nobody draw the clean water out. The comment on the settle even
     -- promised the opposite: "with no barrels it is a no-op and a tap can still reach it".
-    -- Same base head as a vessel, and boostable for the same reason: a pump lifts stored water.
+    -- Boostable for the same reason a vessel is: a pump lifts stored water.
+    --
+    -- The head it supplies is NOT a flat container base. It was, and that was the whole of the clean
+    -- side's pressure however hard the dirty side pushed -- so a purified line ran at sqrt(1/3) = 58 %
+    -- of rate off town mains, and a sprinkler behind a purifier could never be fed at all. A purifier
+    -- cannot carry head the way a pipe does (it is two tanks with a filter between them), but neither is
+    -- it a barrel that has forgotten where its water came from: Purifier.outletHead passes a fixed share
+    -- of the inlet, floored at the container base so an inlet that has run dry costs the clean side its
+    -- boost and not its supply.
     for _, outlet in pairs(purifierOutlets or {}) do
         local node = outlet.nodeKey and nodes[outlet.nodeKey]
         if node and Purifier and Purifier.getOutAmount
             and (Purifier.getOutAmount(outlet.purifier) or 0) > 0 then
-            raise(outlet.nodeKey, elevation(node.z) + containerBase, true)
+            local outletHead = Purifier.outletHead and Purifier.outletHead(outlet.purifier) or containerBase
+            raise(outlet.nodeKey, elevation(node.z) + outletHead, true)
         end
     end
 
