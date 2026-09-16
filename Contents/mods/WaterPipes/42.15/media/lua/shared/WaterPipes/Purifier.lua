@@ -177,10 +177,8 @@ end
 -- Was fluid actually moving on the last server tick? Distinct from isWorking, which only says the
 -- tile has electricity.
 -- ===== Inlet head =====
--- What the DIRTY side delivers to the router's IN tile, in m.c.a. relative to that tile's floor.
--- Recorded by Purifier.step, which is the one place that already has the number: a purifier severs the
--- head field, so the clean zone cannot read the dirty zone's solve without a cross-zone recursion that
--- two purifiers aimed at each other would close into a loop.
+-- Head (m.c.a.) the dirty side delivers to the IN tile, recorded by Purifier.step. Stored rather than
+-- solved, because the clean zone cannot solve the dirty one without cross-zone recursion.
 function Purifier.getInletHead(worldObject)
     local modData = getModData(worldObject)
     local value = modData and modData[Constants.PURIFIER_INLET_HEAD_KEY]
@@ -190,9 +188,7 @@ function Purifier.getInletHead(worldObject)
     return 0
 end
 
--- Store the head just measured on the IN side. Returns whether it moved enough to be worth re-pricing
--- the clean zone: the field is cached, so every material move has to be announced, and a line whose head
--- jitters by a hundredth must not drop that field once a minute forever.
+-- Returns true when the head moved more than PURIFIER_INLET_HEAD_EPSILON (clean zone needs re-pricing).
 function Purifier.setInletHead(worldObject, head)
     local modData = getModData(worldObject)
     if not modData then
@@ -438,10 +434,7 @@ function Purifier.step(purifier, inSquare, outSquare, dt)
     -- converting it later needs power and filter life.
     local avail, fluidType, inletHead = NetworkAccess.availableToPull(inSquare)
 
-    -- Record what the dirty side is pushing at, because the clean side is priced from it. This is the
-    -- only read of it: the two sides are separate head fields and the summary above already carries the
-    -- number, so it costs nothing here and cannot be had at all from the clean side's solve.
-    -- Announced when it moves, since that field is cached and nothing else would drop it.
+    -- The clean side is priced from this head; re-price it when the head moves.
     if Purifier.setInletHead(purifier, inletHead) then
         pcall(Invalidate.supplyChangedAt, outSquare)
     end

@@ -9,13 +9,7 @@ local Pressure = WaterPipes.Pressure
 -- Hydraulic head, in metres of water column (m.c.a.). See the pressure block in Constants.lua for
 -- the model and why the unit is real.
 --
--- What this module owns is the per-save TUNABLES and the two pieces of arithmetic that are not a
--- property of the network: the flow curve and the lift gate. Solving the head itself belongs to
--- Hydraulics, which prices loss per EDGE from the litres actually crossing it -- this module used to
--- carry a closed-form source-to-consumer model (`delivered` / `atRegulator` / `canReach`) beside it,
--- and it was left standing, uncalled, when the field solver replaced it. Two models for one number is
--- one too many, and the stale one was the one the surrounding comments described.
---
+-- Per-save tunables, the flow curve and the lift gate. The head itself is solved in Hydraulics.
 -- Everything here is pure: no world access, no caching.
 
 -- ===== Per-save tunables (Sandbox Options), all falling back to the constants =====
@@ -111,12 +105,7 @@ function Pressure.pumpHead()
     return sandboxTenths("PumpHead", Constants.PUMP_HEAD)
 end
 
--- Share of the head reaching a purifier's dirty side that survives to its clean side.
--- A purifier is a hard boundary -- two tanks with a filter between them -- so the clean side is priced
--- as a fresh source rather than as a continuation of the run. It used to be priced as a BARE one, at a
--- container's base and nothing else, which capped every purified line at 58 % of rate and put a
--- sprinkler permanently out of reach. This is the fraction that crosses. 1.0 makes the purifier
--- transparent to pressure; 0 restores the old flat container base.
+-- Share of the inlet head a purifier passes to its clean side. 1 = transparent, 0 = none.
 function Pressure.purifierHeadTransfer()
     return sandboxPercent("PurifierHeadTransfer", Constants.PURIFIER_HEAD_TRANSFER)
 end

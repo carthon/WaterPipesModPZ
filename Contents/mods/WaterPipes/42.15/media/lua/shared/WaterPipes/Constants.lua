@@ -283,10 +283,7 @@ Constants.PURIFIER_OUT_AMOUNT_KEY = "waterpipesPurOut"
 -- Did the purifier move any fluid on the last server tick? The readout used to infer this from the
 -- buffer levels, which reported a tank sitting full while busy pushing clean water out as "Stopped".
 Constants.PURIFIER_PROCESSING_KEY = "waterpipesPurBusy"
--- Head (m.c.a.) last measured on the router's IN side, written by the purifier's own step.
--- Stored rather than solved on demand: the clean side is its own zone, and asking for the dirty zone's
--- field from inside the clean zone's solve is a cross-zone recursion nothing bounds -- two purifiers
--- pointed at each other close the loop. The step already holds the number.
+-- Head (m.c.a.) last measured on the router's IN side, recorded by Purifier.step.
 Constants.PURIFIER_INLET_HEAD_KEY = "waterpipesPurInHead"
 Constants.PURIFIER_BUFFER_CAPACITY = 50
 -- Rates are per IN-GAME MINUTE (the server sub-steps them by elapsed game time, so throughput does not
@@ -296,17 +293,9 @@ Constants.PURIFIER_BUFFER_CAPACITY = 50
 -- simply evens out with whatever else is on that side. The convert rate still limits throughput.
 Constants.PURIFIER_INTAKE_RATE = 20
 Constants.PURIFIER_CONVERT_RATE = 10
--- Share of the head arriving at the IN side that survives to the clean side. A purifier is two tanks
--- with a filter between them, so it cannot carry pressure the way a length of pipe does -- but pricing
--- the clean side at a bare container base meant every purified line ran at sqrt(1/3) = 58 % of rate and
--- a sprinkler (20 m.c.a.) was out of reach for good, however hard the dirty side was pushing. This is
--- what crosses; the rest is the price of the crossing. At 0.6, mains at 25 leave 15 on the clean side:
--- taps and drips run at full rate, a sprinkler still wants a pump.
+-- Share of the inlet head a purifier passes to its clean side, as a floor that pumps never lift.
 Constants.PURIFIER_HEAD_TRANSFER = 0.6
--- How far the measured inlet head must move before the clean zone is re-priced. The head field is
--- cached, so a material move has to be announced -- and a dirty side whose head wanders by a hundredth
--- must not drop that field every minute for the rest of the save. A quarter of a metre of column is
--- below anything a player can read off the gauge.
+-- Minimum change in the recorded inlet head (m.c.a.) before the clean zone is re-priced.
 Constants.PURIFIER_INLET_HEAD_EPSILON = 0.25
 -- Electric purifier tank: a 2x2 multi-tile object. The vanilla industry_02 cylinder is split into
 -- four perspective quadrants (industry 72/73/74/75), tinted electric-blue and packed into atlas
@@ -361,17 +350,11 @@ Constants.MAX_FINITE_FLUID_CAPACITY = 9999
 -- Municipal mains run 20-40, a garden sprinkler needs ~20, gravity drip works at 1-2. Keeping the unit
 -- real means every constant below can be sanity-checked against a plumbing table.
 --
--- HOW IT IS SOLVED: by the demand-aware head field in Hydraulics, described in the block below. There
--- is no second model. There used to be -- a closed-form `P = base + level*dz - friction(kind)*hops`
--- evaluated per source, which is where the three friction figures below come from -- and it survived,
--- uncalled, for long enough that the comments around it were still describing a mod that no longer ran
--- it. It is gone; what remains of it is the calibration.
+-- Solved by the demand-aware head field in Hydraulics; see the block below.
 Constants.PRESSURE_PER_LEVEL = 3.0          -- a PZ floor is ~2.4-3 m tall; 1 m of water = 0.098 bar
 Constants.CONTAINER_BASE_PRESSURE = 1.0     -- a full ~1 m tall barrel pushes 1 m.c.a. at its base
--- CALIBRATION, not configuration: no code reads these three. They are the per-tile loss the old
--- closed-form model charged each consumer kind, and HYDRAULIC_FRICTION_K below was derived from them
--- (see its own note) so that a network with one emitter kept behaving exactly as it had. Kept because
--- deleting them would leave that derivation pointing at nothing; the live dial is PressureFrictionScale.
+-- Calibration only, read by no code: HYDRAULIC_FRICTION_K below is derived from these.
+-- The live dial is PressureFrictionScale.
 Constants.PRESSURE_FRICTION_DRIP = 0.02     -- trickle flow
 Constants.PRESSURE_FRICTION_TAP = 0.05      -- taps, generators: low flow
 Constants.PRESSURE_FRICTION_SPRINKLER = 0.2 -- wide-open flow through scavenged pipe

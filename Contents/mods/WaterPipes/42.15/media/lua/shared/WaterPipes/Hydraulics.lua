@@ -350,8 +350,7 @@ end
 
 local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets, regions)
     local supply = {}        -- key -> head at that node (m.c.a., absolute)
-    -- Which side of a regulator a node is on, and the pumping standing on each side. A zone with no
-    -- regulator in it is one region, which is the old arithmetic exactly.
+    -- Pump head per regulator region; a zone with no regulator is a single region.
     local function regionOf(key) return (regions and regions[key]) or 1 end
     local pumpHeadInRegion = {}
     local boostable = {}     -- key -> true when a pump may lift this supply (see the end of the pass)
@@ -448,8 +447,7 @@ local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets, regi
                 stats.poweredPumps = stats.poweredPumps + 1
                 pumps[key] = pumps[key] or {}
                 pumps[key][#pumps[key] + 1] = pump
-                -- Zone total, for the readout. What actually lifts a vessel is the per-REGION figure:
-                -- a pump does not push past a regulator, and a supply term is never capped.
+                -- Zone total for the readout; vessels are lifted by the per-region figure.
                 local head = Pump.headForPumps({ pump })
                 stats.pumpHead = stats.pumpHead + head
                 local side = regionOf(key)
@@ -509,10 +507,8 @@ local function orderBySupply(nodes, adjacency, routers, supply, adjacencyOrder)
     local sequence = {}
 
     -- Router crossings are directed edges: water leaves by the OUT side. Indexed by the downstream node.
-    -- STRICTLY directional, and it has to stay that way: drawReachableFrom reads this same table as "who
-    -- may reach through to whom", so an entry pointing the other way is a one-way valve that conducts
-    -- backwards. The head cap needs both directions, and gets them by looking this table up the other way
-    -- round rather than by growing a second meaning here (see propagate).
+    -- Strictly directional: drawReachableFrom reads it as reachability. propagate looks it up from both
+    -- ends for the head cap instead of adding reverse entries here.
     local viaRouter = {}
     -- ...and the same edges from the UPSTREAM side, for the walk below. Built here rather than scanned
     -- per node: the walk used to look at every router in the zone for each of its nodes. Sorted for the
@@ -665,19 +661,8 @@ local function buildFeeders(nodes, adjacency, routers)
     return feeders
 end
 
--- Which side of a REGULATOR each node sits on.
--- A router with a ceiling set is a pressure-reducing valve, and the one thing a player buys with it is
--- that pressure behind it does not turn up in front of it. That has to be enforced on the PUMP term and
--- not only on the edge: pumps enter the field as a property of the SUPPLY (see the note where they are
--- applied), and a supply value is never capped by anything. So a pump anywhere in the zone lifted every
--- vessel in the zone, including the ones the valve existed to protect -- measured at 26 m.c.a. sitting
--- behind a ceiling of 5, with the pump on the far side of it.
---
--- A router WITHOUT a ceiling is transparent and joins its two ends: it is an edge, not a boundary, and
--- splitting on it would strand a pump from the run it is actually pressurising.
---
--- Structural, so it belongs to the topology: the ceiling is captured into `routers` at discovery, and
--- setting one drops the topology with the walks.
+-- Region of each node, split on routers that have a ceiling. Pumps only lift supplies in their own
+-- region, because a supply term is never capped. A router without a ceiling joins its two ends.
 local function partitionByRegulators(nodes, order, adjacency, routers, adjacencyOrder)
     local region = {}
 
@@ -791,11 +776,8 @@ local function propagate(nodes, sequence, parents, feeders, supply, flow, peak, 
                     -- A regulator on this edge fixes the head at ITS OUTLET; past it the water keeps paying friction and
                     -- height like any other run. The cap is a constant of the edge, so the elevation() behind it -- which
                     -- reads a sandbox value -- is computed once, not per pass.
-                    -- Both ends of the edge. A regulator caps head crossing it in EITHER direction:
-                    -- the relaxation takes head from feeders both ways (buildFeeders links both), and
-                    -- capping only the forward one let a pump past the valve re-pressurise the run in
-                    -- front of it -- 26 m.c.a. upstream of a ceiling of 5. viaRouter is keyed by the
-                    -- downstream node, so the reverse lookup is the same table read the other way round.
+                    -- A regulator caps head crossing it in either direction; viaRouter is keyed by the downstream
+                    -- node, so look the edge up from both ends.
                     local feederKey = list[order]
                     local router = (routersHere and routersHere[feederKey])
                         or ((viaRouter[feederKey] or {})[key])
@@ -942,7 +924,7 @@ local function discoverTopology(seedSquare)
         return nil
     end
 
-    -- Each node's neighbours in a fixed order. Hoisted out of the table below, which now needs it twice.
+    -- Each node's neighbours in a fixed order; the table below uses it twice.
     local adjacencyOrder = sortedAdjacency(nodes, adjacency)
 
     -- Every node that can hand head to another. Derived from the adjacency and the routers, so it belongs
@@ -959,8 +941,7 @@ local function discoverTopology(seedSquare)
         -- costs the discovery once instead of every solve -- measured at +17 % on a re-price when it was
         -- sorted per solve, which is the common path.
         adjacencyOrder = adjacencyOrder,
-        -- Which side of a regulator each node is on. Structural like the rest of this table, and built
-        -- from the order above so it cannot depend on hash iteration.
+        -- Regulator region of each node, built from adjacencyOrder so it is deterministic.
         regions = partitionByRegulators(nodes, order, adjacency, routers, adjacencyOrder),
         -- Where the vessels, inlets, pumps and emitters stand. Structural, so it belongs here rather than being
         -- rediscovered by every re-pricing.
