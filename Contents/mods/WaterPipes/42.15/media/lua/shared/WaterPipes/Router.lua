@@ -161,29 +161,29 @@ end
 -- a fluid the destination refuses. Guessing between them from a screenshot is not possible.
 local routerStallReason = {}
 
-local function noteRouterStall(inSquare, reason, detail)
-    if not inSquare or not inSquare.getX then
-        return
-    end
-    local key = WaterPipes.State.squareKey(inSquare:getX(), inSquare:getY(), inSquare:getZ())
-    if routerStallReason[key] == reason then
-        return
-    end
-    routerStallReason[key] = reason
-    Logger.log(string.format("router at %d:%d:%d moved nothing: %s%s",
-        inSquare:getX(), inSquare:getY(), inSquare:getZ(), reason, detail or ""))
+local function noteRouterStall(inSquare, reason, detail)
+    if not inSquare or not inSquare.getX then
+        return
+    end
+    local key = WaterPipes.State.squareKey(inSquare:getX(), inSquare:getY(), inSquare:getZ())
+    if routerStallReason[key] == reason then
+        return
+    end
+    routerStallReason[key] = reason
+    Logger.log(string.format("router at %d:%d:%d moved nothing: %s%s",
+        inSquare:getX(), inSquare:getY(), inSquare:getZ(), reason, detail or ""))
 end
 
-local function noteRouterRunning(inSquare)
-    if not inSquare or not inSquare.getX then
-        return
-    end
-    local key = WaterPipes.State.squareKey(inSquare:getX(), inSquare:getY(), inSquare:getZ())
-    if routerStallReason[key] then
-        routerStallReason[key] = nil
-        Logger.log(string.format("router at %d:%d:%d moving again.",
-            inSquare:getX(), inSquare:getY(), inSquare:getZ()))
-    end
+local function noteRouterRunning(inSquare)
+    if not inSquare or not inSquare.getX then
+        return
+    end
+    local key = WaterPipes.State.squareKey(inSquare:getX(), inSquare:getY(), inSquare:getZ())
+    if routerStallReason[key] then
+        routerStallReason[key] = nil
+        Logger.log(string.format("router at %d:%d:%d moving again.",
+            inSquare:getX(), inSquare:getY(), inSquare:getZ()))
+    end
 end
 
 -- No purifier on the tile: one-way passthrough of the IN network's single fluid into the OUT network.
@@ -197,71 +197,71 @@ end
 function Router.transfer(inSquare, outSquare, dt)
     -- Resolved off the WaterPipes table rather than required: NetworkAccess requires this
     -- module, so closing the loop would be a recursive require.
-    local NetworkAccess = WaterPipes.NetworkAccess
-    local avail, fluidType, pressure = NetworkAccess.availableToPull(inSquare)
-    if not fluidType or avail <= 0 then
-        -- A MIXED source reads exactly like an empty one here, and is the likelier of the two when the
-        -- player can see water in the tank: availableToPull refuses a network holding two fluids.
-        noteRouterStall(inSquare, "nothing to pull",
-            string.format(" (available %.2f, fluid %s)", avail or 0, tostring(fluidType)))
-        return false
-    end
-    local headroom = NetworkAccess.availableToPush(outSquare, fluidType)
-    if headroom <= 0 then
-        noteRouterStall(inSquare, "destination full or refusing this fluid",
-            string.format(" (%s, %.2f available to send)", tostring(fluidType), avail))
-        return false
-    end
-    -- The rate is what the IN side can actually deliver to the router tile, not a flat ceiling: the head
-    -- was already solved for this square and until now was read only as a pass/fail gate. Free to use.
-    local factor = Pressure.flowFactor(pressure)
-    local rate = Constants.ROUTER_TRANSFER_RATE * dt * factor
-    local transfer = math.min(rate, avail, headroom)
-    if transfer <= 0 then
-        noteRouterStall(inSquare, "no head to move it with",
-            string.format(" (pressure %s, flow factor %.3f)",
-                pressure and string.format("%.2f", pressure) or "nil", factor))
-        return false
-    end
-    local drawn = NetworkAccess.drawFluidAtSquare(inSquare, fluidType, transfer)
-    if drawn and drawn > 0 then
-        NetworkAccess.fillFluidAtSquare(outSquare, fluidType, drawn)
-        noteRouterRunning(inSquare)
-        return true
-    end
-    noteRouterStall(inSquare, "the draw returned nothing",
-        string.format(" (wanted %.2f of %s from %.2f available)", transfer, tostring(fluidType), avail))
-    return false
+    local NetworkAccess = WaterPipes.NetworkAccess
+    local avail, fluidType, pressure = NetworkAccess.availableToPull(inSquare)
+    if not fluidType or avail <= 0 then
+        -- A MIXED source reads exactly like an empty one here, and is the likelier of the two when the
+        -- player can see water in the tank: availableToPull refuses a network holding two fluids.
+        noteRouterStall(inSquare, "nothing to pull",
+            string.format(" (available %.2f, fluid %s)", avail or 0, tostring(fluidType)))
+        return false
+    end
+    local headroom = NetworkAccess.availableToPush(outSquare, fluidType)
+    if headroom <= 0 then
+        noteRouterStall(inSquare, "destination full or refusing this fluid",
+            string.format(" (%s, %.2f available to send)", tostring(fluidType), avail))
+        return false
+    end
+    -- The rate is what the IN side can actually deliver to the router tile, not a flat ceiling: the head
+    -- was already solved for this square and until now was read only as a pass/fail gate. Free to use.
+    local factor = Pressure.flowFactor(pressure)
+    local rate = Constants.ROUTER_TRANSFER_RATE * dt * factor
+    local transfer = math.min(rate, avail, headroom)
+    if transfer <= 0 then
+        noteRouterStall(inSquare, "no head to move it with",
+            string.format(" (pressure %s, flow factor %.3f)",
+                pressure and string.format("%.2f", pressure) or "nil", factor))
+        return false
+    end
+    local drawn = NetworkAccess.drawFluidAtSquare(inSquare, fluidType, transfer)
+    if drawn and drawn > 0 then
+        NetworkAccess.fillFluidAtSquare(outSquare, fluidType, drawn)
+        noteRouterRunning(inSquare)
+        return true
+    end
+    noteRouterStall(inSquare, "the draw returned nothing",
+        string.format(" (wanted %.2f of %s from %.2f available)", transfer, tostring(fluidType), avail))
+    return false
 end
 
--- Fluid routers actively move fluid across their boundary in the OUT direction each server tick. A
--- purifier-container on the tile purifies in transit; otherwise it is a plain one-way passthrough.
--- Returns whether it actually moved fluid, which processRouters uses to decide whether the next router
--- on the same source network gets a turn this tick.
-function Router.step(router, rx, ry, rz, dt)
-    dt = dt or 1.0
-    local out = Router.getOutOffset(router)
-    if not out then
-        return false
-    end
-
-    local inSquare = getSquare(rx - out.dx, ry - out.dy, rz)
-    local outSquare = getSquare(rx + out.dx, ry + out.dy, rz)
-    if not inSquare or not outSquare then
-        return false
-    end
-
-    -- Scan the whole purifier footprint from the router tile: the tank's modData may live on a footprint
-    -- tile other than the anchor. Missing it here would silently run a plain passthrough.
-    local purifier = Purifier.findForRouterSquare(World.squareAt(rx, ry, rz))
-    if purifier then
-        Purifier.step(purifier, inSquare, outSquare, dt)
-        -- A purifier router is never sequenced: it is a hard boundary with its own buffers, not a queue
-        -- position on somebody's tank.
-        return false
-    end
-
-    return Router.transfer(inSquare, outSquare, dt)
+-- Fluid routers actively move fluid across their boundary in the OUT direction each server tick. A
+-- purifier-container on the tile purifies in transit; otherwise it is a plain one-way passthrough.
+-- Returns whether it actually moved fluid, which processRouters uses to decide whether the next router
+-- on the same source network gets a turn this tick.
+function Router.step(router, rx, ry, rz, dt)
+    dt = dt or 1.0
+    local out = Router.getOutOffset(router)
+    if not out then
+        return false
+    end
+
+    local inSquare = getSquare(rx - out.dx, ry - out.dy, rz)
+    local outSquare = getSquare(rx + out.dx, ry + out.dy, rz)
+    if not inSquare or not outSquare then
+        return false
+    end
+
+    -- Scan the whole purifier footprint from the router tile: the tank's modData may live on a footprint
+    -- tile other than the anchor. Missing it here would silently run a plain passthrough.
+    local purifier = Purifier.findForRouterSquare(World.squareAt(rx, ry, rz))
+    if purifier then
+        Purifier.step(purifier, inSquare, outSquare, dt)
+        -- A purifier router is never sequenced: it is a hard boundary with its own buffers, not a queue
+        -- position on somebody's tank.
+        return false
+    end
+
+    return Router.transfer(inSquare, outSquare, dt)
 end
 
 return Router
