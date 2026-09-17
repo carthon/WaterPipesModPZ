@@ -1804,10 +1804,7 @@ local function onClientCommand(module, command, player, args)
     -- map-object scripts bail on isClient() for the same reason. One command per tile, spread over the
     -- pass by its millisecond budget and bounded by BUILDING_PLUMB_MAX_TILES.
     if command == "placeBuildingPipe" then
-        local placed, reason = BuildingPlumbing.place({
-            x = args and args.x, y = args and args.y, z = args and args.z,
-            kind = args and args.kind, edge = args and args.edge,
-        })
+        local placed, reason = BuildingPlumbing.placePaid(args, player)
         if not placed then
             Logger.warn("Place building pipe: refused at "
                 .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":"
@@ -1818,6 +1815,7 @@ local function onClientCommand(module, command, player, args)
 
     -- ...and the single settle the whole pass owes, once it is done.
     if command == "finishBuildingPlumbing" then
+        BuildingPlumbing.endPaidPass(player)
         BuildingPlumbing.finish({})
         return
     end

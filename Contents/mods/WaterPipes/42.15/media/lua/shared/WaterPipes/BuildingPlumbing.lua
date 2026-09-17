@@ -8,6 +8,7 @@ require "WaterPipes/World"
 require "WaterPipes/Logger"
 require "WaterPipes/State"
 require "WaterPipes/EndpointPlumbing"
+require "WaterPipes/WaterPipesBuild"
 
 local Constants = WaterPipes.Constants
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
@@ -291,14 +292,6 @@ local function wallEdgeOf(square)
     return nil
 end
 
-local function squareHasFloorPipe(square)
-    for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
-        if PipeObjectUtils.getPipePlacement(worldObject).surface == Constants.PIPE_SURFACE_FLOOR then
-            return true
-        end
-    end
-    return false
-end
 
 -- Can a floor pipe stand here? A floor to stand on, and that is the whole rule.
 --
@@ -353,7 +346,7 @@ function BuildingPlumbing.probeAt(originSquare, radius)
         local key = keyOf(x, y, z)
         tiles[key] = true
         walls[key] = wallEdgeOf(square)
-        piped[key] = squareHasFloorPipe(square)
+        piped[key] = WaterPipes.Build.squareHasFloorPipe(square)
         for _, endpointObject in ipairs(EndpointObjects.collectOnSquare(square)) do
             fixtures[#fixtures + 1] = {
                 x = x, y = y, z = z,
@@ -608,6 +601,132 @@ function BuildingPlumbing.plumbFixtures(plan, player)
     end
 
     return plumbed
+end
+
+-- ===== Cost =====
+
+-- Pipes owed per tile laid, scaled by the BuildingPlumbCostScale sandbox percentage.
+function BuildingPlumbing.costPerTile()
+    local sv = SandboxVars and SandboxVars.WaterPipes
+    local scale = sv and sv.BuildingPlumbCostScale
+    if type(scale) ~= "number" then
+        scale = 100
+    end
+    return math.max(scale, 0) / 100
+end
+
+function BuildingPlumbing.pipesFor(tiles)
+    return math.ceil((tiles or 0) * BuildingPlumbing.costPerTile() - 0.000001)
+end
+
+-- Metal only: a generated pipe is stamped metal and pays metal back when dismantled.
+function BuildingPlumbing.countPipes(inventory)
+    if not inventory or not inventory.getCountTypeRecurse then
+        return 0
+    end
+    local ok, count = pcall(inventory.getCountTypeRecurse, inventory, Constants.PIPE_ITEM_TYPE)
+    return ok and count or 0
+end
+
+-- ===== Server side of a multiplayer pass =====
+-- The client's request is untrusted: validate it, charge the server's copy of the inventory, then lay.
+
+local paidDebt = {}   -- player key -> fractional pipe owed within the current pass
+
+local function playerKey(player)
+    local ok, id = pcall(player.getOnlineID, player)
+    if ok and id ~= nil then
+        return id
+    end
+    return player.getUsername and player:getUsername() or "?"
+end
+
+local function isWholeNumber(v)
+    return type(v) == "number" and v == math.floor(v)
+end
+
+local function validRequest(args, player)
+    if type(args) ~= "table" or not player then
+        return nil, "badRequest"
+    end
+    if not isWholeNumber(args.x) or not isWholeNumber(args.y) or not isWholeNumber(args.z) then
+        return nil, "badRequest"
+    end
+    if args.kind == FLOOR then
+        if args.edge ~= nil then
+            return nil, "badRequest"
+        end
+    elseif args.kind == RISER then
+        if args.edge ~= "N" and args.edge ~= "W" then
+            return nil, "badRequest"
+        end
+    else
+        return nil, "badRequest"
+    end
+
+    -- The menu walks the player next to the plan's origin, and a plan never leaves that radius.
+    local reach = Constants.BUILDING_PLUMB_MAX_RADIUS + 2
+    if math.abs(args.x - math.floor(player:getX())) > reach
+        or math.abs(args.y - math.floor(player:getY())) > reach then
+        return nil, "outOfReach"
+    end
+
+    local square = squareAt(args.x, args.y, args.z)
+    if not square then
+        return nil, "noSquare"
+    end
+    local Build = WaterPipes.Build
+    if args.kind == FLOOR and Build.squareHasFloorPipe(square) then
+        return nil, "alreadyPiped"
+    end
+    if args.kind == RISER and Build.squareHasRiserEdge(square, args.edge) then
+        return nil, "alreadyPiped"
+    end
+
+    return { x = args.x, y = args.y, z = args.z, kind = args.kind, edge = args.edge }
+end
+
+local function takePipes(inventory, count)
+    for _ = 1, count do
+        local item = inventory:getFirstTypeRecurse(Constants.PIPE_ITEM_TYPE)
+        if not item then
+            return
+        end
+        local container = item:getContainer() or inventory
+        sendRemoveItemFromContainer(container, item)
+        container:Remove(item)
+    end
+end
+
+-- Returns the laid object, or nil and a reason. Nothing is charged unless the pipe is laid.
+function BuildingPlumbing.placePaid(args, player)
+    local placement, reason = validRequest(args, player)
+    if not placement then
+        return nil, reason
+    end
+
+    local key = playerKey(player)
+    local debt = (paidDebt[key] or 0) + BuildingPlumbing.costPerTile()
+    local owed = math.floor(debt + 0.000001)
+    local inventory = player:getInventory()
+    if BuildingPlumbing.countPipes(inventory) < owed then
+        return nil, "noPipes"
+    end
+
+    local object, placeReason = BuildingPlumbing.place(placement, player)
+    if not object then
+        return nil, placeReason
+    end
+
+    takePipes(inventory, owed)
+    paidDebt[key] = debt - owed
+    return object
+end
+
+function BuildingPlumbing.endPaidPass(player)
+    if player then
+        paidDebt[playerKey(player)] = nil
+    end
 end
 
 BuildingPlumbing.FLOOR = FLOOR

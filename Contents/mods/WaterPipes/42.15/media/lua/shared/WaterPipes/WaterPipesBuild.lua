@@ -84,6 +84,9 @@ local function squareHasRiserEdge(square, edge)
     return false
 end
 
+Build.squareHasFloorPipe = squareHasFloorPipe
+Build.squareHasRiserEdge = squareHasRiserEdge
+
 -- The gauge is not a pipe, so it is not in getPipeObjectsOnSquare; scan the square's objects instead.
 local function squareHasGauge(square)
     if not square or not square.getObjects then

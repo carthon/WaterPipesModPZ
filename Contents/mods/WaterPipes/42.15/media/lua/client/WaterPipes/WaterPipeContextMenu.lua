@@ -1232,8 +1232,8 @@ function ContextMenu.plumbBuilding(playerObj, square)
         return
     end
 
-    local needed = ISPlumbBuilding.pipesFor(plan.cost)
-    local held = ISPlumbBuilding.countPipes(playerObj:getInventory())
+    local needed = BuildingPlumbing.pipesFor(plan.cost)
+    local held = BuildingPlumbing.countPipes(playerObj:getInventory())
     if held < needed then
         halo(playerObj,
             getText("IGUI_WaterPipesPlumbBuildingNeedPipes", tostring(needed), tostring(held)), "bad")

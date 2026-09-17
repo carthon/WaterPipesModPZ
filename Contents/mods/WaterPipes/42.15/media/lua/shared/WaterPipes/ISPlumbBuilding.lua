@@ -22,35 +22,6 @@ local Constants = WaterPipes.Constants
 local BuildingPlumbing = WaterPipes.BuildingPlumbing
 local Logger = WaterPipes.Logger
 
--- Pipes owed per tile laid. Scaled per-save by WaterPipes.BuildingPlumbCostScale (percent); 100 is one
--- pipe per pipe, exactly what laying them by hand costs, which is what keeps dismantling from turning
--- a plumbed house into a metal-pipe printer.
-function ISPlumbBuilding.costPerTile()
-    local sv = SandboxVars and SandboxVars.WaterPipes
-    local scale = sv and sv.BuildingPlumbCostScale
-    if type(scale) ~= "number" then
-        scale = 100
-    end
-    return math.max(scale, 0) / 100
-end
-
-function ISPlumbBuilding.pipesFor(tiles)
-    return math.ceil((tiles or 0) * ISPlumbBuilding.costPerTile() - 0.000001)
-end
-
--- METAL ONLY, deliberately -- the hand-build recipes also take a clay segment, this does not.
--- A generated pipe is stamped metal and so pays a metal pipe back at 90%% when it is dismantled. Let
--- the pass be paid for in clay, which is spent for good the moment it is laid, and plumbing a house
--- and stripping it would turn clay into metal. The per-tile cost only balances while both sides
--- measure the same thing.
-function ISPlumbBuilding.countPipes(inventory)
-    if not inventory or not inventory.getCountTypeRecurse then
-        return 0
-    end
-    local ok, count = pcall(inventory.getCountTypeRecurse, inventory, Constants.PIPE_ITEM_TYPE)
-    return ok and count or 0
-end
-
 local function takePipe(inventory)
     if not inventory or not inventory.getFirstTypeRecurse then
         return false
@@ -83,11 +54,17 @@ function ISPlumbBuilding:update()
 
         local placement = self.plan.placements[self.next]
 
-        -- Pay as we lay. The debt carries the fractional part, so a scale that is not a whole number
-        -- of pipes per tile still charges exactly what it should over the run.
-        self.debt = self.debt + ISPlumbBuilding.costPerTile()
-        while self.debt >= 1 do
-            if not takePipe(self.character:getInventory()) then
+        -- Pay as we lay; the debt carries the fractional part of a non-whole cost scale.
+        -- In multiplayer the server charges each tile, so the client only tracks what it started with.
+        self.debt = self.debt + BuildingPlumbing.costPerTile()
+        while self.debt + 0.000001 >= 1 do
+            if isClient and isClient() then
+                if self.pipesLeft < 1 then
+                    self.outOfPipes = true
+                    break
+                end
+                self.pipesLeft = self.pipesLeft - 1
+            elseif not takePipe(self.character:getInventory()) then
                 self.outOfPipes = true
                 break
             end
@@ -164,6 +141,7 @@ function ISPlumbBuilding:new(character, plan, onFinished)
     o.next = 1
     o.laid = {}
     o.debt = 0
+    o.pipesLeft = BuildingPlumbing.countPipes(character:getInventory())
     o.failed = 0
     o.plumbed = 0
     o.outOfPipes = false
