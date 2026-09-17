@@ -36,6 +36,20 @@ local function takePipe(inventory)
     return true
 end
 
+-- Materials are checked again as the work starts, so a pass never begins without the pipe to finish it.
+function ISPlumbBuilding:isValidStart()
+    local needed = BuildingPlumbing.pipesFor(self.plan.cost)
+    local held = BuildingPlumbing.countPipes(self.character:getInventory())
+    if held < needed then
+        if HaloTextHelper and HaloTextHelper.addBadText then
+            HaloTextHelper.addBadText(self.character,
+                getText("IGUI_WaterPipesPlumbBuildingNeedPipes", tostring(needed), tostring(held)))
+        end
+        return false
+    end
+    return true
+end
+
 function ISPlumbBuilding:isValid()
     return self.plan ~= nil and #self.plan.placements > 0
 end
@@ -105,6 +119,7 @@ function ISPlumbBuilding:getJobDelta()
 end
 
 function ISPlumbBuilding:start()
+    self.pipesLeft = BuildingPlumbing.countPipes(self.character:getInventory())
     self:setActionAnim("VehicleWorkOnMid")
     self.sound = WaterPipes.SoundOptions.playOnCharacter(self.character, "RepairWithWrench")
 end

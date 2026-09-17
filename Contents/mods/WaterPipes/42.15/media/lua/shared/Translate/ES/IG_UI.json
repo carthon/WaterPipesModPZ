@@ -70,6 +70,7 @@
     "IGUI_WaterPipesPlumbBuildingNoBuilding": "No estás dentro de un edificio.",
     "IGUI_WaterPipesPlumbBuildingNoFixtures": "Aquí no hay nada que fontanear.",
     "IGUI_WaterPipesPlumbBuildingNothingToDo": "Este edificio ya está fontaneado.",
+    "IGUI_WaterPipesPlumbBuildingTruncated": "Este edificio es demasiado grande para revisarlo de una vez: solo se ha planificado la parte más cercana a ti.",
     "IGUI_WaterPipesPlumbBuildingNeedPipes": "Hacen falta %1 tuberías de metal; tienes %2.",
     "IGUI_WaterPipesPlumbBuildingDone": "Fontaneados %1 aparatos, %2 casillas de tubería.",
     "IGUI_WaterPipesPlumbBuildingPartial": "Fontaneados %1 aparatos; %2 se han quedado fuera:",

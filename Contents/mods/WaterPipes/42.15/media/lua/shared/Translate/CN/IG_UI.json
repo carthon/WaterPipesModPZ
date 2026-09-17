@@ -70,6 +70,7 @@
     "IGUI_WaterPipesPlumbBuildingNoBuilding": "你不在建筑内。",
     "IGUI_WaterPipesPlumbBuildingNoFixtures": "这里没有可布管的东西。",
     "IGUI_WaterPipesPlumbBuildingNothingToDo": "这栋建筑已经布好管了。",
+    "IGUI_WaterPipesPlumbBuildingTruncated": "这栋建筑太大，无法一次勘察完毕：只规划了离你最近的部分。",
     "IGUI_WaterPipesPlumbBuildingNeedPipes": "需要 %1 根金属管，你有 %2 根。",
     "IGUI_WaterPipesPlumbBuildingDone": "已为 %1 个设备布管，共 %2 格管道。",
     "IGUI_WaterPipesPlumbBuildingPartial": "已为 %1 个设备布管；%2 个未能连接：",

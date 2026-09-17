@@ -1237,10 +1237,14 @@ function ContextMenu.plumbBuilding(playerObj, square)
     local plan = BuildingPlumbing.plan(
         { x = square:getX(), y = square:getY(), z = square:getZ() }, probe)
 
+    if probe.truncated then
+        halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingTruncated"), "bad")
+    end
+
     if #plan.placements == 0 then
-        -- Either everything is already piped (the idempotent re-run) or nothing can be reached.
-        if #plan.connected > 0 then
-            -- Already plumbed: nothing happened, and nothing is wrong either.
+        if #plan.skipped > 0 then
+            reportPlumbing(playerObj, plan, nil)
+        elseif #plan.connected > 0 or #(plan.alreadyConnected or {}) > 0 then
             halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingNothingToDo"))
         else
             halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingNoFixtures"), "bad")

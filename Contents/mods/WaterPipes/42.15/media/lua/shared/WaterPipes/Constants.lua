@@ -578,11 +578,12 @@ Constants.GAUGE_READ_DISTANCE = 2             -- matches ISFluidUtil.isoMaxPanel
 -- re-running extends. A Louisville hospital is a single BuildingDef of thousands of tiles, so without
 -- this one click would plant thousands of objects in the save.
 Constants.BUILDING_PLUMB_MAX_TILES = 200
--- How far from the clicked tile the building scan may wander, in tiles. A hospital is one BuildingDef
--- of thousands of tiles, and the scan has to be bounded BEFORE the plan is, or a single click pays to
--- walk the whole thing just to discover it cannot lay most of it. A box rather than a node count so
--- the answer does not depend on the order squares happen to be visited in.
-Constants.BUILDING_PLUMB_MAX_RADIUS = 32
+-- Most building tiles one survey reads, nearest the clicked tile first. Covers ordinary buildings whole;
+-- past it the survey stops and the player is told the building was only partly planned.
+Constants.BUILDING_PLUMB_MAX_SCAN_TILES = 8000
+-- Server fallback when a requested tile has no building to check against: how far from the player it
+-- may be.
+Constants.BUILDING_PLUMB_REACH = 34
 -- How long one frame may spend laying pipe. Stated in milliseconds rather than a tile count for the
 -- same reason IRRIGATION_MS_PER_TICK is: a count is a proxy for cost and drifts the moment anything
 -- underneath it changes. At least one tile is always laid, so a pass advances however expensive one

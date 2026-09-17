@@ -25,6 +25,14 @@ local BuildingPlumbing = WaterPipes.BuildingPlumbing
 --
 -- The laid pipe must stay a TREE once the game connects it: then one valve isolates one subtree.
 -- A mesh would be cheaper to lay and would make every valve meaningless.
+--
+-- probe (all coordinates are absolute):
+--   isBuildingTile(x, y, z) -> boolean   inside the building being plumbed, and able to hold a pipe
+--   hasPipe(x, y, z)        -> boolean   a pipe is already there; the plan reuses it and pays nothing
+--   wallEdge(x, y, z)       -> "N"|"W"|nil   the wall THIS tile owns, if any (risers need one)
+--   hasRiser(x, y, z, edge) -> boolean   a riser already stands on that tile and edge
+--   fixtures()              -> { {x=,y=,z=,name=,plumbed=}, ... }   what we are trying to reach; a
+--                              plumbed one is already connected and is never connected again
 
 local FLOOR, RISER = "floor", "riser"
 
@@ -231,13 +239,27 @@ end
 
 -- Dijkstra from a fixture to the tree. A new tile may touch at most one pipe per component, and if one
 -- of them is the tree the route must step straight into it. Returns the path, tree end first, or nil.
-local function routeFixture(probe, net, origin, fixture, budget)
+local function routeFixture(probe, net, origin, fixture, budget, connectedKeys)
     local originKey = keyOf(origin.x, origin.y, origin.z)
     local function isTarget(k)
         if net.piped[originKey] then
             return net.piped[k] == true and findRoot(net.parent, k) == findRoot(net.parent, originKey)
         end
         return k == originKey
+    end
+    -- Pipe on the network of an already-connected fixture, other than the origin's: joining it would
+    -- connect that fixture again.
+    local function isForeign(k)
+        if not net.piped[k] or isTarget(k) then
+            return false
+        end
+        local root = findRoot(net.parent, k)
+        for _, fk in ipairs(connectedKeys or {}) do
+            if net.piped[fk] and findRoot(net.parent, fk) == root then
+                return true
+            end
+        end
+        return false
     end
 
     -- Can tile k be entered from fromKey? Existing pipe always can. Returns ok, forcedNextKey.
@@ -249,6 +271,9 @@ local function routeFixture(probe, net, origin, fixture, budget)
         local comps, seen, forced = {}, {}, nil
         for _, other in ipairs(candidates) do
             if other ~= fromKey and not seen[other] and net.piped[other] then
+                if isForeign(other) then
+                    return false
+                end
                 seen[other] = true
                 local comp = findRoot(net.parent, other)
                 if comps[comp] then
@@ -264,6 +289,9 @@ local function routeFixture(probe, net, origin, fixture, budget)
     end
 
     local startKey = keyOf(fixture.x, fixture.y, fixture.z)
+    if isForeign(startKey) then
+        return nil
+    end
     local start = { key = startKey, x = fixture.x, y = fixture.y, z = fixture.z,
                     cost = net.piped[startKey] and 0 or 1 }
     if isTarget(startKey) then
@@ -339,7 +367,7 @@ local function routeFixture(probe, net, origin, fixture, budget)
 
             for _, s in ipairs(stepsFrom(best)) do
                 local nk = keyOf(s.x, s.y, s.z)
-                if not closed[nk] and (not best.forced or best.forced == nk) then
+                if not closed[nk] and (not best.forced or best.forced == nk) and not isForeign(nk) then
                     local cost = best.cost + (net.piped[nk] and 0 or 1)
                     local view, newRiser = chainView, false
                     if s.riserAt then
@@ -376,7 +404,7 @@ end
 -- One plan for one fixture order.
 local BUILDING_PLAN_RETRIES = 3
 
-local function planOnce(origin, probe, dist, coords, reachable, maxTiles)
+local function planOnce(origin, probe, dist, coords, reachable, maxTiles, connectedKeys)
     local plan = { placements = {}, connected = {}, skipped = {}, cost = 0, cappedAt = false,
                    order = reachable }
 
@@ -399,7 +427,7 @@ local function planOnce(origin, probe, dist, coords, reachable, maxTiles)
     joinAll(net, coords, existing)
 
     for _, entry in ipairs(reachable) do
-        local path, why = routeFixture(probe, net, origin, entry.fixture, maxTiles - plan.cost)
+        local path, why = routeFixture(probe, net, origin, entry.fixture, maxTiles - plan.cost, connectedKeys)
         if not path then
             if why == "overCap" then
                 plan.cappedAt = true
@@ -463,16 +491,19 @@ function BuildingPlumbing.plan(origin, probe, opts)
     local maxTiles = opts.maxTiles or Constants.BUILDING_PLUMB_MAX_TILES
 
     if not origin or not probe or not probe.isBuildingTile(origin.x, origin.y, origin.z) then
-        return { placements = {}, connected = {}, skipped = {}, cost = 0, cappedAt = false }
+        return { placements = {}, connected = {}, skipped = {}, alreadyConnected = {}, cost = 0, cappedAt = false }
     end
 
     local dist, coords = solveTree(probe, origin)
 
     -- Nearest first, so a capped pass lays the plumbing the player is standing next to.
-    local reachable, unreachable = {}, {}
+    local reachable, unreachable, alreadyConnected, connectedKeys = {}, {}, {}, {}
     for _, fixture in ipairs(probe.fixtures() or {}) do
         local d = dist[keyOf(fixture.x, fixture.y, fixture.z)]
-        if d then
+        if fixture.plumbed then
+            alreadyConnected[#alreadyConnected + 1] = fixture
+            connectedKeys[#connectedKeys + 1] = keyOf(fixture.x, fixture.y, fixture.z)
+        elseif d then
             reachable[#reachable + 1] = { fixture = fixture, dist = d }
         else
             unreachable[#unreachable + 1] = fixture
@@ -489,7 +520,8 @@ function BuildingPlumbing.plan(origin, probe, opts)
     -- Fixtures are routed one at a time, so an early route can wall in a later fixture. When that
     -- happens and the pass is not capped, retry with the walled-in fixtures first and keep the plan
     -- that connects the most (then costs the least).
-    local plan = planOnce(origin, probe, dist, coords, reachable, maxTiles)
+    table.sort(connectedKeys)
+    local plan = planOnce(origin, probe, dist, coords, reachable, maxTiles, connectedKeys)
     local last = plan
     for _ = 1, BUILDING_PLAN_RETRIES do
         if last.cappedAt then
@@ -509,7 +541,7 @@ function BuildingPlumbing.plan(origin, probe, opts)
         for _, entry in ipairs(last.order) do
             if not failed[entry.fixture] then order[#order + 1] = entry end
         end
-        last = planOnce(origin, probe, dist, coords, order, maxTiles)
+        last = planOnce(origin, probe, dist, coords, order, maxTiles, connectedKeys)
         if #last.connected > #plan.connected
             or (#last.connected == #plan.connected and last.cost < plan.cost) then
             plan = last
@@ -523,6 +555,7 @@ function BuildingPlumbing.plan(origin, probe, opts)
         }
     end
     plan.order = nil
+    plan.alreadyConnected = alreadyConnected
     return plan
 end
 
@@ -586,7 +619,7 @@ end
 -- geometry, and `square:getBuilding()` is the primitive vanilla itself uses.
 --
 -- Returns a probe for BuildingPlumbing.plan, or nil when the tile is not inside a building.
-function BuildingPlumbing.probeAt(originSquare, radius)
+function BuildingPlumbing.probeAt(originSquare)
     if not originSquare or not originSquare.getBuilding then
         return nil
     end
@@ -599,8 +632,9 @@ function BuildingPlumbing.probeAt(originSquare, radius)
         return nil
     end
 
-    radius = radius or Constants.BUILDING_PLUMB_MAX_RADIUS
     local ox, oy = originSquare:getX(), originSquare:getY()
+    local maxTiles = Constants.BUILDING_PLUMB_MAX_SCAN_TILES
+    local truncated = false
 
     local tiles = {}         -- key -> true, every tile a pipe may stand on
     local walls = {}         -- key -> "N"/"W"
@@ -622,6 +656,7 @@ function BuildingPlumbing.probeAt(originSquare, radius)
                 x = x, y = y, z = z,
                 object = endpointObject,
                 name = endpointObject.getName and endpointObject:getName() or nil,
+                plumbed = WaterPipes.EndpointPlumbing.isPlumbed(endpointObject),
             }
         end
     end
@@ -632,15 +667,16 @@ function BuildingPlumbing.probeAt(originSquare, radius)
 
     local index = 1
     while index <= #queue do
+        if index > maxTiles then
+            truncated = true
+            break
+        end
         local square = queue[index]
         index = index + 1
         admit(square)
 
         local x, y, z = square:getX(), square:getY(), square:getZ()
         local function consider(nx, ny, nz)
-            if math.abs(nx - ox) > radius or math.abs(ny - oy) > radius then
-                return
-            end
             local key = keyOf(nx, ny, nz)
             if seen[key] then
                 return
@@ -677,10 +713,9 @@ function BuildingPlumbing.probeAt(originSquare, radius)
         return nil
     end
 
-    local tileCount = 0
-    for _ in pairs(tiles) do tileCount = tileCount + 1 end
-    Logger.log(string.format("Building plumbing scan at %d:%d:%d -> %d tile(s), %d fixture(s)",
-        ox, oy, originSquare:getZ(), tileCount, #fixtures))
+    Logger.log(string.format("Building plumbing scan at %d:%d:%d -> %d tile(s), %d fixture(s)%s",
+        ox, oy, originSquare:getZ(), math.min(index - 1, #queue), #fixtures,
+        truncated and " (stopped at the scan limit)" or ""))
 
     return {
         isBuildingTile = function(x, y, z) return tiles[keyOf(x, y, z)] == true end,
@@ -688,11 +723,7 @@ function BuildingPlumbing.probeAt(originSquare, radius)
         wallEdge = function(x, y, z) return walls[keyOf(x, y, z)] end,
         hasRiser = function(x, y, z, edge) return edge ~= nil and risers[keyOf(x, y, z)] == edge end,
         fixtures = function() return fixtures end,
-        tileCount = function()
-            local n = 0
-            for _ in pairs(tiles) do n = n + 1 end
-            return n
-        end,
+        truncated = truncated,
     }
 end
 
@@ -934,16 +965,32 @@ local function validRequest(args, player)
         return nil, "badRequest"
     end
 
-    -- The menu walks the player next to the plan's origin, and a plan never leaves that radius.
-    local reach = Constants.BUILDING_PLUMB_MAX_RADIUS + 2
-    if math.abs(args.x - math.floor(player:getX())) > reach
-        or math.abs(args.y - math.floor(player:getY())) > reach then
-        return nil, "outOfReach"
-    end
-
     local square = squareAt(args.x, args.y, args.z)
     if not square then
         return nil, "noSquare"
+    end
+
+    -- A plan never leaves the building the player is working in; without a building to compare, fall
+    -- back to a distance from the player.
+    local function buildingOf(sq)
+        if not sq or not sq.getBuilding then
+            return nil
+        end
+        local ok, building = pcall(sq.getBuilding, sq)
+        return ok and building or nil
+    end
+    local playerSquare = player.getCurrentSquare and player:getCurrentSquare() or nil
+    local here, there = buildingOf(playerSquare), buildingOf(square)
+    if here and there then
+        if here ~= there then
+            return nil, "outOfReach"
+        end
+    else
+        local reach = Constants.BUILDING_PLUMB_REACH
+        if math.abs(args.x - math.floor(player:getX())) > reach
+            or math.abs(args.y - math.floor(player:getY())) > reach then
+            return nil, "outOfReach"
+        end
     end
     local Build = WaterPipes.Build
     if args.kind == FLOOR and Build.squareHasFloorPipe(square) then

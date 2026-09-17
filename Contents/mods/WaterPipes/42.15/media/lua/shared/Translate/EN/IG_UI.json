@@ -70,6 +70,7 @@
     "IGUI_WaterPipesPlumbBuildingNoBuilding": "Not inside a building.",
     "IGUI_WaterPipesPlumbBuildingNoFixtures": "Nothing here to plumb.",
     "IGUI_WaterPipesPlumbBuildingNothingToDo": "This building is already plumbed.",
+    "IGUI_WaterPipesPlumbBuildingTruncated": "This building is too big to survey in one go: only the part nearest you was planned.",
     "IGUI_WaterPipesPlumbBuildingNeedPipes": "Needs %1 metal pipes; you have %2.",
     "IGUI_WaterPipesPlumbBuildingDone": "Plumbed %1 fixtures, %2 tiles of pipe.",
     "IGUI_WaterPipesPlumbBuildingPartial": "Plumbed %1 fixtures; %2 left out:",
