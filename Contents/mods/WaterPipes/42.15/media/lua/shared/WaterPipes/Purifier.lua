@@ -405,6 +405,7 @@ function Purifier.step(purifier, inSquare, outSquare, dt)
     end
 
     -- 2. Convert: move IN -> OUT. Tainted needs power AND filter life; clean water always passes.
+    local outBefore = Purifier.getOutAmount(purifier)
     local inAmount = Purifier.getInAmount(purifier)
     if inAmount > 0 then
         local outHeadroom = Constants.PURIFIER_BUFFER_CAPACITY - Purifier.getOutAmount(purifier)
@@ -427,6 +428,10 @@ function Purifier.step(purifier, inSquare, outSquare, dt)
                 processed = processed or Purifier.getInAmount(purifier) < before
             end
         end
+    end
+    -- An empty clean buffer just became a supply for the clean side.
+    if outBefore <= 0 and Purifier.getOutAmount(purifier) > 0 then
+        pcall(Invalidate.supplyChangedAt, outSquare)
     end
 
     -- 3. Intake: pull ONLY TAINTED water, and ONLY from the router's IN side. The purifier never draws

@@ -804,7 +804,12 @@ function Adapter.writeDescriptorWaterAmount(descriptor, fluidAmount, fluidTypeNa
     end
 
     if descriptor.fluidMode == "purifierOut" then
+        local before = descriptor.waterAmount or 0
         local ok = writePurifierOutAmount(descriptor.object, fluidAmount, fluidTypeName)
+        -- The clean buffer supplies head only while it holds water: announce the flip on its OUT tile.
+        if ok and (before > 0) ~= ((fluidAmount or 0) > 0) and descriptor.x then
+            pcall(Invalidate.supplyChangedAt, World.squareAt(descriptor.x, descriptor.y, descriptor.z))
+        end
         return ok, ok
     end
 
