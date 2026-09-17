@@ -23,17 +23,8 @@ local BuildingPlumbing = WaterPipes.BuildingPlumbing
 -- feature with real design risk, and this way it can be exercised against a hand-built world instead
 -- of only in game.
 --
--- The tree is a SHORTEST-PATH tree, so it is acyclic by construction -- there is exactly one route
--- from the root to any tile, and every edge is therefore a bridge. That is the whole reason the shape
--- is a tree: it is what lets one valve isolate one well-defined subtree (see the valve, shipped
--- first). A mesh would be cheaper to lay and would make every valve meaningless.
---
--- probe (all coordinates are absolute):
---   isBuildingTile(x, y, z) -> boolean   inside the building being plumbed, and able to hold a pipe
---   hasPipe(x, y, z)        -> boolean   a pipe is already there; the plan reuses it and pays nothing
---   wallEdge(x, y, z)       -> "N"|"W"|nil   the wall THIS tile owns, if any (risers need one)
---   hasRiser(x, y, z, edge) -> boolean   a riser already stands on that tile and edge
---   fixtures()              -> { {x=,y=,z=,name=}, ... }   what we are trying to reach
+-- The laid pipe must stay a TREE once the game connects it: then one valve isolates one subtree.
+-- A mesh would be cheaper to lay and would make every valve meaningless.
 
 local FLOOR, RISER = "floor", "riser"
 
@@ -77,117 +68,398 @@ local function neighboursOf(probe, x, y, z)
     return out
 end
 
--- Dijkstra from the root over the building. Returns the distance to every reachable tile and the
--- parent pointer that got there, which IS the tree.
+local function heapPush(heap, cost, key)
+    heap.seq = (heap.seq or 0) + 1
+    local item = { cost = cost, seq = heap.seq, key = key }
+    local i = #heap + 1
+    heap[i] = item
+    while i > 1 do
+        local parent = math.floor(i / 2)
+        local a, b = heap[parent], heap[i]
+        if a.cost < b.cost or (a.cost == b.cost and a.seq < b.seq) then break end
+        heap[parent], heap[i] = b, a
+        i = parent
+    end
+end
+
+local function heapPop(heap)
+    local top = heap[1]
+    local last = table.remove(heap)
+    if #heap > 0 then
+        heap[1] = last
+        local i, n = 1, #heap
+        while true do
+            local l, r, m = 2 * i, 2 * i + 1, i
+            local function less(x, y)
+                return heap[x].cost < heap[y].cost or (heap[x].cost == heap[y].cost and heap[x].seq < heap[y].seq)
+            end
+            if l <= n and less(l, m) then m = l end
+            if r <= n and less(r, m) then m = r end
+            if m == i then break end
+            heap[i], heap[m] = heap[m], heap[i]
+            i = m
+        end
+    end
+    return top
+end
+
+-- Cost from the root to every tile the building lets it reach (climbing only). Orders fixtures nearest
+-- first and tells reachable from unreachable.
 local function solveTree(probe, origin)
-    local dist = { [keyOf(origin.x, origin.y, origin.z)] = stepCost(probe, origin.x, origin.y, origin.z) }
-    local parent = {}
+    local originKey = keyOf(origin.x, origin.y, origin.z)
+    local dist = { [originKey] = stepCost(probe, origin.x, origin.y, origin.z) }
+    local coords = { [originKey] = { x = origin.x, y = origin.y, z = origin.z } }
     local visited = {}
-    local frontier = { { x = origin.x, y = origin.y, z = origin.z } }
+    local frontier = {}
+    heapPush(frontier, dist[originKey], originKey)
 
     while #frontier > 0 do
-        -- Linear scan for the cheapest open tile. A building is hundreds of tiles, not millions, and a
-        -- heap here would be more code than the whole planner saves.
-        local bestIndex, bestKey, bestDist = nil, nil, math.huge
-        for index, node in ipairs(frontier) do
-            local key = keyOf(node.x, node.y, node.z)
-            if (dist[key] or math.huge) < bestDist then
-                bestIndex, bestKey, bestDist = index, key, dist[key]
-            end
-        end
-        if not bestIndex then
-            break
-        end
-
-        local current = table.remove(frontier, bestIndex)
-        if not visited[bestKey] then
-            visited[bestKey] = true
+        local item = heapPop(frontier)
+        local key = item.key
+        if not visited[key] and item.cost == dist[key] then
+            visited[key] = true
+            local current = coords[key]
             for _, step in ipairs(neighboursOf(probe, current.x, current.y, current.z)) do
-                local key = keyOf(step.x, step.y, step.z)
-                local through = bestDist + step.cost
-                if through < (dist[key] or math.huge) then
-                    dist[key] = through
-                    parent[key] = {
-                        x = current.x, y = current.y, z = current.z,
-                        kind = step.kind, edge = step.edge,
-                    }
-                    frontier[#frontier + 1] = { x = step.x, y = step.y, z = step.z }
+                local nk = keyOf(step.x, step.y, step.z)
+                local through = item.cost + step.cost
+                if through < (dist[nk] or math.huge) then
+                    dist[nk] = through
+                    coords[nk] = { x = step.x, y = step.y, z = step.z }
+                    heapPush(frontier, through, nk)
                 end
             end
         end
     end
 
-    return dist, parent
+    return dist, coords
 end
 
--- The tiles a single fixture adds to the tree, walking its branch back to the root and stopping at
--- the first tile already claimed. Returns nil if the branch runs off the tree (it cannot, once the
--- fixture is known reachable, but a probe that lies should not loop forever).
-local function branchFor(probe, origin, parent, claimed, fixture)
-    local branch = {}
-    local x, y, z = fixture.x, fixture.y, fixture.z
-    local guard = 0
+-- ===== Keeping the tree a tree =====
+-- Laid pipe joins its cardinal neighbours on the same floor, and a riser joins its tile to the tile above
+-- and to the one past its wall. The plan tracks those physical links and never lays a branch that would
+-- close a ring: in a ring a closed valve isolates nothing.
 
-    while true do
-        local key = keyOf(x, y, z)
-        if claimed[key] then
-            break
+local function riserTargets(x, y, z, edge)
+    local out = { keyOf(x, y, z + 1) }
+    if edge == "N" then
+        out[2] = keyOf(x, y - 1, z + 1)
+    elseif edge == "W" then
+        out[2] = keyOf(x - 1, y, z + 1)
+    end
+    return out
+end
+
+-- Keys physically linked to (x, y, z), piped or not, given a riser map.
+local function linksOf(x, y, z, riser)
+    local out = { keyOf(x + 1, y, z), keyOf(x - 1, y, z), keyOf(x, y + 1, z), keyOf(x, y - 1, z) }
+    local own = riser[keyOf(x, y, z)]
+    if own then
+        for _, k in ipairs(riserTargets(x, y, z, own)) do out[#out + 1] = k end
+    end
+    if riser[keyOf(x, y, z - 1)] then out[#out + 1] = keyOf(x, y, z - 1) end
+    if riser[keyOf(x, y + 1, z - 1)] == "N" then out[#out + 1] = keyOf(x, y + 1, z - 1) end
+    if riser[keyOf(x + 1, y, z - 1)] == "W" then out[#out + 1] = keyOf(x + 1, y, z - 1) end
+    return out
+end
+
+local function findRoot(parent, k)
+    local root = k
+    while parent[root] and parent[root] ~= root do
+        root = parent[root]
+    end
+    return root
+end
+
+-- Union the links that NEW pipe adds: every link of each new tile in `tiles`, and only the riser's own
+-- links for each new riser in `risers` (its tile may be old pipe whose links are already joined).
+-- Returns false if any of them closes a ring.
+local function joinAll(net, coords, tiles, risers)
+    local done, acyclic = {}, true
+    local function join(a, b)
+        local id = a < b and (a .. "|" .. b) or (b .. "|" .. a)
+        if done[id] then
+            return
         end
-        if not probe.hasPipe(x, y, z) then
-            branch[#branch + 1] = { x = x, y = y, z = z, kind = FLOOR, key = key }
+        done[id] = true
+        net.parent[a] = net.parent[a] or a
+        net.parent[b] = net.parent[b] or b
+        local ra, rb = findRoot(net.parent, a), findRoot(net.parent, b)
+        if ra == rb then
+            acyclic = false
         else
-            -- Already piped: claimed so the walk stops here next time, but nothing to build.
-            branch[#branch + 1] = { x = x, y = y, z = z, kind = FLOOR, key = key, existing = true }
+            net.parent[ra] = rb
         end
-
-        if x == origin.x and y == origin.y and z == origin.z then
-            break
-        end
-
-        local step = parent[key]
-        if not step then
-            return nil
-        end
-        -- A climb also owes the riser on the tile below it.
-        if step.kind == RISER then
-            local riserKey = keyOf(step.x, step.y, step.z) .. ":riser:" .. tostring(step.edge)
-            if not claimed[riserKey] then
-                branch[#branch + 1] = {
-                    x = step.x, y = step.y, z = step.z, kind = RISER, edge = step.edge, key = riserKey,
-                    existing = probe.hasRiser(step.x, step.y, step.z, step.edge) or nil,
-                }
+    end
+    for _, k in ipairs(tiles) do
+        local c = coords[k]
+        net.parent[k] = net.parent[k] or k
+        for _, other in ipairs(linksOf(c.x, c.y, c.z, net.riser)) do
+            if net.piped[other] then
+                join(k, other)
             end
         end
+    end
+    for k, edge in pairs(risers or {}) do
+        local c = coords[k]
+        if net.piped[k] then
+            for _, other in ipairs(riserTargets(c.x, c.y, c.z, edge)) do
+                if net.piped[other] then
+                    join(k, other)
+                end
+            end
+        end
+    end
+    return acyclic
+end
 
-        x, y, z = step.x, step.y, step.z
-        guard = guard + 1
-        if guard > 10000 then
-            return nil
+local function copyNet(net)
+    local out = { piped = {}, riser = {}, parent = {} }
+    for k, v in pairs(net.piped) do out.piped[k] = v end
+    for k, v in pairs(net.riser) do out.riser[k] = v end
+    for k, v in pairs(net.parent) do out.parent[k] = v end
+    return out
+end
+
+-- Dijkstra from a fixture to the tree. A new tile may touch at most one pipe per component, and if one
+-- of them is the tree the route must step straight into it. Returns the path, tree end first, or nil.
+local function routeFixture(probe, net, origin, fixture, budget)
+    local originKey = keyOf(origin.x, origin.y, origin.z)
+    local function isTarget(k)
+        if net.piped[originKey] then
+            return net.piped[k] == true and findRoot(net.parent, k) == findRoot(net.parent, originKey)
+        end
+        return k == originKey
+    end
+
+    -- Can tile k be entered from fromKey? Existing pipe always can. Returns ok, forcedNextKey.
+    local function admit(k, x, y, z, fromKey, riser)
+        if net.piped[k] then
+            return true, nil
+        end
+        local candidates = linksOf(x, y, z, riser or net.riser)
+        local comps, seen, forced = {}, {}, nil
+        for _, other in ipairs(candidates) do
+            if other ~= fromKey and not seen[other] and net.piped[other] then
+                seen[other] = true
+                local comp = findRoot(net.parent, other)
+                if comps[comp] then
+                    return false
+                end
+                comps[comp] = true
+                if isTarget(other) then
+                    forced = other
+                end
+            end
+        end
+        return true, forced
+    end
+
+    local startKey = keyOf(fixture.x, fixture.y, fixture.z)
+    local start = { key = startKey, x = fixture.x, y = fixture.y, z = fixture.z,
+                    cost = net.piped[startKey] and 0 or 1 }
+    if isTarget(startKey) then
+        if net.piped[startKey] then
+            return {}
+        end
+        return admit(startKey, start.x, start.y, start.z, nil, nil) and { start } or nil
+    end
+    local ok, forced = admit(startKey, start.x, start.y, start.z, nil, nil)
+    if not ok then
+        return nil
+    end
+    start.forced = forced
+
+    local labels = { [startKey] = start }
+    local frontier = {}
+    heapPush(frontier, start.cost, startKey)
+    local closed = {}
+
+    local function stepsFrom(c)
+        local out = {}
+        for _, offset in ipairs(CARDINALS) do
+            local nx, ny = c.x + offset.dx, c.y + offset.dy
+            if probe.isBuildingTile(nx, ny, c.z) then
+                out[#out + 1] = { x = nx, y = ny, z = c.z }
+            end
+        end
+        local up = probe.wallEdge(c.x, c.y, c.z)
+        if up and probe.isBuildingTile(c.x, c.y, c.z + 1) then
+            out[#out + 1] = { x = c.x, y = c.y, z = c.z + 1, riserAt = { x = c.x, y = c.y, z = c.z }, edge = up }
+        end
+        if probe.isBuildingTile(c.x, c.y, c.z - 1) then
+            local down = probe.wallEdge(c.x, c.y, c.z - 1)
+            if down then
+                out[#out + 1] = { x = c.x, y = c.y, z = c.z - 1,
+                                  riserAt = { x = c.x, y = c.y, z = c.z - 1 }, edge = down }
+            end
+        end
+        return out
+    end
+
+    while #frontier > 0 do
+        local item = heapPop(frontier)
+        local best = labels[item.key]
+        if best.cost > budget then
+            return nil, "overCap"
+        end
+
+        if not closed[best.key] and item.cost == best.cost then
+            closed[best.key] = true
+
+            if isTarget(best.key) then
+                local path, node = {}, best
+                while node do
+                    path[#path + 1] = node
+                    node = node.prev and labels[node.prev] or nil
+                end
+                return path
+            end
+
+            -- The route so far and the risers it lays: a step must not link back into it anywhere but
+            -- the tile it came from, or the branch closes a ring of its own.
+            local chain, chainRisers = {}, {}
+            local cursor = best
+            while cursor do
+                chain[cursor.key] = true
+                if cursor.riserAt and cursor.newRiser then
+                    chainRisers[keyOf(cursor.riserAt.x, cursor.riserAt.y, cursor.riserAt.z)] = cursor.edge
+                end
+                cursor = cursor.prev and labels[cursor.prev] or nil
+            end
+            local chainView = setmetatable(chainRisers, { __index = net.riser })
+
+            for _, s in ipairs(stepsFrom(best)) do
+                local nk = keyOf(s.x, s.y, s.z)
+                if not closed[nk] and (not best.forced or best.forced == nk) then
+                    local cost = best.cost + (net.piped[nk] and 0 or 1)
+                    local view, newRiser = chainView, false
+                    if s.riserAt then
+                        local rk = keyOf(s.riserAt.x, s.riserAt.y, s.riserAt.z)
+                        newRiser = view[rk] ~= s.edge
+                        if newRiser then
+                            cost = cost + 1
+                            view = setmetatable({ [rk] = s.edge }, { __index = chainView })
+                        end
+                    end
+                    local selfLinked = false
+                    for _, other in ipairs(linksOf(s.x, s.y, s.z, view)) do
+                        if other ~= best.key and chain[other] then
+                            selfLinked = true
+                            break
+                        end
+                    end
+                    if not selfLinked and (not labels[nk] or cost < labels[nk].cost) then
+                        local admitted, nextForced = admit(nk, s.x, s.y, s.z, best.key, view)
+                        if admitted then
+                            labels[nk] = { key = nk, x = s.x, y = s.y, z = s.z, cost = cost, prev = best.key,
+                                           forced = nextForced, riserAt = s.riserAt, edge = s.edge,
+                                           newRiser = newRiser }
+                            heapPush(frontier, cost, nk)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- One plan for one fixture order.
+local BUILDING_PLAN_RETRIES = 3
+
+local function planOnce(origin, probe, dist, coords, reachable, maxTiles)
+    local plan = { placements = {}, connected = {}, skipped = {}, cost = 0, cappedAt = false,
+                   order = reachable }
+
+    -- The existing pipe, as the game connects it.
+    local net = { piped = {}, riser = {}, parent = {} }
+    local existing = {}
+    for key in pairs(dist) do
+        local c = coords[key]
+        local x, y, z = c.x, c.y, c.z
+        if probe.hasPipe(x, y, z) then
+            net.piped[key] = true
+            existing[#existing + 1] = key
+        end
+        local edge = probe.wallEdge(x, y, z)
+        if edge and probe.hasRiser(x, y, z, edge) then
+            net.riser[key] = edge
+        end
+    end
+    table.sort(existing)
+    joinAll(net, coords, existing)
+
+    for _, entry in ipairs(reachable) do
+        local path, why = routeFixture(probe, net, origin, entry.fixture, maxTiles - plan.cost)
+        if not path then
+            if why == "overCap" then
+                plan.cappedAt = true
+            end
+            plan.skipped[#plan.skipped + 1] = { fixture = entry.fixture, reason = why or "noRoute" }
+        else
+            -- Tree end first: each tile, then the riser that climbs from it to the next tile out. An
+            -- interrupted pass therefore always leaves a connected tree.
+            local branch, trial, touched, risersLaid = {}, copyNet(net), {}, {}
+            for index = 1, #path do
+                local node = path[index]
+                if not net.piped[node.key] then
+                    branch[#branch + 1] = { x = node.x, y = node.y, z = node.z, kind = FLOOR, key = node.key }
+                    trial.piped[node.key] = true
+                    touched[#touched + 1] = node.key
+                end
+                if node.riserAt and node.newRiser then
+                    local rk = keyOf(node.riserAt.x, node.riserAt.y, node.riserAt.z)
+                    branch[#branch + 1] = { x = node.riserAt.x, y = node.riserAt.y, z = node.riserAt.z,
+                                            kind = RISER, edge = node.edge, key = rk .. ":riser:" .. node.edge }
+                    trial.riser[rk] = node.edge
+                    risersLaid[rk] = node.edge
+                    if not coords[rk] then
+                        coords[rk] = { x = node.riserAt.x, y = node.riserAt.y, z = node.riserAt.z }
+                    end
+                end
+            end
+            for _, k in ipairs(touched) do
+                if not coords[k] then
+                    local x, y, z = k:match("^(-?%d+):(-?%d+):(-?%d+)$")
+                    coords[k] = { x = tonumber(x), y = tonumber(y), z = tonumber(z) }
+                end
+            end
+
+            if #branch > 0 and not joinAll(trial, coords, touched, risersLaid) then
+                plan.skipped[#plan.skipped + 1] = { fixture = entry.fixture, reason = "wouldLoop" }
+            elseif plan.cost + #branch > maxTiles then
+                -- Whole fixtures only: half a branch reaches nothing and would still cost pipe.
+                plan.cappedAt = true
+                plan.skipped[#plan.skipped + 1] = { fixture = entry.fixture, reason = "overCap" }
+            else
+                net = trial
+                for _, placement in ipairs(branch) do
+                    plan.placements[#plan.placements + 1] = placement
+                end
+                plan.cost = plan.cost + #branch
+                plan.connected[#plan.connected + 1] = entry.fixture
+            end
         end
     end
 
-    return branch
+    return plan
 end
 
 -- Plan the tree.
 --
 -- opts.maxTiles caps how much ONE pass may lay. Over the cap the pass takes the fixtures it can reach
--- most cheaply and stops -- it does not refuse. Re-running extends, so a building bigger than the cap
--- (a Louisville hospital is one BuildingDef of thousands of tiles) is plumbed in several passes,
--- spreading outward from wherever the player is working.
+-- most cheaply and stops; re-running extends from wherever the player is working.
 function BuildingPlumbing.plan(origin, probe, opts)
     opts = opts or {}
     local maxTiles = opts.maxTiles or Constants.BUILDING_PLUMB_MAX_TILES
 
-    local plan = { placements = {}, connected = {}, skipped = {}, cost = 0, cappedAt = false }
     if not origin or not probe or not probe.isBuildingTile(origin.x, origin.y, origin.z) then
-        return plan
+        return { placements = {}, connected = {}, skipped = {}, cost = 0, cappedAt = false }
     end
 
-    local dist, parent = solveTree(probe, origin)
+    local dist, coords = solveTree(probe, origin)
 
-    -- Nearest first, so a capped pass lays the plumbing the player is standing next to rather than an
-    -- arbitrary corner of the building, and so a re-run extends outward from what is already there.
+    -- Nearest first, so a capped pass lays the plumbing the player is standing next to.
     local reachable, unreachable = {}, {}
     for _, fixture in ipairs(probe.fixtures() or {}) do
         local d = dist[keyOf(fixture.x, fixture.y, fixture.z)]
@@ -201,63 +473,47 @@ function BuildingPlumbing.plan(origin, probe, opts)
         if left.dist ~= right.dist then
             return left.dist < right.dist
         end
-        -- Ties broken on coordinates so the same building always plans the same way.
         return keyOf(left.fixture.x, left.fixture.y, left.fixture.z)
             < keyOf(right.fixture.x, right.fixture.y, right.fixture.z)
     end)
 
-    local claimed = {}
-    for _, entry in ipairs(reachable) do
-        local branch = branchFor(probe, origin, parent, claimed, entry.fixture)
-        if not branch then
-            plan.skipped[#plan.skipped + 1] = { fixture = entry.fixture, reason = "noRoute" }
-        else
-            local newTiles = 0
-            for _, placement in ipairs(branch) do
-                if not placement.existing then
-                    newTiles = newTiles + 1
-                end
-            end
-
-            if plan.cost + newTiles > maxTiles then
-                -- Whole fixtures only: half a branch reaches nothing and would still cost pipe.
-                plan.cappedAt = true
-                plan.skipped[#plan.skipped + 1] = { fixture = entry.fixture, reason = "overCap" }
-            else
-                for _, placement in ipairs(branch) do
-                    claimed[placement.key] = true
-                    if not placement.existing then
-                        plan.placements[#plan.placements + 1] = placement
-                    end
-                end
-                plan.cost = plan.cost + newTiles
-                plan.connected[#plan.connected + 1] = entry.fixture
-            end
+    -- Fixtures are routed one at a time, so an early route can wall in a later fixture. When that
+    -- happens and the pass is not capped, retry with the walled-in fixtures first and keep the plan
+    -- that connects the most (then costs the least).
+    local plan = planOnce(origin, probe, dist, coords, reachable, maxTiles)
+    local last = plan
+    for _ = 1, BUILDING_PLAN_RETRIES do
+        if last.cappedAt then
+            break
+        end
+        local failed = {}
+        for _, s in ipairs(last.skipped) do
+            if s.reason == "noRoute" then failed[s.fixture] = true end
+        end
+        if next(failed) == nil then
+            break
+        end
+        local order = {}
+        for _, entry in ipairs(last.order) do
+            if failed[entry.fixture] then order[#order + 1] = entry end
+        end
+        for _, entry in ipairs(last.order) do
+            if not failed[entry.fixture] then order[#order + 1] = entry end
+        end
+        last = planOnce(origin, probe, dist, coords, order, maxTiles)
+        if #last.connected > #plan.connected
+            or (#last.connected == #plan.connected and last.cost < plan.cost) then
+            plan = last
         end
     end
 
     for _, fixture in ipairs(unreachable) do
-        -- Told apart so the report can say something useful: a fixture on a floor with no wall to climb
-        -- is a different problem from one walled off on its own floor, and only the first is fixable by
-        -- the player putting a pipe somewhere.
-        local reason = "noRoute"
-        if fixture.z ~= origin.z then
-            reason = "noClimb"
-        end
-        plan.skipped[#plan.skipped + 1] = { fixture = fixture, reason = reason }
+        -- Another floor with no wall to climb is fixable by the player; walled off on its own floor is not.
+        plan.skipped[#plan.skipped + 1] = {
+            fixture = fixture, reason = fixture.z ~= origin.z and "noClimb" or "noRoute",
+        }
     end
-
-    -- Root outward, so a pass interrupted partway has always laid a CONNECTED tree rather than
-    -- islands: the ms-budgeted placement can stop at any point and what is on the ground still works.
-    table.sort(plan.placements, function(left, right)
-        local ld = dist[keyOf(left.x, left.y, left.z)] or math.huge
-        local rd = dist[keyOf(right.x, right.y, right.z)] or math.huge
-        if ld ~= rd then
-            return ld < rd
-        end
-        return left.key < right.key
-    end)
-
+    plan.order = nil
     return plan
 end
 
