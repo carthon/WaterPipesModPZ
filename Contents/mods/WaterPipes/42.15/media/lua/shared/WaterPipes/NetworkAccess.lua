@@ -282,6 +282,10 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
             nextX, nextY = rx + out.dx, ry + out.dy
         end
 
+        if Router.getPressureCeiling(router) then
+            zone.regulated = true
+        end
+
         -- +1 for the router tile itself, which sits in the run but is never a network square.
         -- The router's pressure CEILING is not read here: this walk answers reachability, and the head
         -- a regulated crossing lands at is solved by the field in Hydraulics.
@@ -666,7 +670,7 @@ end
 -- may be coming from some other, higher source.
 -- statusOnly keeps the water behind the tile visible even when the solve excluded this consumer: the
 -- answer is shared with every consumer on the level, so one starved emitter must not empty it.
-local function applyPressureGate(descriptors, originSquare, kind, solution, zoneLift, statusOnly)
+local function applyPressureGate(descriptors, originSquare, kind, solution, liftFor, statusOnly)
     local enabled = Pressure.isEnabled()
     if not enabled then
         return descriptors, Pressure.containerBase()
@@ -681,7 +685,7 @@ local function applyPressureGate(descriptors, originSquare, kind, solution, zone
 
     local reachable = {}
     for _, descriptor in ipairs(descriptors) do
-        if Pressure.canFillTo(descriptor.z, originSquare:getZ(), zoneLift) then
+        if Pressure.canFillTo(descriptor.z, originSquare:getZ(), liftFor(descriptor)) then
             descriptor.pressure = head
             reachable[#reachable + 1] = descriptor
         end
@@ -691,11 +695,11 @@ local function applyPressureGate(descriptors, originSquare, kind, solution, zone
 end
 
 -- Which containers can fluid entering at originSquare reach? Only lift is priced (Pressure.canFillTo).
-local function applyFillGate(descriptors, originSquare, pumpHead)
+local function applyFillGate(descriptors, originSquare, liftFor)
     local originZ = originSquare:getZ()
     local reachable = {}
     for _, descriptor in ipairs(descriptors) do
-        if Pressure.canFillTo(originZ, descriptor.z, pumpHead) then
+        if Pressure.canFillTo(originZ, descriptor.z, liftFor(descriptor)) then
             reachable[#reachable + 1] = descriptor
         end
     end
@@ -795,16 +799,27 @@ local function buildSummaryFromSquare(originSquare, verticalMode, kind, fill, st
     -- Visualization asks for neither gate and sees the whole physical network.
     local pressure = nil
     if kind or fill then
-        -- How far water entering here can be pushed UPHILL. Fills are never regulated, so the whole zone's
-        -- lift counts; a live inlet or open hydrant is a floor the pumps do not have to find.
-        local liftHead = math.max(Pump.headForPumps(zone.pumps), zone.supplyHead or 0)
+        -- How far water can be pushed UPHILL between two tiles: per regulator region, capped at each
+        -- ceiling on the way (Hydraulics.liftBetween). A fill that crossed no regulator keeps the walk's lift
+        -- and pays for no solve.
+        local ox, oy, oz = originSquare:getX(), originSquare:getY(), originSquare:getZ()
+        local liftSolution = solution or (fill and zone.regulated and Hydraulics.solveAt(originSquare)) or nil
+        local zoneLift = math.max(Pump.headForPumps(zone.pumps), zone.supplyHead or 0)
+        local liftFor
+        if not liftSolution then
+            liftFor = function() return zoneLift end
+        elseif fill then
+            liftFor = function(dsc) return Hydraulics.liftBetween(liftSolution, ox, oy, oz, dsc.x, dsc.y, dsc.z) end
+        else
+            liftFor = function(dsc) return Hydraulics.liftBetween(liftSolution, dsc.x, dsc.y, dsc.z, ox, oy, oz) end
+        end
         if fill then
             local gateMark = markPhase()
-            descriptors = applyFillGate(descriptors, originSquare, liftHead)
+            descriptors = applyFillGate(descriptors, originSquare, liftFor)
             sincePhase("fill/gate", gateMark)
         else
             descriptors, pressure = applyPressureGate(descriptors, originSquare, kind,
-                solution, liftHead, statusOnly)
+                solution, liftFor, statusOnly)
         end
         if #descriptors == 0 then
             return nil

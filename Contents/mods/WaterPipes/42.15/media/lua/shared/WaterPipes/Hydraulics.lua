@@ -1617,6 +1617,105 @@ function Hydraulics.supplyHead(solution)
     return solution and solution.stats and solution.stats.supplyHead or 0
 end
 
+-- Regulator region of a tile, or of the first pipe beside it for a fixture off the line.
+local function regionAt(solution, x, y, z)
+    local regions = solution.topology and solution.topology.regions
+    if not regions then
+        return nil
+    end
+    local key = keyOf(x, y, z)
+    if solution.nodes[key] then
+        return regions[key]
+    end
+    for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
+        local neighbour = keyOf(x + offset.x, y + offset.y, z)
+        if solution.nodes[neighbour] then
+            return regions[neighbour]
+        end
+    end
+    return nil
+end
+
+-- Each region's own lift: its powered pumps, or a live utility supply standing in it.
+local function regionOwnLift(solution)
+    if solution._regionOwnLift then
+        return solution._regionOwnLift
+    end
+    local regions = solution.topology.regions
+    local sites = solution.topology.sites
+    local pumpHead, own = {}, {}
+    for key, pumps in pairs(solution.pumps or {}) do
+        local r = regions[key]
+        pumpHead[r] = (pumpHead[r] or 0) + Pump.headForPumps(pumps)
+    end
+    for r, head in pairs(pumpHead) do
+        own[r] = head
+    end
+    local function supply(key, head)
+        local r = regions[key]
+        if head > (own[r] or 0) then
+            own[r] = head
+        end
+    end
+    for _, key in ipairs(sites.mains or {}) do
+        if Mains.findOnSquare(solution.nodes[key].square) then
+            supply(key, Mains.head())
+        end
+    end
+    for _, key in ipairs(sites.hydrants or {}) do
+        local hydrant = Hydrant.findOnSquare(solution.nodes[key].square)
+        if hydrant and Hydrant.pressureActive(hydrant) then
+            supply(key, Hydrant.head())
+        end
+    end
+    solution._regionOwnLift = own
+    return own
+end
+
+-- Lift (m.c.a.) that can move water from one tile to another in this zone. Each region lifts with its
+-- own pumps or supply; lift carried IN -> OUT across a regulator is capped at its ceiling.
+function Hydraulics.liftBetween(solution, fromX, fromY, fromZ, toX, toY, toZ)
+    if not solution or not solution.topology then
+        return 0
+    end
+    local fromRegion = regionAt(solution, fromX, fromY, fromZ)
+    local toRegion = regionAt(solution, toX, toY, toZ)
+    local own = regionOwnLift(solution)
+    if not fromRegion or not toRegion then
+        return 0
+    end
+    if fromRegion == toRegion then
+        return own[fromRegion] or 0
+    end
+
+    local regions = solution.topology.regions
+    local edges = {}
+    for _, router in pairs(solution.topology.routers or {}) do
+        if router.ceiling and regions[router.inKey] and regions[router.outKey] then
+            edges[#edges + 1] = { from = regions[router.inKey], to = regions[router.outKey], cap = router.ceiling }
+        end
+    end
+
+    local arriving = { [fromRegion] = own[fromRegion] or 0 }
+    for _ = 1, #edges + 1 do
+        local changed = false
+        for _, e in ipairs(edges) do
+            local upstream = arriving[e.from]
+            if upstream then
+                local candidate = math.max(own[e.to] or 0, math.min(upstream, e.cap))
+                if not arriving[e.to] or candidate > arriving[e.to] then
+                    arriving[e.to] = candidate
+                    changed = true
+                end
+            end
+        end
+        if not changed then
+            break
+        end
+    end
+    return arriving[toRegion] or own[toRegion] or 0
+end
+
 -- The purifier OUT buffers on this zone, as the solve recorded them during the walk.
 function Hydraulics.purifierOutlets(solution)
     return solution and solution.purifierOutlets or {}
