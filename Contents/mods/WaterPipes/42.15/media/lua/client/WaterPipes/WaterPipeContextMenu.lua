@@ -1401,11 +1401,8 @@ local function buildEmitterTooltip(emitterObject)
     return tooltip
 end
 
--- What the hydrant will do if opened: mains-fed and bottomless while the town service runs, or the
--- finite local reserve once it is cut. Reminds the player a pipe on the tile is what connects it.
--- The valve's state must be READABLE, not inferred from the art. Its sprite is the only other clue,
--- and a sprite that fails to resolve (a pack added but the game not restarted) leaves a shut valve
--- looking open -- which reads to the player as "the network is broken", not "the valve is closed".
+-- The valve's state is stated here, not left to its sprite: a sprite that fails to resolve makes a shut
+-- valve look open.
 local function buildValveTooltip(valve)
     local tooltip = ISWorldObjectContextMenu.addToolTip()
     local open = Valve.isOpen(valve)
@@ -1417,6 +1414,8 @@ local function buildValveTooltip(valve)
     return tooltip
 end
 
+-- What the hydrant will do if opened: mains-fed and bottomless while the town service runs, or the
+-- finite local reserve once it is cut. Reminds the player a pipe on the tile is what connects it.
 local function buildHydrantTooltip(hydrant)
     local tooltip = ISWorldObjectContextMenu.addToolTip()
     tooltip:setName(getText("ContextMenu_WaterPipesOpenHydrant"))
