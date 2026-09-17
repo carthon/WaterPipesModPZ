@@ -771,7 +771,6 @@ function BuildingPlumbing.place(placement, player)
         riser = placement.kind == RISER or nil,
         edge = placement.kind == RISER and placement.edge or nil,
         hidden = true,
-        generated = true,
     })
 
     GameEntityFactory.CreateIsoObjectEntity(object, parent, true)

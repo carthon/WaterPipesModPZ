@@ -578,10 +578,6 @@ Constants.GAUGE_READ_DISTANCE = 2             -- matches ISFluidUtil.isoMaxPanel
 -- re-running extends. A Louisville hospital is a single BuildingDef of thousands of tiles, so without
 -- this one click would plant thousands of objects in the save.
 Constants.BUILDING_PLUMB_MAX_TILES = 200
--- Marks a pipe the generator laid. A LABEL, not a material: it feeds the report and the idempotent
--- re-run, and never changes what dismantling one pays back -- a generated pipe is an ordinary metal
--- pipe removed through the ordinary path.
-Constants.PIPE_GENERATED_MODDATA_KEY = "waterpipesGenerated"
 -- How far from the clicked tile the building scan may wander, in tiles. A hospital is one BuildingDef
 -- of thousands of tiles, and the scan has to be bounded BEFORE the plan is, or a single click pays to
 -- walk the whole thing just to discover it cannot lay most of it. A box rather than a node count so
