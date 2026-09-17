@@ -590,6 +590,9 @@ Constants.BUILDING_PLUMB_REACH = 34
 -- turns out to be; after that the clock decides. Eight leaves room under the ~16 ms where a stutter
 -- becomes visible.
 Constants.BUILDING_PLUMB_MS_PER_TICK = 8
+-- In multiplayer a client only sends each tile to the server, which costs it nothing, so the budget above
+-- cannot pace it. One request per this many milliseconds keeps a pass from reaching the server at once.
+Constants.BUILDING_PLUMB_REMOTE_INTERVAL_MS = 20
 
 -- ===== Shut-off valve =====
 -- A NON-pipe device built onto a tile that already carries a floor pipe -- the gauge's pattern, not the

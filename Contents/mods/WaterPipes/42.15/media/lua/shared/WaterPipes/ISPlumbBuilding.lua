@@ -60,11 +60,23 @@ function ISPlumbBuilding:update()
     local budget = Constants.BUILDING_PLUMB_MS_PER_TICK
     local started = getTimestampMs and getTimestampMs() or 0
     local laidThisTick = 0
+    local remote = isClient and isClient()
 
     while self.next <= #self.plan.placements do
         -- At least one tile a tick, so a pass always advances however expensive one turns out to be.
         if laidThisTick > 0 and getTimestampMs and (getTimestampMs() - started) >= budget then
             break
+        end
+        -- Multiplayer: pace the requests in time instead.
+        if remote and getTimestampMs then
+            local now = getTimestampMs()
+            local interval = Constants.BUILDING_PLUMB_REMOTE_INTERVAL_MS
+            -- Keep the average rate across frames, but never catch up more than one interval after a stall.
+            local due = math.max(self.nextRequestAt or now, now - interval)
+            if now < due then
+                break
+            end
+            self.nextRequestAt = due + interval
         end
 
         local placement = self.plan.placements[self.next]
