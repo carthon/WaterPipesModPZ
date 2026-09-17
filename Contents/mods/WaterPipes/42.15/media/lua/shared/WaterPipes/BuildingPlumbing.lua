@@ -32,6 +32,7 @@ local BuildingPlumbing = WaterPipes.BuildingPlumbing
 --   isBuildingTile(x, y, z) -> boolean   inside the building being plumbed, and able to hold a pipe
 --   hasPipe(x, y, z)        -> boolean   a pipe is already there; the plan reuses it and pays nothing
 --   wallEdge(x, y, z)       -> "N"|"W"|nil   the wall THIS tile owns, if any (risers need one)
+--   hasRiser(x, y, z, edge) -> boolean   a riser already stands on that tile and edge
 --   fixtures()              -> { {x=,y=,z=,name=}, ... }   what we are trying to reach
 
 local FLOOR, RISER = "floor", "riser"
@@ -66,11 +67,10 @@ local function neighboursOf(probe, x, y, z)
 
     local edge = probe.wallEdge(x, y, z)
     if edge and probe.isBuildingTile(x, y, z + 1) then
-        -- The riser is placed on THIS tile and the tile above it still needs its own floor pipe, so a
-        -- climb costs the riser plus whatever the landing costs.
+        -- A climb costs the riser on THIS tile (free if one is already there) plus the landing above.
         out[#out + 1] = {
             x = x, y = y, z = z + 1, kind = RISER, edge = edge,
-            cost = stepCost(probe, x, y, z + 1) + (probe.hasPipe(x, y, z) and 0 or 1),
+            cost = stepCost(probe, x, y, z + 1) + (probe.hasRiser(x, y, z, edge) and 0 or 1),
         }
     end
 
@@ -154,6 +154,7 @@ local function branchFor(probe, origin, parent, claimed, fixture)
             if not claimed[riserKey] then
                 branch[#branch + 1] = {
                     x = step.x, y = step.y, z = step.z, kind = RISER, edge = step.edge, key = riserKey,
+                    existing = probe.hasRiser(step.x, step.y, step.z, step.edge) or nil,
                 }
             end
         end
@@ -339,6 +340,7 @@ function BuildingPlumbing.probeAt(originSquare, radius)
     local tiles = {}         -- key -> true, every tile a pipe may stand on
     local walls = {}         -- key -> "N"/"W"
     local piped = {}         -- key -> true, a floor pipe is already there
+    local risers = {}        -- key -> edge of a riser already on the tile's own wall
     local fixtures = {}
 
     local function admit(square)
@@ -347,6 +349,9 @@ function BuildingPlumbing.probeAt(originSquare, radius)
         tiles[key] = true
         walls[key] = wallEdgeOf(square)
         piped[key] = WaterPipes.Build.squareHasFloorPipe(square)
+        if walls[key] and WaterPipes.Build.squareHasRiserEdge(square, walls[key]) then
+            risers[key] = walls[key]
+        end
         for _, endpointObject in ipairs(EndpointObjects.collectOnSquare(square)) do
             fixtures[#fixtures + 1] = {
                 x = x, y = y, z = z,
@@ -416,6 +421,7 @@ function BuildingPlumbing.probeAt(originSquare, radius)
         isBuildingTile = function(x, y, z) return tiles[keyOf(x, y, z)] == true end,
         hasPipe = function(x, y, z) return piped[keyOf(x, y, z)] == true end,
         wallEdge = function(x, y, z) return walls[keyOf(x, y, z)] end,
+        hasRiser = function(x, y, z, edge) return edge ~= nil and risers[keyOf(x, y, z)] == edge end,
         fixtures = function() return fixtures end,
         tileCount = function()
             local n = 0
