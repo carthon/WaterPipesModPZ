@@ -72,6 +72,12 @@
     "IGUI_WaterPipesPlumbBuildingNothingToDo": "Este edificio ya está fontaneado.",
     "IGUI_WaterPipesPlumbBuildingNeedPipes": "Hacen falta %1 tuberías de metal; tienes %2.",
     "IGUI_WaterPipesPlumbBuildingDone": "Fontaneados %1 aparatos, %2 casillas de tubería.",
-    "IGUI_WaterPipesPlumbBuildingPartial": "Fontaneados %1 aparatos; %2 se han quedado fuera (mira console.txt). Vuelve a lanzarlo para ampliar.",
-    "IGUI_WaterPipesPlumbBuildingOutOfPipes": "Te has quedado sin tubería de metal tras %1 casillas. Vuelve a lanzarlo con más."
+    "IGUI_WaterPipesPlumbBuildingPartial": "Fontaneados %1 aparatos; %2 se han quedado fuera:",
+    "IGUI_WaterPipesPlumbBuildingOutOfPipes": "Te has quedado sin tubería de metal tras %1 casillas. Vuelve a lanzarlo con más.",
+    "IGUI_WaterPipesPlumbBuildingSkipped": "%1: %2",
+    "IGUI_WaterPipesPlumbBuildingSkippedMore": "...y %1 más, listados en console.txt.",
+    "IGUI_WaterPipesPlumbBuildingReason_noRoute": "no hay ruta desde aquí",
+    "IGUI_WaterPipesPlumbBuildingReason_noClimb": "no hay pared para llegar a su planta",
+    "IGUI_WaterPipesPlumbBuildingReason_wouldLoop": "conectarlo cerraría un anillo",
+    "IGUI_WaterPipesPlumbBuildingReason_overCap": "supera el límite de distancia, vuelve a construir en otro punto"
 }

@@ -72,6 +72,12 @@
     "IGUI_WaterPipesPlumbBuildingNothingToDo": "This building is already plumbed.",
     "IGUI_WaterPipesPlumbBuildingNeedPipes": "Needs %1 metal pipes; you have %2.",
     "IGUI_WaterPipesPlumbBuildingDone": "Plumbed %1 fixtures, %2 tiles of pipe.",
-    "IGUI_WaterPipesPlumbBuildingPartial": "Plumbed %1 fixtures; %2 left out (see console.txt). Run it again to extend.",
-    "IGUI_WaterPipesPlumbBuildingOutOfPipes": "Ran out of metal pipe after %1 tiles. Run it again with more."
+    "IGUI_WaterPipesPlumbBuildingPartial": "Plumbed %1 fixtures; %2 left out:",
+    "IGUI_WaterPipesPlumbBuildingOutOfPipes": "Ran out of metal pipe after %1 tiles. Run it again with more.",
+    "IGUI_WaterPipesPlumbBuildingSkipped": "%1: %2",
+    "IGUI_WaterPipesPlumbBuildingSkippedMore": "...and %1 more, listed in console.txt.",
+    "IGUI_WaterPipesPlumbBuildingReason_noRoute": "no route from here",
+    "IGUI_WaterPipesPlumbBuildingReason_noClimb": "no wall to reach its floor",
+    "IGUI_WaterPipesPlumbBuildingReason_wouldLoop": "connecting it would close a loop",
+    "IGUI_WaterPipesPlumbBuildingReason_overCap": "over the distance limit, build again from another spot"
 }

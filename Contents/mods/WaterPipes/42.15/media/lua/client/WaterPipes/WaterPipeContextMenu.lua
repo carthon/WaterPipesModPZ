@@ -1171,6 +1171,8 @@ end
 -- The plan is built when the option is CHOSEN, never when the menu opens: planning floods the building
 -- and runs a Dijkstra over it, and a right-click has to stay cheap. So the tooltip states the rule and
 -- the answer arrives when the player commits.
+local SKIPPED_SHOWN = 3
+
 local function reportPlumbing(playerObj, plan, action)
     local skipped = #plan.skipped
     local text, tone
@@ -1189,6 +1191,20 @@ local function reportPlumbing(playerObj, plan, action)
         tone = "good"
     end
     halo(playerObj, text, tone)
+
+    -- Which fixtures were left out and why, a few lines in the halo; the full list stays in console.txt.
+    if not (action and action.outOfPipes) and skipped > 0 then
+        for index = 1, math.min(skipped, SKIPPED_SHOWN) do
+            local entry = plan.skipped[index]
+            local name = entry.fixture.object and resolveFixtureName(entry.fixture.object)
+                or getText("IGUI_WaterPipesFixture")
+            halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingSkipped", name,
+                getText("IGUI_WaterPipesPlumbBuildingReason_" .. tostring(entry.reason))))
+        end
+        if skipped > SKIPPED_SHOWN then
+            halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingSkippedMore", tostring(skipped - SKIPPED_SHOWN)))
+        end
+    end
 
     Logger.log(string.format(
         "Building plumbing finished: %d fixture(s) reached, %d connected, %d tile(s) of pipe, %d skipped",
