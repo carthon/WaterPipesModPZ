@@ -1651,6 +1651,7 @@ local function regionOwnLift(solution)
     for r, head in pairs(pumpHead) do
         own[r] = head
     end
+    solution._regionPumpHead = pumpHead
     local function supply(key, head)
         local r = regions[key]
         if head > (own[r] or 0) then
@@ -1751,7 +1752,14 @@ function Hydraulics.zoneReport(solution, square)
     report.poweredPumps = stats.poweredPumps or 0
     report.mainsCount = stats.mainsCount or 0
     report.hydrantCount = stats.hydrantCount or 0
-    report.pumpHead = stats.pumpHead or 0
+    -- The pumps lifting THIS tile's regulator region; a pump past a regulator lifts nothing here.
+    local region = square and regionAt(solution, square:getX(), square:getY(), square:getZ())
+    if region and solution.topology and solution.topology.regions then
+        regionOwnLift(solution)
+        report.pumpHead = solution._regionPumpHead[region] or 0
+    else
+        report.pumpHead = stats.pumpHead or 0
+    end
     report.mainsHead = (stats.mainsCount or 0) > 0 and Mains.head() or 0
     report.supplyHead = stats.supplyHead or 0
 
