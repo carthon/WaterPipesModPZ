@@ -1,0 +1,4 @@
+* text=auto
+*.png binary
+*.pack binary
+*.tiles binary
