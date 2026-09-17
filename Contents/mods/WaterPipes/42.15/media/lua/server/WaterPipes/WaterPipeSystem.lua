@@ -186,10 +186,8 @@ function System.scanContainersAroundPipes()
                 end
             end
 
-            -- The shut-off valve is a NON-pipe object, so it is not in the loop above; but the gate is the
-            -- same one -- a pipe object carrying our key proves this square's modData has arrived.
-            -- Read in the SAFE direction: a valve whose own modData has not landed yet reads as absent,
-            -- so the tile conducts. An accidental open costs nothing; an accidental closed splits a base.
+            -- The valve is not a pipe object, but a pipe carrying our key proves this square's modData has arrived.
+            -- A valve whose modData has not landed reads as absent, so the tile conducts.
             if derived then
                 derived.valveClosed = Valve.isClosedOnSquare(square) or nil
             end
@@ -942,21 +940,15 @@ local function describeModDataKeys(modData)
     return "{" .. table.concat(keys, ",") .. "}"
 end
 
--- Fittings a pipe CARRIES: the shut-off valve and the pressure gauge. Both are non-pipe devices whose
--- OnIsValid demands a pipe on the tile, so a fitting left behind by a dismantled pipe is an object that
--- could never have been built where it now stands. For the gauge that was merely a dial floating over
--- bare floor; for a valve it is worse -- it keeps its state, so a pipe later run through that tile is
--- born cut, with nothing on screen to say why.
---
--- Called only once the pipe is confirmed gone (see the caller), so a cancelled removal takes nothing.
+-- Fittings a pipe carries (valve, gauge) come down with it: neither is valid without a pipe, and a valve
+-- left behind would keep its state. Called only once the pipe is confirmed gone.
 local FITTING_RETURNS = {
     [Constants.VALVE_MODDATA_KEY] = { "Base.MetalPipe", "Base.IronBarHalf" },
     [Constants.GAUGE_MODDATA_KEY] = { "Base.MetalPipe", "Base.ElectronicsScrap" },
 }
 
--- Fittings this pass is taking down right now. RemoveTileObject raises the very event that pays for a
--- dismantled fitting (the purifier's footprint sweep learned the same lesson), so without this a valve
--- pulled off by its own pipe would be paid for twice.
+-- Fittings being taken down right now. RemoveTileObject raises the event that pays for a dismantled
+-- fitting, so this stops a valve removed with its pipe from being paid twice.
 local fittingsComingDown = {}
 
 local function fittingReturnsFor(object)
@@ -1296,12 +1288,8 @@ end
 System.schedulePurifierRemoval = schedulePurifierRemoval
 System.processPurifierRemovals = processPendingPurifierRemovals
 
--- A fitting dismantled BY ITSELF, rather than taken down with the pipe under it. Vanilla pays nothing
--- for it: WaterPipeScrap registers the material at zero chance on purpose, so the Disassemble option
--- exists without vanilla ever paying twice for a pipe. That left a valve costing a metal pipe and half
--- a bar of stock to build and returning nothing at all when taken off.
--- Same next-tick confirmation as the pipe drops, and for the same reason: the event fires BEFORE the
--- object leaves, so a cancelled removal must pay nothing.
+-- A fitting dismantled by itself pays its materials back (vanilla's scrap pays nothing for it). Confirmed
+-- on the next tick, as for pipes, so a cancelled removal pays nothing.
 local function scheduleFittingRemoval(object)
     if not object or fittingsComingDown[object] then
         return

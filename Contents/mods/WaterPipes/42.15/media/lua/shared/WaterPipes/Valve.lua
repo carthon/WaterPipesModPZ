@@ -12,14 +12,8 @@ local State = WaterPipes.State
 local Logger = WaterPipes.Logger
 local Valve = WaterPipes.Valve
 
--- An inline shut-off valve: a NON-pipe device built onto a tile that already carries a floor pipe,
--- the same way the pressure gauge is (see Build.gaugeOnIsValid). It is not the pipe, which is what
--- lets it be fitted to a run that already exists without dismantling anything.
---
--- Open, it does nothing at all. Closed, its square stops conducting: every topology walk treats it as
--- a wall, so the network genuinely splits and the two sides stop sharing pressure, level, stagnation
--- and contamination. Unlike a router it has no crossing behaviour -- a closed valve is a hard stop in
--- both directions, and an open one is invisible.
+-- An inline shut-off valve: a non-pipe device fitted onto an existing floor pipe. Open, it does nothing.
+-- Closed, every topology walk treats its tile as a wall in both directions, so the network splits.
 
 local function getModData(worldObject)
     if not worldObject or not worldObject.getModData then
@@ -87,9 +81,7 @@ function Valve.setOpen(worldObject, open)
         pcall(worldObject.transmitModData, worldObject)
     end
 
-    -- The sprite IS the state, as far as the player can see. A silent failure here leaves a valve that
-    -- looks open while it is shut -- indistinguishable from the network being broken, and the reason
-    -- the context menu now spells the state out in a tooltip rather than trusting the art.
+    -- The sprite shows the state; the context menu tooltip states it as well, in case the sprite fails.
     local spriteName = Valve.spriteFor(worldObject)
     local sprite = getSprite and getSprite(spriteName) or nil
     if sprite and worldObject.setSprite then

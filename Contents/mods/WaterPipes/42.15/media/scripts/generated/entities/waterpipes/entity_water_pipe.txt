@@ -380,11 +380,8 @@ module WaterPipes
         }
     }
 
-    /* Inline shut-off valve. A device fitted ONTO an existing floor pipe (the gauge's pattern), so it
-       can be added to a run that already exists -- a building's concealed plumbing included -- without
-       dismantling anything. Symmetric, so it has a single face: it must read over a straight, a corner,
-       a T and a cross alike. Cell 47 is open; 48 (closed) is swapped in at runtime by Valve.setOpen and
-       is deliberately not a face, since every entity face sprite has to be unique. */
+    /* Inline shut-off valve, fitted onto an existing floor pipe. One face (cell 47, open); cell 48
+       (closed) is swapped in by Valve.setOpen and is not a face, as entity faces must be unique. */
     entity WaterPipeValve
     {
         component SpriteConfig

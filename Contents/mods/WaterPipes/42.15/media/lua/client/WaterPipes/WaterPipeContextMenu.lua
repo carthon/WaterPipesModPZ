@@ -1148,11 +1148,8 @@ function ContextMenu.setValveOpen(playerObj, valve, open)
     end
 end
 
--- Halo notes in the colour the message deserves. addGoodText / addBadText are vanilla's own; the
--- fallback to the neutral addText is kept because a refusal that renders is worth more than one that
--- throws on a build where the coloured variants are missing.
---   good -> the whole thing worked        bad -> refused, or stopped partway
---   neutral -> it happened, and there was nothing to celebrate or fix
+-- Halo notes by tone: good = it worked, bad = refused or stopped partway, nil = neutral. Falls back to
+-- addText where the coloured variants are missing.
 local function halo(playerObj, text, tone)
     if not playerObj or not HaloTextHelper then
         return
@@ -1168,9 +1165,7 @@ end
 
 -- ===== Plumbing a whole building =====
 --
--- The plan is built when the option is CHOSEN, never when the menu opens: planning floods the building
--- and runs a Dijkstra over it, and a right-click has to stay cheap. So the tooltip states the rule and
--- the answer arrives when the player commits.
+-- The plan is built when the option is chosen, never when the menu opens: planning floods the building.
 local SKIPPED_SHOWN = 3
 
 local function reportPlumbing(playerObj, plan, action)

@@ -3,12 +3,8 @@ require "WaterPipes/Constants"
 require "WaterPipes/Valve"
 require "WaterPipes/SoundOptions"
 
--- Opening or closing a shut-off valve: the character walks to it, works the wrench, and only then does
--- the valve turn. Same shape as ISToggleHydrant -- the world state is flipped authoritatively on the
--- server via a client command (direct in single-player).
---
--- The duration is not decoration. Closing a valve splits the network, which costs a graph rebuild and
--- an endpoint refresh; inside a timed action that lands where the player is already waiting.
+-- Opening or closing a shut-off valve: walk to it, work the wrench, then flip it on the server (direct in
+-- single player). The duration covers the graph rebuild the change costs.
 
 ISToggleValve = ISBaseTimedAction:derive("ISToggleValve")
 

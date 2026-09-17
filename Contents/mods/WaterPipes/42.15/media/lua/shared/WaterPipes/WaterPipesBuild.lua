@@ -249,11 +249,8 @@ end
 
 -- What a pipe's modData IS.
 -- opts: surface, riser, edge, hidden, router, routerDirection, pump, drip, sprinkler, axis.
--- Every pipe variant is stamped here, so what makes a router / pump / drip / sprinkler special is one
--- extra modData flag and never a separate object type.
--- Split out of markAndRegister so the building generator can stamp exactly the same thing without the
--- per-pipe registration below: it lays hundreds at once and owes the network ONE rebuild at the end,
--- not one per tile. One definition, so the two paths cannot drift.
+-- Every pipe variant is stamped here, so a router / pump / drip / sprinkler is one extra modData flag.
+-- Shared with the building generator, which registers once per pass instead of once per pipe.
 function Build.stampPipeModData(thumpable, opts)
     if not thumpable then
         return
@@ -480,10 +477,8 @@ function Build.gaugeOnCreate(params)
     end
 end
 
--- The shut-off valve follows the gauge exactly: a device fitted ONTO an existing floor pipe, which is
--- what lets it be added to a run (a building's concealed plumbing included) without dismantling it.
--- It never registers as a pipe; what it changes is whether its tile conducts, and that is read off the
--- world by State.rebuildGraph through the registry.
+-- The shut-off valve follows the gauge: a device fitted onto an existing floor pipe. It never registers
+-- as a pipe; State.rebuildGraph reads whether its tile conducts.
 function Build.valveOnIsValid(params)
     local square = params and params.square
     return squareHasFloorPipe(square) and not Valve.hasValveOnSquare(square)

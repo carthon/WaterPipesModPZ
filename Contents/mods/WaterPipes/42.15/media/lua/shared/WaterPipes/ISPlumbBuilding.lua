@@ -4,18 +4,9 @@ require "WaterPipes/BuildingPlumbing"
 require "WaterPipes/Logger"
 require "WaterPipes/SoundOptions"
 
--- Plumbing a whole building: the character works, and the pipes go in as the work proceeds.
---
--- The pass is spread over frames by a MILLISECOND BUDGET rather than a tile count, the same way
--- Irrigation.beginPass is: a count is a proxy for cost and it drifts the moment anything underneath
--- changes. At least one tile is laid per tick so a pass always advances, and after that the clock
--- decides.
---
--- The plan lays tiles ROOT OUTWARD, so an interrupted pass leaves a connected tree rather than
--- islands -- whatever is on the ground when the player walks away actually works.
---
--- Materials are spent per tile as it is laid, not up front: interrupt the pass and you have paid for
--- the pipe that is in the floor and nothing more.
+-- Plumbing a whole building: pipes are laid as the work proceeds, root outward, so an interrupted pass
+-- leaves a connected tree. Paced per frame by a millisecond budget, or by time in multiplayer; pipe is
+-- spent per tile laid.
 
 ISPlumbBuilding = ISBaseTimedAction:derive("ISPlumbBuilding")
 

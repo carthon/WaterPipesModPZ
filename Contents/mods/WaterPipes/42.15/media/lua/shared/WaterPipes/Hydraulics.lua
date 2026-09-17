@@ -1437,10 +1437,8 @@ function Hydraulics.solveAt(square)
     -- The seed must be a pipe tile: a fixture has no pipe of its own, so the zone it belongs to is
     -- whichever one its neighbours are on.
     --
-    -- ...but NOT when the square is a closed valve. Falling through to the neighbours there would seed
-    -- the field from one of the two sides the valve exists to keep apart, and which one is an accident
-    -- of iteration order. A shut valve has no zone. (Same fix as the walk's origin guard in
-    -- NetworkAccess: refusing the tile is not enough if the neighbours are then seeded anyway.)
+    -- ...but not when the square is a closed valve: seeding from a neighbour would pick one side of it.
+    -- A shut valve has no zone.
     if Valve.isClosedOnSquare(square) then
         return nil
     end

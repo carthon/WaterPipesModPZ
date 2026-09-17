@@ -226,10 +226,8 @@ function State.rebuildGraph()
         return data and data.metadata and data.metadata.router == true or false
     end
 
-    -- A CLOSED shut-off valve makes its tile behave like a wall: no edge in or out. Same registry
-    -- authority as `metadata.router` above, and kept honest the same way -- re-derived every pass in
-    -- System.scanContainersAroundPipes, so a flag left on a tile whose valve is gone (or opened by
-    -- another client) cannot keep the base split.
+    -- A closed shut-off valve makes its tile a wall: no edge in or out. Re-derived every pass, so a stale
+    -- flag cannot keep a base split.
     local function isClosedValveAt(x, y, z)
         local data = state.pipes[State.squareKey(x, y, z)]
         return data and data.metadata and data.metadata.valveClosed == true or false

@@ -14,9 +14,7 @@ Constants.REDISTRIBUTION_INTERVAL_MINUTES = 10
 Constants.PIPE_OBJECT_NAME = "Water Pipe"
 Constants.PIPE_BUILD_ENTITY_NAME = "WaterPipe"
 Constants.PIPE_BUILD_ENTITY_FULL_NAME = "WaterPipes.WaterPipe"
--- The item a pipe is BUILT FROM. It said Base.Pipe for a long time and nothing ever read it, so the
--- lie went unnoticed until the building generator counted the player's stock with it and found none:
--- every recipe in this mod consumes Base.MetalPipe (or Base.ClayPipeSegment).
+-- The item a pipe is built from; every recipe in this mod consumes Base.MetalPipe (or Base.ClayPipeSegment).
 Constants.PIPE_ITEM_TYPE = "Base.MetalPipe"
 Constants.PIPE_TOOL_TYPE = "Base.PipeWrench"
 Constants.PIPE_MODDATA_KEY = "waterpipesPipe"
@@ -88,11 +86,8 @@ Constants.PIPE_RISER_EDGE_MODDATA_KEY = "waterpipesRiserEdge"
 -- Baked in at build time and never toggled at runtime, so no extra network sync is needed.
 Constants.PIPE_HIDDEN_MODDATA_KEY = "waterpipesHidden"
 Constants.PIPE_HIDDEN_SPRITE = "waterpipes_01_20"   -- fully transparent tile in the tileset
--- The concealed entities' own FACE sprites. Distinct from the transparent tile above: the face is what
--- the build cursor shows and, more importantly here, what SpriteConfigManager.getObjectInfoFromSprite
--- resolves an entity script from -- which is how the generator creates a pipe without a build cursor.
--- Every entity face must be unique across the mod or the world throws WorldDictionaryException, which
--- is exactly why these three cells exist instead of borrowing the visible pipes'.
+-- The concealed entities' own face sprites. The generator resolves an entity script from the face, and
+-- every entity face must be unique across the mod or the world throws WorldDictionaryException.
 Constants.PIPE_HIDDEN_FACE_SPRITE = "waterpipes_01_44"        -- WaterPipeHidden, face S
 Constants.PIPE_HIDDEN_RISER_FACE_N = "waterpipes_01_45"       -- WaterPipeRiserHidden, face N
 Constants.PIPE_HIDDEN_RISER_FACE_W = "waterpipes_01_46"       -- ...and face W
@@ -572,11 +567,8 @@ Constants.GAUGE_SPRITE_W = "waterpipes_01_31"   -- ...and the West wall mirror
 Constants.GAUGE_READ_DISTANCE = 2             -- matches ISFluidUtil.isoMaxPanelDist
 
 -- ===== Building plumbing =====
--- How many NEW pipe tiles one pass of the building generator may lay. A ceiling on save size and on
--- the length of the pass, not a difficulty dial, which is why it lives here and not in Sandbox.
--- It does not REFUSE over the cap: the pass takes the fixtures it reaches most cheaply and stops, and
--- re-running extends. A Louisville hospital is a single BuildingDef of thousands of tiles, so without
--- this one click would plant thousands of objects in the save.
+-- New pipe tiles one pass may lay: a ceiling on save size and pass length. Over it the pass takes the
+-- nearest fixtures and a re-run extends.
 Constants.BUILDING_PLUMB_MAX_TILES = 200
 -- Most building tiles one survey reads, nearest the clicked tile first. Covers ordinary buildings whole;
 -- past it the survey stops and the player is told the building was only partly planned.
@@ -584,24 +576,15 @@ Constants.BUILDING_PLUMB_MAX_SCAN_TILES = 8000
 -- Server fallback when a requested tile has no building to check against: how far from the player it
 -- may be.
 Constants.BUILDING_PLUMB_REACH = 34
--- How long one frame may spend laying pipe. Stated in milliseconds rather than a tile count for the
--- same reason IRRIGATION_MS_PER_TICK is: a count is a proxy for cost and drifts the moment anything
--- underneath it changes. At least one tile is always laid, so a pass advances however expensive one
--- turns out to be; after that the clock decides. Eight leaves room under the ~16 ms where a stutter
--- becomes visible.
+-- How long one frame may spend laying pipe, in milliseconds. At least one tile is always laid.
 Constants.BUILDING_PLUMB_MS_PER_TICK = 8
 -- In multiplayer a client only sends each tile to the server, which costs it nothing, so the budget above
 -- cannot pace it. One request per this many milliseconds keeps a pass from reaching the server at once.
 Constants.BUILDING_PLUMB_REMOTE_INTERVAL_MS = 20
 
 -- ===== Shut-off valve =====
--- A NON-pipe device built onto a tile that already carries a floor pipe -- the gauge's pattern, not the
--- emitters'. That is what lets a valve be fitted to an existing run (a building's concealed plumbing
--- included) without dismantling the pipe first.
--- Closed, its square stops conducting entirely: State.rebuildGraph drops its edges and the network
--- splits in two, so pressure, level, stagnation and contamination stop being shared across it. Pipe
--- nodes carry no fluid of their own (water lives on container nodes), so cutting a tile out of the
--- graph strands nothing -- which is why the valve can be a pure edge and never a node.
+-- A non-pipe device fitted onto an existing floor pipe. Closed, its tile stops conducting and the network
+-- splits; pipe nodes hold no fluid, so nothing is stranded.
 Constants.VALVE_MODDATA_KEY = "waterpipesValve"
 -- ABSENT MEANS OPEN, the same idiom as PUMP_ENABLED_KEY: building a valve must never change how the
 -- network behaves until the player deliberately closes it.

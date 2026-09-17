@@ -16,15 +16,9 @@ local EndpointObjects = WaterPipes.EndpointObjects
 local Logger = WaterPipes.Logger
 local BuildingPlumbing = WaterPipes.BuildingPlumbing
 
--- Plans the concealed pipe tree that connects a building's fixtures to one root tile.
---
--- PURE. It reads the world through a `probe` table and returns a plan; it places nothing, spends
--- nothing and touches no global state. That is deliberate: the shape of this tree is the part of the
--- feature with real design risk, and this way it can be exercised against a hand-built world instead
--- of only in game.
---
--- The laid pipe must stay a TREE once the game connects it: then one valve isolates one subtree.
--- A mesh would be cheaper to lay and would make every valve meaningless.
+-- Plans the concealed pipe tree that connects a building's fixtures to one root tile. Pure: it reads the
+-- world through a `probe` and returns a plan. The laid pipe must stay a tree once the game connects it,
+-- so one valve isolates one subtree.
 --
 -- probe (all coordinates are absolute):
 --   isBuildingTile(x, y, z) -> boolean   inside the building being plumbed, and able to hold a pipe
@@ -51,10 +45,8 @@ local function stepCost(probe, x, y, z)
     return probe.hasPipe(x, y, z) and 0 or 1
 end
 
--- Every move out of one tile. Horizontal within the building; vertical ONLY through a riser, and a
--- riser only exists on a tile that owns a North or West wall -- in PZ a tile owns no other, which is
--- why the mod has no East/South riser and why this is a hard constraint rather than a preference.
--- A riser lives on the LOWER square and links it to the square above (PipeObjectUtils:229).
+-- Every move out of one tile: horizontal within the building, vertical only through a riser on the lower
+-- tile's own North or West wall (a tile owns no other).
 local function neighboursOf(probe, x, y, z)
     local out = {}
     for _, offset in ipairs(CARDINALS) do
@@ -152,9 +144,8 @@ local function solveTree(probe, origin)
 end
 
 -- ===== Keeping the tree a tree =====
--- Laid pipe joins its cardinal neighbours on the same floor, and a riser joins its tile to the tile above
--- and to the one past its wall. The plan tracks those physical links and never lays a branch that would
--- close a ring: in a ring a closed valve isolates nothing.
+-- Pipe joins its cardinal neighbours on a floor; a riser joins its tile to the one above and the one past
+-- its wall. A branch that would close a ring is never laid.
 
 local function riserTargets(x, y, z, edge)
     local out = { keyOf(x, y, z + 1) }
@@ -482,10 +473,7 @@ local function planOnce(origin, probe, dist, coords, reachable, maxTiles, connec
     return plan
 end
 
--- Plan the tree.
---
--- opts.maxTiles caps how much ONE pass may lay. Over the cap the pass takes the fixtures it can reach
--- most cheaply and stops; re-running extends from wherever the player is working.
+-- Plan the tree. opts.maxTiles caps one pass: over it the nearest fixtures are taken and a re-run extends.
 function BuildingPlumbing.plan(origin, probe, opts)
     opts = opts or {}
     local maxTiles = opts.maxTiles or Constants.BUILDING_PLUMB_MAX_TILES
@@ -592,19 +580,8 @@ local function wallEdgeOf(square)
 end
 
 
--- Can a floor pipe stand here? A floor to stand on, and that is the whole rule.
---
--- It is NOT "nothing solid or placement-blocking in the way", which is what this asked at first and
--- what broke it. The engine's own check (ISBuildIsoEntity.lua:335) rejects a blocked square only when
--- the thing being PLACED is itself solidtrans or BlocksPlacement:
---
---     if (square blocks) and (tileInfoSpriteProps:has(solidtrans) or has("BlocksPlacement")) then
---
--- A floor pipe is neither, so a blocked square is irrelevant to it -- and the mod's own validity says
--- the same: Build.floorOnIsValid asks only whether a floor pipe is already there. Taking the left half
--- of that condition and dropping the right rejected exactly the tiles that matter most: a sink's own
--- tile, which is where the player clicks AND where the mod requires a pipe before a fixture can be
--- plumbed at all.
+-- Can a floor pipe stand here? Only a floor is needed: as in the engine's placement check, a blocked
+-- square only stops a solid object, and a sink's own tile must take the pipe it is plumbed through.
 local function canHoldPipe(square)
     if not square or not square.hasFloor then
         return false
@@ -613,12 +590,8 @@ local function canHoldPipe(square)
     return okFloor and floored or false
 end
 
--- Read the building ONCE, by flooding out from the clicked tile over squares belonging to the same
--- IsoBuilding. A flood rather than walking the BuildingDef's room rectangles: it visits only tiles
--- that are really there, it handles every floor and every irregular shape without needing the room
--- geometry, and `square:getBuilding()` is the primitive vanilla itself uses.
---
--- Returns a probe for BuildingPlumbing.plan, or nil when the tile is not inside a building.
+-- Read the building once by flooding from the clicked tile over squares of the same IsoBuilding, nearest
+-- first. Returns a probe for BuildingPlumbing.plan, or nil outside a building.
 function BuildingPlumbing.probeAt(originSquare)
     if not originSquare or not originSquare.getBuilding then
         return nil
@@ -728,11 +701,8 @@ function BuildingPlumbing.probeAt(originSquare)
 end
 
 -- ===== Laying it =====
--- Creating a built object without a build cursor, the way vanilla's own map-object scripts do it
--- (server/Map/MapObjects/MORainCollectorBarrel.lua): build the IsoThumpable, resolve its entity script
--- from its FACE sprite, and associate the two. That association is the step that cannot be skipped --
--- an object without it comes back from a chunk reload as "EntityScript not found", which is exactly
--- the bug the pump and the gauge hit when their art sat on a vanilla cell.
+-- Built without a cursor, as vanilla's map-object scripts do: create the IsoThumpable and associate its
+-- entity script from the face sprite, or the object reloads as "EntityScript not found".
 
 local FACE_FOR = {
     [FLOOR] = function() return Constants.PIPE_HIDDEN_FACE_SPRITE end,
@@ -745,13 +715,8 @@ local FACE_FOR = {
 -- plumbing softer than the player's own line.
 local GENERATED_HEALTH = 200
 
--- Lay ONE pipe. Returns the object (or true, when the server was asked to do it), or nil and a reason.
---
--- Creating world objects belongs to the server -- vanilla's own map-object scripts bail on isClient()
--- for exactly this reason -- so on a client each tile is asked for rather than made. One command per
--- tile rather than one for the whole plan: it keeps the progressive laying and the interruption
--- semantics identical in both, and the traffic is bounded by BUILDING_PLUMB_MAX_TILES and spread over
--- the pass by its millisecond budget.
+-- Lay ONE pipe. Returns the object, true when the server was asked to lay it, or nil and a reason.
+-- World objects are created by the server, so a client sends one request per tile.
 function BuildingPlumbing.place(placement, player)
     if isClient and isClient() then
         if not player then
@@ -818,9 +783,7 @@ function BuildingPlumbing.place(placement, player)
     return object
 end
 
--- Everything the network owes after a pass, paid ONCE. Laying N pipes through the ordinary
--- registerPipeAt would rebuild the graph and refresh every plumbed endpoint N times -- the pattern
--- that cost processPumps 56 ms before it was fixed.
+-- Everything the network owes after a pass, paid once rather than per pipe laid.
 function BuildingPlumbing.finish(placements, player)
     if isClient and isClient() then
         -- The server owns the graph; ask it to settle once. Sprites are derived client-side, never sent.
@@ -845,18 +808,8 @@ function BuildingPlumbing.finish(placements, player)
     end
 end
 
--- Connect the fixtures the pass reached.
---
--- Laying pipe to a sink is not the same as plumbing it: the pipe is on its tile, but the fixture still
--- draws from vanilla's own water until EndpointPlumbing.plumb swaps it over. Doing that by hand for
--- every sink in the house right after asking for the house to be plumbed is busywork with no decision
--- in it, so the pass finishes the job.
---
--- MUST run after BuildingPlumbing.finish: plumbing reads the network, and until the rebuild the
--- network does not know the new pipes exist.
---
--- Per SQUARE rather than per fixture, and every endpoint on it: that is what the server command can
--- address, so single-player and multiplayer connect exactly the same set.
+-- Connect the fixtures the pass reached. Must run after BuildingPlumbing.finish, which is what makes the
+-- network know the new pipes. Per square, as the server command addresses them.
 function BuildingPlumbing.plumbFixtures(plan, player)
     local EndpointPlumbing = WaterPipes.EndpointPlumbing
     local EndpointObjectsModule = WaterPipes.EndpointObjects
