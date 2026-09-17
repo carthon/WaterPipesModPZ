@@ -410,101 +410,101 @@ local function timed(name, fn, ...)
     return fn(...)
 end
 
--- Which purifier, if any, this pump can feed: one on a router bordering the pump's own zone, approached
--- from the router's IN side. The OUT offset points at the clean side, so pushing raw lake water in
--- there would contaminate the clean run.
--- Driven by the REGISTRY rather than by searching the world -- a purifier cannot exist without a router
--- under it, and both appear and disappear by player action. The old walk probed six neighbours of every
--- tile of the pump's network, about 1 260 lookups per pump per minute, to return nil on a base with no
--- purifier at all. A registry entry is a claim, not a fact: one the world contradicts is dropped here.
-local function findPurifierIntakeForPump(square)
-    -- Resolved off the WaterPipes table rather than required, for the reason above Pump.getStatus:
-    -- NetworkAccess requires this module, so closing the loop would be a recursive require. Without
-    -- this line the name below is a nil GLOBAL -- the function moved here from WaterPipeSystem, where
-    -- the file had a local for it, and nothing here replaced it.
-    local NetworkAccess = WaterPipes.NetworkAccess
-
-    local purifiers = State.getPurifiers()
-    if not purifiers or not NetworkAccess then
-        return nil
-    end
-
-    -- Built on first use, so an empty registry never pays for it.
-    local networkKeys = nil
-    local stale = nil
-
-    local function routerFeedsNetwork(routerSquare)
-        local router = Router.findOnSquare(routerSquare)
-        local out = router and Router.getOutOffset(router)
-        if not out then
-            return false
-        end
-
-        local rx, ry, rz = routerSquare:getX(), routerSquare:getY(), routerSquare:getZ()
-        for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-            local tx, ty, tz = rx + offset.x, ry + offset.y, rz + offset.z
-            -- The OUT tile is the clean side; feeding the intake from there would push purified water
-            -- back through the filter. Every other side is the dirty side, which is what a pump wants.
-            local isOutSide = tx == rx + out.dx and ty == ry + out.dy and tz == rz
-            if not isOutSide and networkKeys[State.squareKey(tx, ty, tz)] then
-                return true
-            end
-        end
-        return false
-    end
-
-    for _, coord in pairs(purifiers) do
-        local purifierSquare = World.squareAt(coord.x, coord.y, coord.z)
-        -- An unloaded square is not a contradiction: it says nothing either way, so the claim stands.
-        if purifierSquare then
-            if not Purifier.findOnSquare(purifierSquare) then
-                stale = stale or {}
-                stale[#stale + 1] = coord
-            else
-                if not networkKeys then
-                    networkKeys = {}
-                    for _, pipeSquare in ipairs(NetworkAccess.getNetworkSquares(square) or {}) do
-                        networkKeys[State.squareKey(pipeSquare:getX(), pipeSquare:getY(),
-                            pipeSquare:getZ())] = true
-                    end
-                end
-
-                -- The purifier sits on its router or beside it, so both are candidates.
+-- Which purifier, if any, this pump can feed: one on a router bordering the pump's own zone, approached
+-- from the router's IN side. The OUT offset points at the clean side, so pushing raw lake water in
+-- there would contaminate the clean run.
+-- Driven by the REGISTRY rather than by searching the world -- a purifier cannot exist without a router
+-- under it, and both appear and disappear by player action. The old walk probed six neighbours of every
+-- tile of the pump's network, about 1 260 lookups per pump per minute, to return nil on a base with no
+-- purifier at all. A registry entry is a claim, not a fact: one the world contradicts is dropped here.
+local function findPurifierIntakeForPump(square)
+    -- Resolved off the WaterPipes table rather than required, for the reason above Pump.getStatus:
+    -- NetworkAccess requires this module, so closing the loop would be a recursive require. Without
+    -- this line the name below is a nil GLOBAL -- the function moved here from WaterPipeSystem, where
+    -- the file had a local for it, and nothing here replaced it.
+    local NetworkAccess = WaterPipes.NetworkAccess
+
+    local purifiers = State.getPurifiers()
+    if not purifiers or not NetworkAccess then
+        return nil
+    end
+
+    -- Built on first use, so an empty registry never pays for it.
+    local networkKeys = nil
+    local stale = nil
+
+    local function routerFeedsNetwork(routerSquare)
+        local router = Router.findOnSquare(routerSquare)
+        local out = router and Router.getOutOffset(router)
+        if not out then
+            return false
+        end
+
+        local rx, ry, rz = routerSquare:getX(), routerSquare:getY(), routerSquare:getZ()
+        for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
+            local tx, ty, tz = rx + offset.x, ry + offset.y, rz + offset.z
+            -- The OUT tile is the clean side; feeding the intake from there would push purified water
+            -- back through the filter. Every other side is the dirty side, which is what a pump wants.
+            local isOutSide = tx == rx + out.dx and ty == ry + out.dy and tz == rz
+            if not isOutSide and networkKeys[State.squareKey(tx, ty, tz)] then
+                return true
+            end
+        end
+        return false
+    end
+
+    for _, coord in pairs(purifiers) do
+        local purifierSquare = World.squareAt(coord.x, coord.y, coord.z)
+        -- An unloaded square is not a contradiction: it says nothing either way, so the claim stands.
+        if purifierSquare then
+            if not Purifier.findOnSquare(purifierSquare) then
+                stale = stale or {}
+                stale[#stale + 1] = coord
+            else
+                if not networkKeys then
+                    networkKeys = {}
+                    for _, pipeSquare in ipairs(NetworkAccess.getNetworkSquares(square) or {}) do
+                        networkKeys[State.squareKey(pipeSquare:getX(), pipeSquare:getY(),
+                            pipeSquare:getZ())] = true
+                    end
+                end
+
+                -- The purifier sits on its router or beside it, so both are candidates.
                 local found = Purifier.findForRouterSquare(purifierSquare)
                 if found and not routerFeedsNetwork(purifierSquare) then
                     found = nil
                 end
-                if not found then
-                    for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
-                        local routerSquare = World.squareAt(coord.x + offset.x,
-                            coord.y + offset.y, coord.z + offset.z)
-                        if routerSquare and Router.hasRouterOnSquare(routerSquare) then
-                            local purifier = Purifier.findForRouterSquare(routerSquare)
-                            if purifier and routerFeedsNetwork(routerSquare) then
-                                found = purifier
-                                break
-                            end
-                        end
-                    end
-                end
-
-                if found then
-                    for _, gone in ipairs(stale or {}) do
-                        State.unregisterPurifier(gone.x, gone.y, gone.z)
-                    end
-                    return found
-                end
-            end
-        end
-    end
-
-    for _, gone in ipairs(stale or {}) do
-        State.unregisterPurifier(gone.x, gone.y, gone.z)
-    end
-    return nil
+                if not found then
+                    for _, offset in ipairs(Constants.NETWORK_NEIGHBOR_OFFSETS) do
+                        local routerSquare = World.squareAt(coord.x + offset.x,
+                            coord.y + offset.y, coord.z + offset.z)
+                        if routerSquare and Router.hasRouterOnSquare(routerSquare) then
+                            local purifier = Purifier.findForRouterSquare(routerSquare)
+                            if purifier and routerFeedsNetwork(routerSquare) then
+                                found = purifier
+                                break
+                            end
+                        end
+                    end
+                end
+
+                if found then
+                    for _, gone in ipairs(stale or {}) do
+                        State.unregisterPurifier(gone.x, gone.y, gone.z)
+                    end
+                    return found
+                end
+            end
+        end
+    end
+
+    for _, gone in ipairs(stale or {}) do
+        State.unregisterPurifier(gone.x, gone.y, gone.z)
+    end
+    return nil
 end
 
-function Pump.step(pump, square, dt)
+function Pump.step(pump, square, dt)
     if not pump or (dt or 0) <= 0 then
         return
     end
@@ -512,49 +512,49 @@ function Pump.step(pump, square, dt)
     -- module, so closing the loop would be a recursive require.
     local NetworkAccess = WaterPipes.NetworkAccess
 
-    local source = timed("pump/source", Pump.findSource, pump)
-    if not source then
-        return   -- booster only: nothing to draw from, but it still adds head to its zone
-    end
-
-    -- Ask what can take water FIRST, so we never pull it out of a well and lose it.
-    -- Two destinations, not one: a fill query stops dead at a router and a purifier sits on a router, so a
-    -- pump feeding one with storage only on the clean side was told "no room" and drew nothing at all.
-    local tainted = source.fluidType == "TaintedWater"
-    local headroom = timed("pump/headroom", NetworkAccess.availableToPush,
-        square, source.fluidType)
-    local purifier = timed("pump/purifier", findPurifierIntakeForPump, square)
-    local purifierRoom = purifier and Purifier.intakeHeadroom(purifier, tainted) or 0
-
-    local wanted = math.min(Pump.intakeFor(dt), headroom + purifierRoom)
-    if wanted <= 0 then
-        return
-    end
-
-    local taken = timed("pump/draw", Pump.drawFromSource, source, wanted)
-    if taken <= 0 then
-        return
-    end
-
-    -- Network first: it is the destination the player can actually see filling up.
-    local added = 0
-    if headroom > 0 then
-        added = timed("pump/fill", NetworkAccess.fillFluidAtSquare,
-            square, source.fluidType, math.min(taken, headroom))
-    end
-
-    local leftover = taken - added
-    if leftover > 0 and purifierRoom > 0 and purifier then
-        local intoTank = math.min(leftover, purifierRoom)
-        Purifier.addIn(purifier, intoTank, tainted)
-        added = added + intoTank
-    end
-
-    if added < taken then
-        -- Less was taken than we drew (a race with another consumer, or a mixed-fluid refusal). Put the
-        -- remainder back rather than quietly destroying it.
-        Pump.refundToSource(source, taken - added)
-    end
+    local source = timed("pump/source", Pump.findSource, pump)
+    if not source then
+        return   -- booster only: nothing to draw from, but it still adds head to its zone
+    end
+
+    -- Ask what can take water FIRST, so we never pull it out of a well and lose it.
+    -- Two destinations, not one: a fill query stops dead at a router and a purifier sits on a router, so a
+    -- pump feeding one with storage only on the clean side was told "no room" and drew nothing at all.
+    local tainted = source.fluidType == "TaintedWater"
+    local headroom = timed("pump/headroom", NetworkAccess.availableToPush,
+        square, source.fluidType)
+    local purifier = timed("pump/purifier", findPurifierIntakeForPump, square)
+    local purifierRoom = purifier and Purifier.intakeHeadroom(purifier, tainted) or 0
+
+    local wanted = math.min(Pump.intakeFor(dt), headroom + purifierRoom)
+    if wanted <= 0 then
+        return
+    end
+
+    local taken = timed("pump/draw", Pump.drawFromSource, source, wanted)
+    if taken <= 0 then
+        return
+    end
+
+    -- Network first: it is the destination the player can actually see filling up.
+    local added = 0
+    if headroom > 0 then
+        added = timed("pump/fill", NetworkAccess.fillFluidAtSquare,
+            square, source.fluidType, math.min(taken, headroom))
+    end
+
+    local leftover = taken - added
+    if leftover > 0 and purifierRoom > 0 and purifier then
+        local intoTank = math.min(leftover, purifierRoom)
+        Purifier.addIn(purifier, intoTank, tainted)
+        added = added + intoTank
+    end
+
+    if added < taken then
+        -- Less was taken than we drew (a race with another consumer, or a mixed-fluid refusal). Put the
+        -- remainder back rather than quietly destroying it.
+        Pump.refundToSource(source, taken - added)
+    end
 end
 
 return Pump
