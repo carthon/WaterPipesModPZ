@@ -1,5 +1,6 @@
 require "TimedActions/ISBaseTimedAction"
 require "WaterPipes/EndpointPlumbing"
+require "WaterPipes/SoundOptions"
 
 ISPlumbWaterPipeEndpoint = ISBaseTimedAction:derive("ISPlumbWaterPipeEndpoint")
 
@@ -16,16 +17,16 @@ end
 
 function ISPlumbWaterPipeEndpoint:start()
     self:setActionAnim("VehicleWorkOnMid")
-    self.sound = self.character:playSound("RepairWithWrench")
+    self.sound = WaterPipes.SoundOptions.playOnCharacter(self.character, "RepairWithWrench")
 end
 
 function ISPlumbWaterPipeEndpoint:stop()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
     ISBaseTimedAction.stop(self)
 end
 
 function ISPlumbWaterPipeEndpoint:perform()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
 
     local square = self.endpointObject and self.endpointObject.getSquare and self.endpointObject:getSquare()
     if isClient() and square then

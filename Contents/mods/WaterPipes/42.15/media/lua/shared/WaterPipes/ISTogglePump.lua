@@ -1,6 +1,7 @@
 require "TimedActions/ISBaseTimedAction"
 require "WaterPipes/Constants"
 require "WaterPipes/Pump"
+require "WaterPipes/SoundOptions"
 
 -- Flipping a water pump's switch. The character walks to the pump and the state changes only when the
 -- action completes -- same shape as ISToggleHydrant, except a switch needs no tool. The flip is
@@ -44,7 +45,7 @@ end
 function ISTogglePump:perform()
     local square = self.pump:getSquare()
     if square then
-        square:playSound("LightSwitch")
+        WaterPipes.SoundOptions.playAtSquare(square, "LightSwitch")
     end
 
     if isClient() and square then

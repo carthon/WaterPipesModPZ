@@ -2,6 +2,7 @@ require "TimedActions/ISBaseTimedAction"
 require "WaterPipes/Constants"
 require "WaterPipes/BuildingPlumbing"
 require "WaterPipes/Logger"
+require "WaterPipes/SoundOptions"
 
 -- Plumbing a whole building: the character works, and the pipes go in as the work proceeds.
 --
@@ -105,7 +106,7 @@ end
 
 function ISPlumbBuilding:start()
     self:setActionAnim("VehicleWorkOnMid")
-    self.sound = self.character:playSound("RepairWithWrench")
+    self.sound = WaterPipes.SoundOptions.playOnCharacter(self.character, "RepairWithWrench")
 end
 
 -- Settle the network, then connect what the pass reached. In that order, always: plumbing reads the
@@ -117,7 +118,7 @@ function ISPlumbBuilding:settle()
 end
 
 function ISPlumbBuilding:stop()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
     -- Whatever went in is a connected tree, so it is owed the same settling as a completed pass --
     -- including the fixtures it did reach.
     self:settle()
@@ -125,7 +126,7 @@ function ISPlumbBuilding:stop()
 end
 
 function ISPlumbBuilding:perform()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
     self:settle()
     if self.onFinished then
         self.onFinished(self)

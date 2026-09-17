@@ -1,6 +1,7 @@
 require "TimedActions/ISBaseTimedAction"
 require "WaterPipes/Constants"
 require "WaterPipes/Valve"
+require "WaterPipes/SoundOptions"
 
 -- Opening or closing a shut-off valve: the character walks to it, works the wrench, and only then does
 -- the valve turn. Same shape as ISToggleHydrant -- the world state is flipped authoritatively on the
@@ -33,16 +34,16 @@ end
 
 function ISToggleValve:start()
     self:setActionAnim("VehicleWorkOnMid")
-    self.sound = self.character:playSound("RepairWithWrench")
+    self.sound = WaterPipes.SoundOptions.playOnCharacter(self.character, "RepairWithWrench")
 end
 
 function ISToggleValve:stop()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
     ISBaseTimedAction.stop(self)
 end
 
 function ISToggleValve:perform()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
 
     local square = self.valve:getSquare()
     if isClient() and square then
