@@ -65,6 +65,15 @@ local function neighboursOf(probe, x, y, z)
         }
     end
 
+    -- ...and down, through a riser on the tile below's own wall.
+    local below = probe.isBuildingTile(x, y, z - 1) and probe.wallEdge(x, y, z - 1) or nil
+    if below then
+        out[#out + 1] = {
+            x = x, y = y, z = z - 1, kind = RISER, edge = below,
+            cost = stepCost(probe, x, y, z - 1) + (probe.hasRiser(x, y, z - 1, below) and 0 or 1),
+        }
+    end
+
     return out
 end
 
