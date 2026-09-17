@@ -104,13 +104,10 @@ function ISPlumbBuilding:update()
         local object, reason = BuildingPlumbing.place(placement, self.character)
         if object then
             self.laid[#self.laid + 1] = placement
-        else
-            self.failed = self.failed + 1
-            if reason and not self.reportedReasons[reason] then
-                self.reportedReasons[reason] = true
-                Logger.warn(string.format("Building plumbing could not lay %s at %d:%d:%d (%s)",
-                    placement.kind, placement.x, placement.y, placement.z, tostring(reason)))
-            end
+        elseif reason and not self.reportedReasons[reason] then
+            self.reportedReasons[reason] = true
+            Logger.warn(string.format("Building plumbing could not lay %s at %d:%d:%d (%s)",
+                placement.kind, placement.x, placement.y, placement.z, tostring(reason)))
         end
 
         self.next = self.next + 1
@@ -170,7 +167,6 @@ function ISPlumbBuilding:new(character, plan, onFinished)
     o.laid = {}
     o.debt = 0
     o.pipesLeft = BuildingPlumbing.countPipes(character:getInventory())
-    o.failed = 0
     o.plumbed = 0
     o.outOfPipes = false
     o.reportedReasons = {}

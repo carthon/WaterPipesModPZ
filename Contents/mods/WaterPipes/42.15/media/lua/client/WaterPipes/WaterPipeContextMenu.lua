@@ -1427,10 +1427,7 @@ local function buildValveTooltip(valve)
     local tooltip = ISWorldObjectContextMenu.addToolTip()
     local open = Valve.isOpen(valve)
     tooltip:setName(getText(open and "IGUI_WaterPipesValveOpenName" or "IGUI_WaterPipesValveClosedName"))
-    local lines = {
-        getText(open and "IGUI_WaterPipesValveOpenDesc" or "IGUI_WaterPipesValveClosedDesc"),
-    }
-    tooltip.description = table.concat(lines, " <LINE> ")
+    tooltip.description = getText(open and "IGUI_WaterPipesValveOpenDesc" or "IGUI_WaterPipesValveClosedDesc")
     return tooltip
 end
 

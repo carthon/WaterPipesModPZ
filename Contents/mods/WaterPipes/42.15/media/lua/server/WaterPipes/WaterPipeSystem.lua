@@ -980,14 +980,9 @@ local function takeDownFittingsOn(square, returnsMaterial)
     local doomed = {}
     for index = 0, objects:size() - 1 do
         local object = objects:get(index)
-        local ok, modData = pcall(object.getModData, object)
-        if ok and modData then
-            for key, returns in pairs(FITTING_RETURNS) do
-                if modData[key] == true then
-                    doomed[#doomed + 1] = { object = object, returns = returns }
-                    break
-                end
-            end
+        local returns = fittingReturnsFor(object)
+        if returns then
+            doomed[#doomed + 1] = { object = object, returns = returns }
         end
     end
     if #doomed == 0 then

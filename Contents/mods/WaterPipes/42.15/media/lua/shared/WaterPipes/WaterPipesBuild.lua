@@ -13,6 +13,7 @@ require "WaterPipes/Constants"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Logger"
 require "WaterPipes/World"
+require "WaterPipes/Valve"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.Build = WaterPipes.Build or {}
@@ -21,6 +22,7 @@ local Constants = WaterPipes.Constants
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Logger = WaterPipes.Logger
 local Build = WaterPipes.Build
+local Valve = WaterPipes.Valve
 local World = WaterPipes.World
 
 -- The vertical pipe is a single rotatable entity: facing "w" -> West wall, anything else -> North.
@@ -107,23 +109,6 @@ end
 
 -- The shut-off valve is not a pipe either; same scan as the gauge above. Kept local rather than going
 -- through WaterPipes.Valve because this file must be loaded before the entity scripts are parsed.
-local function squareHasValve(square)
-    if not square or not square.getObjects then
-        return false
-    end
-    local ok, objects = pcall(square.getObjects, square)
-    if not ok or not objects then
-        return false
-    end
-    for i = 0, objects:size() - 1 do
-        local modData = getModData(objects:get(i))
-        if modData and modData[Constants.VALVE_MODDATA_KEY] then
-            return true
-        end
-    end
-    return false
-end
-
 -- ===== OnIsValid (both sides) =====
 
 -- One floor pipe per square (any orientation) -- they auto-connect.
@@ -501,7 +486,7 @@ end
 -- world by State.rebuildGraph through the registry.
 function Build.valveOnIsValid(params)
     local square = params and params.square
-    return squareHasFloorPipe(square) and not squareHasValve(square)
+    return squareHasFloorPipe(square) and not Valve.hasValveOnSquare(square)
 end
 
 -- Built OPEN, always: no closed key. Placing a valve must never change how the network behaves until

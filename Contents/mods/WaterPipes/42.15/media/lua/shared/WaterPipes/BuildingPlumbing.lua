@@ -823,25 +823,17 @@ end
 -- that cost processPumps 56 ms before it was fixed.
 function BuildingPlumbing.finish(placements, player)
     if isClient and isClient() then
-        -- The server owns the graph; ask it to settle once, then repaint locally (sprites are always
-        -- derived client-side and never transmitted -- see PipeAutotile).
+        -- The server owns the graph; ask it to settle once. Sprites are derived client-side, never sent.
         if player then
             sendClientCommand(player, "WaterPipes", "finishBuildingPlumbing", {})
         end
-        local PipeAutotile = WaterPipes.PipeAutotile
-        if PipeAutotile and PipeAutotile.refreshAround then
-            for _, placement in ipairs(placements or {}) do
-                PipeAutotile.refreshAround(placement.x, placement.y, placement.z)
+    else
+        local System = WaterPipes.System
+        if System and System.rebuild then
+            System.rebuild()
+            if System.refreshPlumbedEndpoints then
+                System.refreshPlumbedEndpoints()
             end
-        end
-        return
-    end
-
-    local System = WaterPipes.System
-    if System and System.rebuild then
-        System.rebuild()
-        if System.refreshPlumbedEndpoints then
-            System.refreshPlumbedEndpoints()
         end
     end
 
