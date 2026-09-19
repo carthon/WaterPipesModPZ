@@ -515,11 +515,15 @@ function BuildingPlumbing.plan(origin, probe, opts)
         if last.cappedAt then
             break
         end
-        local failed = {}
+        -- Counted, not asked with next(): PZ's Lua does not expose it.
+        local failed, failedCount = {}, 0
         for _, s in ipairs(last.skipped) do
-            if s.reason == "noRoute" then failed[s.fixture] = true end
+            if s.reason == "noRoute" and not failed[s.fixture] then
+                failed[s.fixture] = true
+                failedCount = failedCount + 1
+            end
         end
-        if next(failed) == nil then
+        if failedCount == 0 then
             break
         end
         local order = {}
