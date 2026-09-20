@@ -99,23 +99,70 @@ local function ownCapacity(endpoint)
         or 0
 end
 
--- Fixtures with no tank of their own are the external-water ones (see EndpointPlumbing): they are
--- served through usesExternalWaterSource and have nothing here to mirror into. Said once each.
+-- Ours, not the fixture's. A tank we attached is one we also SIZE to the network; a fixture's own tank
+-- is left at whatever the fixture says it holds.
+local OUR_TANK_KEY = "waterpipesOwnTank"
+
+local function objectsOnTile(endpoint)
+    local square = endpoint and endpoint.getSquare and endpoint:getSquare() or nil
+    local objects = square and square.getObjects and square:getObjects() or nil
+    return objects and objects.size and objects:size() or -1
+end
+
+-- Plenty of vanilla fixtures hold no fluid at all until something gives them a tank, and without one
+-- there is nowhere to mirror the network and the engine shows no fluid menu. So attach one.
+--
+-- It is the only thing here that can change what is ON the tile, and a sink dumped either side of a
+-- pass came back as two objects -- so the tile is counted across the call and said out loud. If the
+-- count moves, this is what moved it.
+local function attachTank(endpoint, capacity)
+    if not GameEntityFactory or not GameEntityFactory.AddComponent
+        or not ComponentType or not ComponentType.FluidContainer then
+        return nil
+    end
+    local component = ComponentType.FluidContainer.CreateComponent
+        and ComponentType.FluidContainer:CreateComponent() or nil
+    if not component then
+        return nil
+    end
+    if component.setCapacity then
+        component:setCapacity(math.max(capacity or 1, 1))
+    end
+
+    local before = objectsOnTile(endpoint)
+    pcall(GameEntityFactory.AddComponent, endpoint, true, component)
+    local after = objectsOnTile(endpoint)
+    Logger.log(("EndpointFluidSource: gave %s a tank of its own (it had none); objects on the tile %d -> %d")
+        :format(describeObject(endpoint), before, after))
+
+    -- Newly attached component: push the full object so multiplayer clients receive it.
+    if endpoint.transmitCompleteItemToClients then
+        pcall(endpoint.transmitCompleteItemToClients, endpoint)
+    end
+
+    local modData = getModData(endpoint)
+    if modData then
+        modData[OUR_TANK_KEY] = true
+    end
+    return getFluidContainer(endpoint)
+end
+
+-- Said once per fixture: the refresh comes round every minute and a fixture that cannot take a tank
+-- will not take one next time either.
 local warnedNoTank = {}
-local function canHoldWater(endpoint)
-    if not endpoint or not endpoint.addFluid or not endpoint.emptyFluid then
-        return false
-    end
-    if ownCapacity(endpoint) > 0 then
-        return true
-    end
+local function warnNoTank(endpoint)
     local key = tostring(endpoint)
-    if not warnedNoTank[key] then
-        warnedNoTank[key] = true
-        Logger.warn("EndpointFluidSource: " .. describeObject(endpoint)
-            .. " has no tank of its own, so there is nothing to mirror the network into.")
+    if warnedNoTank[key] then
+        return
     end
-    return false
+    warnedNoTank[key] = true
+    Logger.warn("EndpointFluidSource: " .. describeObject(endpoint)
+        .. " has no tank and could not be given one, so it has nothing to serve.")
+end
+
+local function hasOurTank(endpoint)
+    local modData = getModData(endpoint)
+    return modData and modData[OUR_TANK_KEY] == true or false
 end
 
 local function setSyncing(endpoint, value)
@@ -153,15 +200,18 @@ local function readAmount(endpoint)
     return math.max(amount or 0, 0)
 end
 
--- Put `amount` of `fluidTypeName` in the fixture's own tank, emptying it first. The tank's CAPACITY is
--- the fixture's and is never rewritten, so what the player reads is a full sink rather than the whole
--- network's litres: the network's level is what decides whether there is water at all, and a fixture
--- holding more than it can is not a thing the engine can show.
+-- Put `amount` of `fluidTypeName` in the tank, emptying it first. A tank the FIXTURE came with keeps
+-- its own capacity -- what the player reads is a full sink rather than the whole network's litres, and
+-- a fixture holding more than it can is not a thing the engine can show. A tank we attached has no
+-- size of its own, so it is sized to the network.
 -- The syncing flag stops our own write coming back as consumption to reconcile.
-local function writeFluid(endpoint, amount, fluidTypeName)
+local function writeFluid(endpoint, amount, fluidTypeName, networkCapacity)
+    local fluidContainer = getFluidContainer(endpoint)
+    if networkCapacity and hasOurTank(endpoint) and fluidContainer and fluidContainer.setCapacity then
+        pcall(fluidContainer.setCapacity, fluidContainer, math.max(networkCapacity, 1))
+    end
     local capacity = ownCapacity(endpoint)
     local effectiveAmount = math.max(math.min(amount or 0, capacity), 0)
-    local fluidContainer = getFluidContainer(endpoint)
 
     setSyncing(endpoint, true)
 
@@ -202,12 +252,16 @@ local function writeFluid(endpoint, amount, fluidTypeName)
     setSyncing(endpoint, false)
 end
 
--- The network snapshot, as much of it as the fixture can hold.
-local function writeSnapshot(endpoint, amount, fluidTypeName)
-    if not canHoldWater(endpoint) then
+-- The network snapshot, as much of it as the tank can hold.
+local function writeSnapshot(endpoint, amount, fluidTypeName, networkCapacity)
+    if not endpoint or not endpoint.addFluid or not endpoint.emptyFluid then
         return false
     end
-    writeFluid(endpoint, amount, fluidTypeName)
+    if ownCapacity(endpoint) <= 0 and not attachTank(endpoint, networkCapacity) then
+        warnNoTank(endpoint)
+        return false
+    end
+    writeFluid(endpoint, amount, fluidTypeName, networkCapacity)
     setLastSync(endpoint, readAmount(endpoint))
     return true
 end
@@ -255,13 +309,13 @@ function FluidSource.syncForEndpoint(endpoint)
 
     local summary = NetworkAccess.getSummary(endpoint)
     if not summary or (summary.totalCapacity or 0) <= 0 then
-        writeSnapshot(endpoint, 0, nil)
+        writeSnapshot(endpoint, 0, nil, summary and summary.totalCapacity or nil)
         return false
     end
 
     -- Mixed-fluid networks: dry, rather than serving a random fluid.
     if summary.isMixed then
-        writeSnapshot(endpoint, 0, nil)
+        writeSnapshot(endpoint, 0, nil, summary.totalCapacity)
         return true
     end
 
@@ -274,7 +328,7 @@ function FluidSource.syncForEndpoint(endpoint)
     if servedType == "TaintedWater" and not realisticPurification() then
         servedType = "Water"
     end
-    return writeSnapshot(endpoint, visibleAmount, servedType)
+    return writeSnapshot(endpoint, visibleAmount, servedType, summary.totalCapacity)
 end
 
 local function readContainerState(endpoint)
