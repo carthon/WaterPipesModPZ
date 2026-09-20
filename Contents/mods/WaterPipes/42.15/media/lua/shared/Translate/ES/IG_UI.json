@@ -74,7 +74,6 @@
     "IGUI_WaterPipesPlumbBuildingNeedPipes": "Hacen falta %1 tuberías de metal; tienes %2.",
     "IGUI_WaterPipesPlumbBuildingDone": "Fontaneados %1 aparatos, %2 casillas de tubería.",
     "IGUI_WaterPipesPlumbBuildingPartial": "Fontaneados %1 aparatos; %2 se han quedado fuera:",
-    "IGUI_WaterPipesPlumbBuildingOutOfPipes": "Te has quedado sin tubería de metal tras %1 casillas. Vuelve a lanzarlo con más.",
     "IGUI_WaterPipesPlumbBuildingSkipped": "%1: %2",
     "IGUI_WaterPipesPlumbBuildingSkippedMore": "...y %1 más, listados en console.txt.",
     "IGUI_WaterPipesPlumbBuildingReason_noRoute": "no hay ruta desde aquí",

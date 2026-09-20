@@ -238,12 +238,12 @@ option WaterPipes.HydrantHead
     translation = WaterPipes_HydrantHead,
 }
 
-option WaterPipes.BuildingPlumbCostScale
+option WaterPipes.BuildingPlumbCostPerFixture
 {
     type = integer,
     min = 0,
-    max = 200,
-    default = 100,
+    max = 10,
+    default = 1,
     page = WaterPipes,
-    translation = WaterPipes_BuildingPlumbCostScale,
+    translation = WaterPipes_BuildingPlumbCostPerFixture,
 }

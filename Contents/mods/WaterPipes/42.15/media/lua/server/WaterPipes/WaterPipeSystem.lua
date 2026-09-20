@@ -1701,6 +1701,9 @@ local function onClientCommand(module, command, player, args)
                 end
             end
         end
+        if command == "plumbEndpointsOnSquare" then
+            BuildingPlumbing.notePaidFixture(player, args.x, args.y, args.z)
+        end
         return
     end
 
@@ -1777,6 +1780,15 @@ local function onClientCommand(module, command, player, args)
     -- Building plumbing lays world objects, and creating those belongs to the server -- vanilla's own
     -- map-object scripts bail on isClient() for the same reason. One command per tile, spread over the
     -- pass by its millisecond budget and bounded by BUILDING_PLUMB_MAX_TILES.
+    -- The whole price of a pass, taken against a fixture list this side counts for itself.
+    if command == "beginBuildingPlumbing" then
+        local charged, reason = BuildingPlumbing.beginPaidPass(args, player)
+        if not charged then
+            Logger.warn("Begin building plumbing: refused (" .. tostring(reason) .. ")")
+        end
+        return
+    end
+
     if command == "placeBuildingPipe" then
         local placed, reason = BuildingPlumbing.placePaid(args, player)
         if not placed then
@@ -1787,9 +1799,14 @@ local function onClientCommand(module, command, player, args)
         return
     end
 
-    -- ...and the single settle the whole pass owes, once it is done.
-    if command == "finishBuildingPlumbing" then
+    if command == "endBuildingPlumbing" then
         BuildingPlumbing.endPaidPass(player)
+        return
+    end
+
+    -- ...and the single settle the whole pass owes, once it is done. The pass itself is closed later,
+    -- by endBuildingPlumbing: the fixtures are connected after this, and it is those that were paid for.
+    if command == "finishBuildingPlumbing" then
         BuildingPlumbing.finish({})
         return
     end

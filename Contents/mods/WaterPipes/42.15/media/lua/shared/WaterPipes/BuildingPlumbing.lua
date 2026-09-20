@@ -562,6 +562,8 @@ function BuildingPlumbing.plan(origin, probe, opts)
 
     plan.order = nil
     plan.alreadyConnected = alreadyConnected
+    -- What the pass will cost, in pipes: the tile count is what gets LAID, not what gets paid.
+    plan.pipes = BuildingPlumbing.pipesFor(#plan.connected)
     return plan
 end
 
@@ -859,6 +861,9 @@ function BuildingPlumbing.plumbFixtures(plan, player)
                             plumbed = plumbed + 1
                         end
                     end
+                    -- Single player books the fixture against the pass itself; in multiplayer the
+                    -- command handler does it, so a refused plumb is never booked as one that landed.
+                    BuildingPlumbing.notePaidFixture(player, fixture.x, fixture.y, fixture.z)
                 end
             end
         end
@@ -869,18 +874,20 @@ end
 
 -- ===== Cost =====
 
--- Pipes owed per tile laid, scaled by the BuildingPlumbCostScale sandbox percentage.
-function BuildingPlumbing.costPerTile()
+-- Metal pipes one fixture costs, from the BuildingPlumbCostPerFixture sandbox option. The pipe LAID is
+-- free: what the player pays for is the fixture connected, however long the run to reach it turned out
+-- to be. At 0 the whole pass is free.
+function BuildingPlumbing.costPerFixture()
     local sv = SandboxVars and SandboxVars.WaterPipes
-    local scale = sv and sv.BuildingPlumbCostScale
-    if type(scale) ~= "number" then
-        scale = 100
+    local cost = sv and sv.BuildingPlumbCostPerFixture
+    if type(cost) ~= "number" then
+        cost = 1
     end
-    return math.max(scale, 0) / 100
+    return math.max(math.floor(cost), 0)
 end
 
-function BuildingPlumbing.pipesFor(tiles)
-    return math.ceil((tiles or 0) * BuildingPlumbing.costPerTile() - 0.000001)
+function BuildingPlumbing.pipesFor(fixtures)
+    return math.max(fixtures or 0, 0) * BuildingPlumbing.costPerFixture()
 end
 
 -- Metal only: a generated pipe is stamped metal and pays metal back when dismantled.
@@ -892,10 +899,13 @@ function BuildingPlumbing.countPipes(inventory)
     return ok and count or 0
 end
 
--- ===== Server side of a multiplayer pass =====
--- The client's request is untrusted: validate it, charge the server's copy of the inventory, then lay.
+-- ===== A paid pass =====
+-- The cost is per fixture, so it is settled when the pass OPENS, against a fixture list this side
+-- validates for itself -- a client asking for a hundred free pipes gets counted, not believed. Pipe is
+-- then laid free within the pass, and a pass that never reaches a fixture it paid for refunds it.
+-- Single player runs the same three calls without the commands.
 
-local paidDebt = {}   -- player key -> fractional pipe owed within the current pass
+local passes = {}   -- player key -> { unit, owed = {squareKey -> true}, plumbed = {squareKey -> true} }
 
 local function playerKey(player)
     local ok, id = pcall(player.getOnlineID, player)
@@ -907,6 +917,26 @@ end
 
 local function isWholeNumber(v)
     return type(v) == "number" and v == math.floor(v)
+end
+
+-- A plan never leaves the building the player is working in; without a building to compare, fall back
+-- to a distance from the player.
+local function withinReach(square, x, y, player)
+    local function buildingOf(sq)
+        if not sq or not sq.getBuilding then
+            return nil
+        end
+        local ok, building = pcall(sq.getBuilding, sq)
+        return ok and building or nil
+    end
+    local here = buildingOf(player.getCurrentSquare and player:getCurrentSquare() or nil)
+    local there = buildingOf(square)
+    if here and there then
+        return here == there
+    end
+    local reach = Constants.BUILDING_PLUMB_REACH
+    return math.abs(x - math.floor(player:getX())) <= reach
+        and math.abs(y - math.floor(player:getY())) <= reach
 end
 
 local function validRequest(args, player)
@@ -933,27 +963,8 @@ local function validRequest(args, player)
         return nil, "noSquare"
     end
 
-    -- A plan never leaves the building the player is working in; without a building to compare, fall
-    -- back to a distance from the player.
-    local function buildingOf(sq)
-        if not sq or not sq.getBuilding then
-            return nil
-        end
-        local ok, building = pcall(sq.getBuilding, sq)
-        return ok and building or nil
-    end
-    local playerSquare = player.getCurrentSquare and player:getCurrentSquare() or nil
-    local here, there = buildingOf(playerSquare), buildingOf(square)
-    if here and there then
-        if here ~= there then
-            return nil, "outOfReach"
-        end
-    else
-        local reach = Constants.BUILDING_PLUMB_REACH
-        if math.abs(args.x - math.floor(player:getX())) > reach
-            or math.abs(args.y - math.floor(player:getY())) > reach then
-            return nil, "outOfReach"
-        end
+    if not withinReach(square, args.x, args.y, player) then
+        return nil, "outOfReach"
     end
     local Build = WaterPipes.Build
     if args.kind == FLOOR and Build.squareHasFloorPipe(square) then
@@ -967,46 +978,132 @@ local function validRequest(args, player)
 end
 
 local function takePipes(inventory, count)
+    local taken = 0
     for _ = 1, count do
         local item = inventory:getFirstTypeRecurse(Constants.PIPE_ITEM_TYPE)
         if not item then
-            return
+            return taken
         end
         local container = item:getContainer() or inventory
-        sendRemoveItemFromContainer(container, item)
+        if sendRemoveItemFromContainer then
+            sendRemoveItemFromContainer(container, item)
+        end
         container:Remove(item)
+        taken = taken + 1
     end
+    return taken
 end
 
--- Returns the laid object, or nil and a reason. Nothing is charged unless the pipe is laid.
+local function givePipes(player, count)
+    local inventory = count > 0 and player and player.getInventory and player:getInventory() or nil
+    if not inventory or not inventory.AddItem then
+        return 0
+    end
+    local given = 0
+    for _ = 1, count do
+        local ok, item = pcall(inventory.AddItem, inventory, Constants.PIPE_ITEM_TYPE)
+        if not ok or not item then
+            break
+        end
+        if sendAddItemToContainer then
+            pcall(sendAddItemToContainer, inventory, item)
+        end
+        given = given + 1
+    end
+    return given
+end
+
+-- A fixture square the pass may be charged for: inside the player's building, carrying an endpoint
+-- that is not connected yet. Counted here rather than taken on trust, so the price is the server's.
+local function chargeableFixture(entry, player)
+    if type(entry) ~= "table" or not isWholeNumber(entry.x) or not isWholeNumber(entry.y)
+        or not isWholeNumber(entry.z) then
+        return nil
+    end
+    local square = squareAt(entry.x, entry.y, entry.z)
+    if not square or not withinReach(square, entry.x, entry.y, player) then
+        return nil
+    end
+    local EndpointPlumbing = WaterPipes.EndpointPlumbing
+    for _, endpoint in ipairs(EndpointObjects.collectOnSquare(square)) do
+        if not EndpointPlumbing.isPlumbed(endpoint) then
+            return keyOf(entry.x, entry.y, entry.z)
+        end
+    end
+    return nil
+end
+
+-- Open a pass and take its whole price. Returns the pipes charged, or nil and a reason.
+function BuildingPlumbing.beginPaidPass(args, player)
+    if not player then
+        return nil, "badRequest"
+    end
+    local unit = BuildingPlumbing.costPerFixture()
+    local owed, count = {}, 0
+    for _, entry in ipairs(type(args) == "table" and args.fixtures or {}) do
+        local key = chargeableFixture(entry, player)
+        if key and not owed[key] then
+            owed[key] = true
+            count = count + 1
+        end
+    end
+
+    local price = count * unit
+    local inventory = player.getInventory and player:getInventory() or nil
+    if price > 0 and BuildingPlumbing.countPipes(inventory) < price then
+        return nil, "noPipes"
+    end
+    if price > 0 and takePipes(inventory, price) < price then
+        return nil, "noPipes"
+    end
+
+    passes[playerKey(player)] = { unit = unit, owed = owed, plumbed = {} }
+    return price
+end
+
+-- Returns the laid object, or nil and a reason. Pipe is laid free INSIDE a pass and not at all outside
+-- one: the pass is what was paid for, and without that gate a client could ask for pipe all day and
+-- dismantle it for the metal.
 function BuildingPlumbing.placePaid(args, player)
+    local pass = player and passes[playerKey(player)]
+    if not pass then
+        return nil, "noPass"
+    end
     local placement, reason = validRequest(args, player)
     if not placement then
         return nil, reason
     end
-
-    local key = playerKey(player)
-    local debt = (paidDebt[key] or 0) + BuildingPlumbing.costPerTile()
-    local owed = math.floor(debt + 0.000001)
-    local inventory = player:getInventory()
-    if BuildingPlumbing.countPipes(inventory) < owed then
-        return nil, "noPipes"
-    end
-
-    local object, placeReason = BuildingPlumbing.place(placement, player)
-    if not object then
-        return nil, placeReason
-    end
-
-    takePipes(inventory, owed)
-    paidDebt[key] = debt - owed
-    return object
+    return BuildingPlumbing.place(placement, player)
 end
 
-function BuildingPlumbing.endPaidPass(player)
-    if player then
-        paidDebt[playerKey(player)] = nil
+-- Records that the pass reached one of the fixtures it paid for.
+function BuildingPlumbing.notePaidFixture(player, x, y, z)
+    local pass = player and passes[playerKey(player)]
+    if not pass then
+        return
     end
+    local key = keyOf(x, y, z)
+    if pass.owed[key] then
+        pass.plumbed[key] = true
+    end
+end
+
+-- Close the pass and refund the fixtures it was charged for but never reached. Returns the refund.
+function BuildingPlumbing.endPaidPass(player)
+    local key = player and playerKey(player)
+    local pass = key and passes[key]
+    if not pass then
+        return 0
+    end
+    passes[key] = nil
+
+    local missed = 0
+    for square in pairs(pass.owed) do
+        if not pass.plumbed[square] then
+            missed = missed + 1
+        end
+    end
+    return givePipes(player, missed * pass.unit)
 end
 
 BuildingPlumbing.FLOOR = FLOOR

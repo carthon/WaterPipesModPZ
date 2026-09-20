@@ -5,8 +5,8 @@ require "WaterPipes/Logger"
 require "WaterPipes/SoundOptions"
 
 -- Plumbing a whole building: pipes are laid as the work proceeds, root outward, so an interrupted pass
--- leaves a connected tree. Paced per frame by a millisecond budget, or by time in multiplayer; pipe is
--- spent per tile laid.
+-- leaves a connected tree. Paced per frame by a millisecond budget, or by time in multiplayer. The pipe
+-- is paid for by FIXTURE when the pass opens, and a fixture the pass never reaches is refunded.
 
 ISPlumbBuilding = ISBaseTimedAction:derive("ISPlumbBuilding")
 
@@ -14,22 +14,9 @@ local Constants = WaterPipes.Constants
 local BuildingPlumbing = WaterPipes.BuildingPlumbing
 local Logger = WaterPipes.Logger
 
-local function takePipe(inventory)
-    if not inventory or not inventory.getFirstTypeRecurse then
-        return false
-    end
-    local ok, item = pcall(inventory.getFirstTypeRecurse, inventory, Constants.PIPE_ITEM_TYPE)
-    if not ok or not item then
-        return false
-    end
-    local container = item:getContainer() or inventory
-    container:DoRemoveItem(item)
-    return true
-end
-
 -- Materials are checked again as the work starts, so a pass never begins without the pipe to finish it.
 function ISPlumbBuilding:isValidStart()
-    local needed = BuildingPlumbing.pipesFor(self.plan.cost)
+    local needed = self.plan.pipes or 0
     local held = BuildingPlumbing.countPipes(self.character:getInventory())
     if held < needed then
         if HaloTextHelper and HaloTextHelper.addBadText then
@@ -71,27 +58,6 @@ function ISPlumbBuilding:update()
         end
 
         local placement = self.plan.placements[self.next]
-
-        -- Pay as we lay; the debt carries the fractional part of a non-whole cost scale.
-        -- In multiplayer the server charges each tile, so the client only tracks what it started with.
-        self.debt = self.debt + BuildingPlumbing.costPerTile()
-        while self.debt + 0.000001 >= 1 do
-            if isClient and isClient() then
-                if self.pipesLeft < 1 then
-                    self.outOfPipes = true
-                    break
-                end
-                self.pipesLeft = self.pipesLeft - 1
-            elseif not takePipe(self.character:getInventory()) then
-                self.outOfPipes = true
-                break
-            end
-            self.debt = self.debt - 1
-        end
-        if self.outOfPipes then
-            break
-        end
-
         local object, reason = BuildingPlumbing.place(placement, self.character)
         if object then
             self.laid[#self.laid + 1] = placement
@@ -105,7 +71,7 @@ function ISPlumbBuilding:update()
         laidThisTick = laidThisTick + 1
     end
 
-    if self.outOfPipes or self.next > #self.plan.placements then
+    if self.next > #self.plan.placements then
         self:forceComplete()
     end
 end
@@ -118,8 +84,19 @@ function ISPlumbBuilding:getJobDelta()
     return math.min((self.next - 1) / total, 1)
 end
 
+-- The whole price, taken before a tile goes down. The fixtures are named so the server prices the pass
+-- itself rather than believing a number the client sent it.
 function ISPlumbBuilding:start()
-    self.pipesLeft = BuildingPlumbing.countPipes(self.character:getInventory())
+    local fixtures = {}
+    for _, fixture in ipairs(self.plan.connected or {}) do
+        fixtures[#fixtures + 1] = { x = fixture.x, y = fixture.y, z = fixture.z }
+    end
+    if isClient and isClient() then
+        sendClientCommand(self.character, "WaterPipes", "beginBuildingPlumbing", { fixtures = fixtures })
+    else
+        BuildingPlumbing.beginPaidPass({ fixtures = fixtures }, self.character)
+    end
+
     self:setActionAnim("VehicleWorkOnMid")
     self.sound = WaterPipes.SoundOptions.playOnCharacter(self.character, "RepairWithWrench")
 end
@@ -127,9 +104,20 @@ end
 -- Settle the network, then connect what the pass reached. In that order, always: plumbing reads the
 -- network, and until finish() has rebuilt it the new pipes do not exist as far as a fixture is
 -- concerned.
+-- ...and the pass closes AFTER the fixtures are connected, because what it refunds is the ones it paid
+-- for and never reached.
 function ISPlumbBuilding:settle()
+    if self.settled then
+        return
+    end
+    self.settled = true
     BuildingPlumbing.finish(self.laid, self.character)
     self.plumbed = BuildingPlumbing.plumbFixtures(self.plan, self.character)
+    if isClient and isClient() then
+        sendClientCommand(self.character, "WaterPipes", "endBuildingPlumbing", {})
+    else
+        self.refunded = BuildingPlumbing.endPaidPass(self.character)
+    end
 end
 
 function ISPlumbBuilding:stop()
@@ -156,10 +144,7 @@ function ISPlumbBuilding:new(character, plan, onFinished)
     o.onFinished = onFinished
     o.next = 1
     o.laid = {}
-    o.debt = 0
-    o.pipesLeft = BuildingPlumbing.countPipes(character:getInventory())
     o.plumbed = 0
-    o.outOfPipes = false
     o.reportedReasons = {}
     o.stopOnWalk = true
     o.stopOnRun = true

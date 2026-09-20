@@ -1191,11 +1191,7 @@ local SKIPPED_SHOWN = 3
 local function reportPlumbing(playerObj, plan, action)
     local skipped = #plan.skipped
     local text, tone
-    if action and action.outOfPipes then
-        -- Stopped partway for want of materials: the player has something to go and fix.
-        text = getText("IGUI_WaterPipesPlumbBuildingOutOfPipes", tostring(#action.laid))
-        tone = "bad"
-    elseif skipped > 0 then
+    if skipped > 0 then
         -- It worked, but not on everything. Neither a win nor a refusal.
         text = getText("IGUI_WaterPipesPlumbBuildingPartial",
             tostring(#plan.connected), tostring(skipped))
@@ -1208,7 +1204,7 @@ local function reportPlumbing(playerObj, plan, action)
     halo(playerObj, text, tone)
 
     -- Which fixtures were left out and why, a few lines in the halo; the full list stays in console.txt.
-    if not (action and action.outOfPipes) and skipped > 0 then
+    if skipped > 0 then
         for index = 1, math.min(skipped, SKIPPED_SHOWN) do
             local entry = plan.skipped[index]
             local name = entry.fixture.object and resolveFixtureName(entry.fixture.object)
@@ -1267,7 +1263,7 @@ function ContextMenu.plumbBuilding(playerObj, square)
         return
     end
 
-    local needed = BuildingPlumbing.pipesFor(plan.cost)
+    local needed = plan.pipes or 0
     local held = BuildingPlumbing.countPipes(playerObj:getInventory())
     if held < needed then
         halo(playerObj,

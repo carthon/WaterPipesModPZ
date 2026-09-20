@@ -74,7 +74,6 @@
     "IGUI_WaterPipesPlumbBuildingNeedPipes": "需要 %1 根金属管，你有 %2 根。",
     "IGUI_WaterPipesPlumbBuildingDone": "已为 %1 个设备布管，共 %2 格管道。",
     "IGUI_WaterPipesPlumbBuildingPartial": "已为 %1 个设备布管；%2 个未能连接：",
-    "IGUI_WaterPipesPlumbBuildingOutOfPipes": "铺设 %1 格后金属管用完了。备足后再次执行。",
     "IGUI_WaterPipesPlumbBuildingSkipped": "%1：%2",
     "IGUI_WaterPipesPlumbBuildingSkippedMore": "……另有 %1 个，详见 console.txt。",
     "IGUI_WaterPipesPlumbBuildingReason_noRoute": "从这里无法接通",
