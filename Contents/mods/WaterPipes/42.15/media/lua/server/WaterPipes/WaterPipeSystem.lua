@@ -1678,36 +1678,27 @@ local function onClientCommand(module, command, player, args)
     end
 
     -- Endpoint plumb/unplumb runs authoritatively on the server (clients only request it).
-    if command == "plumbEndpoint" or command == "unplumbEndpoint" then
+    -- Plumbing is per SQUARE, never per object. The client sends coordinates, so the server would
+    -- otherwise pick the first endpoint it finds there while the player worked on another: a tile
+    -- carrying a sink and a washer ended up half connected, and the menu then offered both a plumb and
+    -- an unplumb for what looks like one fixture. Every endpoint on the tile moves together.
+    if command == "plumbEndpoint" or command == "unplumbEndpoint"
+        or command == "plumbEndpointsOnSquare" then
         local square = resolveCommandSquare(args)
-        local endpoint = square and EndpointObjects.findOnSquare(square)
-        if not endpoint then
+        local endpoints = square and EndpointObjects.collectOnSquare(square) or {}
+        if #endpoints == 0 then
             Logger.warn("Endpoint plumb command: no endpoint at "
                 .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
             return
         end
-        if command == "plumbEndpoint" then
-            EndpointPlumbing.plumb(endpoint)
-        else
-            EndpointPlumbing.unplumb(endpoint)
-        end
-        return
-    end
-
-    -- Every endpoint on one square, for the building pass. Distinct from plumbEndpoint above, which
-    -- takes the FIRST endpoint it finds: a tile carrying both a sink and a washer would leave one of
-    -- them behind, and the generator connects what it reached rather than one of what it reached.
-    if command == "plumbEndpointsOnSquare" then
-        local square = resolveCommandSquare(args)
-        local endpoints = square and EndpointObjects.collectOnSquare(square) or {}
-        if #endpoints == 0 then
-            Logger.warn("Plumb endpoints command: none at "
-                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
-            return
-        end
+        local wanted = command ~= "unplumbEndpoint"
         for _, endpoint in ipairs(endpoints) do
-            if not EndpointPlumbing.isPlumbed(endpoint) then
-                EndpointPlumbing.plumb(endpoint)
+            if EndpointPlumbing.isPlumbed(endpoint) ~= wanted then
+                if wanted then
+                    EndpointPlumbing.plumb(endpoint)
+                else
+                    EndpointPlumbing.unplumb(endpoint)
+                end
             end
         end
         return

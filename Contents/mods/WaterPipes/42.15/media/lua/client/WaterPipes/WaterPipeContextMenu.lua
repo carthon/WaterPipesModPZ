@@ -843,6 +843,25 @@ local function findVanillaPlumbOption(context)
     return nil, prefix
 end
 
+-- Drop the engine's leftover plumb options. It adds one per plumbable object on the tile, and a tile's
+-- endpoints connect together, so once one of them has been turned into our unplumb the rest are
+-- duplicates of it -- which is how a single fixture came to show both a plumb and an unplumb.
+local function removeLeftoverPlumbOptions(context, prefix)
+    if not prefix or not context or not context.options or not context.removeOptionByName then
+        return
+    end
+    local names = {}
+    for _, option in ipairs(context.options) do
+        if type(option.name) == "string" and #option.name >= #prefix
+            and option.name:sub(1, #prefix) == prefix then
+            names[#names + 1] = option.name
+        end
+    end
+    for _, name in ipairs(names) do
+        pcall(context.removeOptionByName, context, name)
+    end
+end
+
 -- The fixture's real display name (e.g. "Sink"/"Fregadero"), resolved the same way the engine
 -- does it: from the sprite's CustomName/GroupName properties, run through the moveable translator.
 local function getFixtureDisplayName(worldObject)
@@ -916,6 +935,7 @@ local function addTopLevelUnplumbOption(context, playerObj, endpointObject)
         vanillaPlumb.isDisabled = nil
         vanillaPlumb.toolTip = nil
         applyPlumbOptionIcon(vanillaPlumb)
+        removeLeftoverPlumbOptions(context, prefix)
     else
         applyPlumbOptionIcon(context:addOption(optionName, playerObj, ContextMenu.unplumbEndpoint, endpointObject))
     end
