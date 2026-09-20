@@ -149,6 +149,17 @@ function EndpointObjects.collectOnSquare(square)
     return results
 end
 
+-- Which endpoint on a tile carries the water. A fixture can be built from more than one object -- a
+-- basin and its tap both flagged waterPiped -- and giving each one a tank shows the player two of the
+-- same sink, one per object. The tile has one supply, so the first endpoint on it holds it and the
+-- rest are connected without a tank of their own.
+function EndpointObjects.isWaterAnchor(worldObject)
+    if not worldObject or not worldObject.getSquare then
+        return false
+    end
+    local anchor = EndpointObjects.findOnSquare(worldObject:getSquare())
+    return anchor == nil or anchor == worldObject
+end
 function EndpointObjects.findInWorldObjects(worldobjects)
     if not worldobjects then
         return nil

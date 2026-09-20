@@ -490,6 +490,13 @@ function EndpointPlumbing.refreshEndpointSource(worldObject)
     if pipedChanged then
         transmitObjectState(worldObject)
     end
+
+    -- One tank per tile. Every endpoint on the tile is connected, but only the one holding the water
+    -- keeps a FluidContainer: a second one shows the player a second sink with a second level.
+    if not EndpointObjects.isWaterAnchor(worldObject) then
+        FluidSource.releaseMirror(worldObject)
+        return false
+    end
     return FluidSource.syncForEndpoint(worldObject)
 end
 
