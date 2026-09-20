@@ -4,6 +4,8 @@ require "Fluids/ISFluidContainer"
 require "Fluids/ISFluidInfoUI"
 require "Fluids/ISFluidPanelAction"
 require "WaterPipes/EndpointAdapterSource"
+require "WaterPipes/EndpointFluidSource"
+require "WaterPipes/EndpointObjects"
 
 local AdapterSource = WaterPipes.EndpointAdapterSource
 local ClientHooks = WaterPipes.ClientHooks or {}
@@ -183,7 +185,31 @@ local function pruneAdapterWaterMenus(context)
     pruneAdapterEntriesFromMenu(context)
 end
 
+-- Fill this client's copy of the fixture's tank before the engine builds the menu from it. The
+-- server owns the water and records what the tank should read; a FluidContainer does not replicate,
+-- and sending the fixture whole to carry one puts a second copy of it in the client's world.
+local function refreshEndpointTanks(worldobjects)
+    local FluidSource = WaterPipes.EndpointFluidSource
+    local EndpointObjects = WaterPipes.EndpointObjects
+    if not FluidSource or not FluidSource.mirrorForClient or not EndpointObjects then
+        return
+    end
+    local seen = {}
+    for _, worldObject in ipairs(worldobjects or {}) do
+        local square = worldObject and worldObject.getSquare and worldObject:getSquare() or nil
+        if square and not seen[tostring(square)] then
+            seen[tostring(square)] = true
+            for _, endpoint in ipairs(EndpointObjects.collectOnSquare(square)) do
+                pcall(FluidSource.mirrorForClient, endpoint)
+            end
+        end
+    end
+end
+
 ISWorldObjectContextMenu.createMenu = function(player, worldobjects, x, y, test)
+    if not test then
+        refreshEndpointTanks(worldobjects)
+    end
     local adapterSquareContext = isAdapterSquareContext(worldobjects)
     if adapterSquareContext then
         worldobjects = filterAdapterWorldObjects(worldobjects)
