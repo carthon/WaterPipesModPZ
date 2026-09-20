@@ -109,6 +109,8 @@ local OUR_TANK_KEY = "waterpipesOwnTank"
 -- its own copy of the tank from them.
 local MIRROR_KEY = "waterpipesMirror"
 
+local reportedClient = {}
+
 local function objectsOnTile(endpoint)
     local square = endpoint and endpoint.getSquare and endpoint:getSquare() or nil
     local objects = square and square.getObjects and square:getObjects() or nil
@@ -304,6 +306,18 @@ function FluidSource.mirrorForClient(endpoint)
     end
     local modData = getModData(endpoint)
     local mirror = modData and modData[MIRROR_KEY]
+    -- Said once per fixture, and it is the only window onto this half: the server's numbers either
+    -- reached this client or they did not, and everything below is silent about which.
+    local said = tostring(endpoint)
+    if not reportedClient[said] then
+        reportedClient[said] = true
+        Logger.log(("EndpointFluidSource: client tank for %s -- server says %s, this side holds %.0f L")
+            :format(describeObject(endpoint),
+                type(mirror) == "table"
+                    and ("%.0f of %.0f L"):format(tonumber(mirror.amount) or 0, tonumber(mirror.capacity) or 0)
+                    or "nothing yet",
+                ownCapacity(endpoint)))
+    end
     if type(mirror) ~= "table" then
         return false
     end
