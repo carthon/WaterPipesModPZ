@@ -45,6 +45,9 @@ function ISToggleValve:perform()
     if isClient() and square then
         sendClientCommand(self.character, "WaterPipes", "setValveOpen",
             { x = square:getX(), y = square:getY(), z = square:getZ(), open = self.open })
+        -- Show the flip here too. The server owns the state and refuses only when the valve is gone,
+        -- which isValid has just ruled out; waiting for its answer leaves the handle wrong meanwhile.
+        Valve.applySprite(self.valve, self.open)
     else
         Valve.setOpen(self.valve, self.open)
     end

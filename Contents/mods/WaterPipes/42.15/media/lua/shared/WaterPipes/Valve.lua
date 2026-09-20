@@ -68,6 +68,24 @@ function Valve.isClosedOnSquare(square)
     return valve ~= nil and not Valve.isOpen(valve)
 end
 
+-- Put the open/closed sprite on the valve. Split out because BOTH ends need it: the server, which owns
+-- the flip, and the client that asked for it -- a sprite set on the server does not travel to clients
+-- with the modData, so the valve kept looking the way it did when the client loaded the tile.
+function Valve.applySprite(worldObject, open)
+    local spriteName = open and Constants.VALVE_SPRITE_OPEN or Constants.VALVE_SPRITE_CLOSED
+    local sprite = getSprite and getSprite(spriteName) or nil
+    if not sprite or not worldObject or not worldObject.setSprite then
+        Logger.warn("Valve sprite " .. tostring(spriteName) .. " did not resolve -- the valve is "
+            .. (open and "open" or "CLOSED") .. " but will not look it. Restart the game fully: "
+            .. "tilesets load only at boot, so a pack added this session is not there yet.")
+        return
+    end
+    pcall(worldObject.setSprite, worldObject, sprite)
+    if worldObject.transmitCompleteItemToClients then
+        pcall(worldObject.transmitCompleteItemToClients, worldObject)
+    end
+end
+
 -- Flip it, authoritatively. Every toggle path lands here (the server command handler and the
 -- single-player direct call both do), so this is the only place that has to keep the registry, the
 -- sprite and the caches in step.
@@ -81,16 +99,8 @@ function Valve.setOpen(worldObject, open)
         pcall(worldObject.transmitModData, worldObject)
     end
 
-    -- The sprite shows the state; the context menu tooltip states it as well, in case the sprite fails.
-    local spriteName = Valve.spriteFor(worldObject)
-    local sprite = getSprite and getSprite(spriteName) or nil
-    if sprite and worldObject.setSprite then
-        pcall(worldObject.setSprite, worldObject, sprite)
-    else
-        Logger.warn("Valve sprite " .. tostring(spriteName) .. " did not resolve -- the valve is "
-            .. (open and "open" or "CLOSED") .. " but will not look it. Restart the game fully: "
-            .. "tilesets load only at boot, so a pack added this session is not there yet.")
-    end
+    Valve.applySprite(worldObject, open)
+
 
     local square = worldObject.getSquare and worldObject:getSquare() or nil
     if square then
