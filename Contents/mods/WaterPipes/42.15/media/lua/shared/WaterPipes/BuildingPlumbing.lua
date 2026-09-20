@@ -511,6 +511,7 @@ function BuildingPlumbing.plan(origin, probe, opts)
     table.sort(connectedKeys)
     local plan = planOnce(origin, probe, dist, coords, reachable, maxTiles, connectedKeys)
     local last = plan
+    local attempts = { plan }
     for _ = 1, BUILDING_PLAN_RETRIES do
         if last.cappedAt then
             break
@@ -534,6 +535,7 @@ function BuildingPlumbing.plan(origin, probe, opts)
             if not failed[entry.fixture] then order[#order + 1] = entry end
         end
         last = planOnce(origin, probe, dist, coords, order, maxTiles, connectedKeys)
+        attempts[#attempts + 1] = last
         if #last.connected > #plan.connected
             or (#last.connected == #plan.connected and last.cost < plan.cost) then
             plan = last
@@ -546,6 +548,18 @@ function BuildingPlumbing.plan(origin, probe, opts)
             fixture = fixture, reason = fixture.z ~= origin.z and "noClimb" or "noRoute",
         }
     end
+    -- What every attempt managed, when one of them left a fixture out. A fixture that no ordering
+    -- reaches is walled in; one that only the retries reach was passed over for a plan that connects
+    -- more, and moving to another root tile is what connects it.
+    if #plan.skipped > 0 and Logger and #attempts > 0 then
+        local scores = {}
+        for index, attempt in ipairs(attempts) do
+            scores[index] = string.format("%d for %d", #attempt.connected, attempt.cost)
+        end
+        Logger.log(string.format("Building plumbing plan: kept %d fixture(s) for %d tile(s) of %d attempt(s) [%s]",
+            #plan.connected, plan.cost, #attempts, table.concat(scores, ", ")))
+    end
+
     plan.order = nil
     plan.alreadyConnected = alreadyConnected
     return plan

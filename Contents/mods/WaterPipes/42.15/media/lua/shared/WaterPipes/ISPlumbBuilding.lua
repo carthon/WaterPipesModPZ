@@ -163,9 +163,10 @@ function ISPlumbBuilding:new(character, plan, onFinished)
     o.reportedReasons = {}
     o.stopOnWalk = true
     o.stopOnRun = true
-    -- Long enough to read as real work; the pass itself ends the action the moment the last tile is in,
-    -- so this is a ceiling rather than a duration.
-    o.maxTime = character:isTimedActionInstant() and 1 or (60 + 6 * #plan.placements)
+    -- No duration: the pass itself ends the action, the moment the last tile is laid or the pipe runs
+    -- out. A timer here is a second authority on when the work is done, and it wins -- with instant
+    -- actions it ended the pass after ONE tile and reported the whole plan as finished.
+    o.maxTime = -1
     return o
 end
 
