@@ -135,10 +135,11 @@ local function attachTank(endpoint, capacity)
     Logger.log(("EndpointFluidSource: gave %s a tank of its own (it had none); objects on the tile %d -> %d")
         :format(describeObject(endpoint), before, after))
 
-    -- Newly attached component: push the full object so multiplayer clients receive it.
-    if endpoint.transmitCompleteItemToClients then
-        pcall(endpoint.transmitCompleteItemToClients, endpoint)
-    end
+    -- NOT transmitted whole. Sending the complete item works for an object a client has never seen --
+    -- a pipe we just created -- but a fixture is already in the client's world, and it ADDS the copy
+    -- rather than replacing what it has: the server kept one sink and the client showed two, each with
+    -- its own fluid menu, and the spare survived being disconnected. The per-write sync is what carries
+    -- the tank's contents to clients.
 
     local modData = getModData(endpoint)
     if modData then
