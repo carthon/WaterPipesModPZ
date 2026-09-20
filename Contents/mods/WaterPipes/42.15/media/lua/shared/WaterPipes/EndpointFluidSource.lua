@@ -138,8 +138,10 @@ local function attachTank(endpoint, capacity)
     local before = objectsOnTile(endpoint)
     pcall(GameEntityFactory.AddComponent, endpoint, true, component)
     local after = objectsOnTile(endpoint)
-    Logger.log(("EndpointFluidSource: gave %s a tank of its own (it had none); objects on the tile %d -> %d")
-        :format(describeObject(endpoint), before, after))
+    -- The SIZE is the network's storage at this moment, which is nothing at all until something on the
+    -- line holds water -- so a tank born at 1 L means the pipes reach no vessel yet, not a broken tank.
+    Logger.log(("EndpointFluidSource: gave %s a %.0f L tank (it had none); objects on the tile %d -> %d")
+        :format(describeObject(endpoint), math.max(capacity or 1, 1), before, after))
 
     -- NOT transmitted whole. Sending the complete item works for an object a client has never seen --
     -- a pipe we just created -- but a fixture is already in the client's world, and it ADDS the copy
@@ -215,7 +217,14 @@ end
 local function writeFluid(endpoint, amount, fluidTypeName, networkCapacity, localOnly)
     local fluidContainer = getFluidContainer(endpoint)
     if networkCapacity and hasOurTank(endpoint) and fluidContainer and fluidContainer.setCapacity then
-        pcall(fluidContainer.setCapacity, fluidContainer, math.max(networkCapacity, 1))
+        local wanted = math.max(networkCapacity, 1)
+        if math.abs(ownCapacity(endpoint) - wanted) > CONSUME_EPSILON then
+            -- Only on a real change: the tank follows the network's storage, and saying so is how a
+            -- tank stuck at its birth size can be told from one the network never grew.
+            Logger.log(("EndpointFluidSource: %s tank resized %.0f -> %.0f L")
+                :format(describeObject(endpoint), ownCapacity(endpoint), wanted))
+            pcall(fluidContainer.setCapacity, fluidContainer, wanted)
+        end
     end
     local capacity = ownCapacity(endpoint)
     local effectiveAmount = math.max(math.min(amount or 0, capacity), 0)
