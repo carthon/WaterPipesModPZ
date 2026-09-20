@@ -306,11 +306,16 @@ function FluidSource.mirrorForClient(endpoint)
     end
     local modData = getModData(endpoint)
     local mirror = modData and modData[MIRROR_KEY]
-    -- Said once per fixture, and it is the only window onto this half: the server's numbers either
-    -- reached this client or they did not, and everything below is silent about which.
+    -- Said whenever the ANSWER changes, not once per fixture: once-only hid the very moment this is
+    -- about -- a tank that reads 1 L while the network it was told about has since grown to 300.
+    local answer = ("%s|%.2f"):format(
+        type(mirror) == "table"
+            and ("%.0f of %.0f L"):format(tonumber(mirror.amount) or 0, tonumber(mirror.capacity) or 0)
+            or "nothing yet",
+        ownCapacity(endpoint))
     local said = tostring(endpoint)
-    if not reportedClient[said] then
-        reportedClient[said] = true
+    if reportedClient[said] ~= answer then
+        reportedClient[said] = answer
         Logger.log(("EndpointFluidSource: client tank for %s -- server says %s, this side holds %.0f L")
             :format(describeObject(endpoint),
                 type(mirror) == "table"
