@@ -1327,10 +1327,63 @@ end
 -- Fires for moveable "Pick Up" and other lua-driven removals; without it a removed pipe would stay
 -- registered and its endpoints would still read as connected. Dismantling comes through here, so this
 -- path hands the build material back.
+-- A vessel joining or leaving the line changes what every fixture on it can serve, and until now that
+-- only reached them on the next minute's pass -- two of them, in fact: one to notice the vessel and one
+-- to refresh the fixtures. A barrel hung on a freshly plumbed house left its taps reading empty for
+-- over a minute and a half. So the network is told at once.
+--
+-- Bounded by the network itself, and only for a vessel landing on a tile that carries pipe: the walk
+-- and one refresh per fixture, on an event the player raises by hand.
+local function refreshEndpointsOnNetworkAt(square)
+    if not square then
+        return
+    end
+    local squares = NetworkAccess.getNetworkSquares(square)
+    if not squares or #squares == 0 then
+        return
+    end
+    local coordinates = {}
+    for _, pipeSquare in ipairs(squares) do
+        coordinates[#coordinates + 1] =
+            { x = pipeSquare:getX(), y = pipeSquare:getY(), z = pipeSquare:getZ() }
+    end
+    refreshPlumbedEndpointsNearCoordinates(coordinates)
+end
+
+local function vesselChangedOnPipe(object)
+    if not object or not object.getSquare then
+        return
+    end
+    local ok, square = pcall(object.getSquare, object)
+    if not ok or not square then
+        return
+    end
+    -- A container connects only through a pipe on its OWN tile, which is also what keeps this off the
+    -- path of every object dropped anywhere in the world.
+    if not PipeObjectUtils.getPipeOnSquare(square) then
+        return
+    end
+    if not Adapter.hasSquareContainers(square) and not Adapter.getWorldFluidKind(object) then
+        return
+    end
+    refreshEndpointsOnNetworkAt(square)
+end
+
+local function onObjectAdded(object)
+    local ok, err = pcall(vesselChangedOnPipe, object)
+    if not ok then
+        Logger.error("Vessel added handler failed: " .. tostring(err))
+    end
+end
+
 local function onObjectAboutToBeRemoved(object)
     schedulePipeRemoval(object, true)
     schedulePurifierRemoval(object, true)
     scheduleFittingRemoval(object)
+    local ok, err = pcall(vesselChangedOnPipe, object)
+    if not ok then
+        Logger.error("Vessel removed handler failed: " .. tostring(err))
+    end
 end
 
 -- Rotates through state.pipes a few tiles at a time, so every tile is checked eventually and no
@@ -1914,6 +1967,10 @@ if Events then
 
     if Events.OnObjectAboutToBeRemoved then
         Events.OnObjectAboutToBeRemoved.Add(onObjectAboutToBeRemoved)
+    end
+
+    if Events.OnObjectAdded then
+        Events.OnObjectAdded.Add(onObjectAdded)
     end
 
     if Events.OnWaterAmountChange then
