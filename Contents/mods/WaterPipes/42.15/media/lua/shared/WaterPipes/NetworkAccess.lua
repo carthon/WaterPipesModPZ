@@ -1001,46 +1001,65 @@ function NetworkAccess.taintNetworkAt(originSquare)
     return turned
 end
 
--- Even the stored water out across the network without adding or removing any; returns litres moved.
--- The purifier needs it: a network otherwise settles only when something draws from it or fills it,
--- so a purifier feeding barrels nobody drinks from would stall at a full buffer.
--- A settle is a FILL-shaped question -- where can water sitting here GO -- and the arguments have to say
--- so. This read `(originSquare, nil, true)` against a signature of
--- (originSquare, verticalMode, kind, fill, statusOnly): one short, so `true` landed in `kind` and the
--- level-out was answered as a CONSUMER DRAW. The gate that comes with a draw asks each vessel whether it
--- could push water UP to the origin, so a barrel below the purifier's outlet was struck off the list and
--- the buffer had nothing left to even out against. Harmless until the shared head field made that gate
--- all-or-nothing; after it, the purifier's clean side simply stopped draining.
-function NetworkAccess.settleAtSquare(originSquare)
+-- Empty the purifier OUT buffers on this network into the rest of it, and return the litres moved.
+-- The buffer is a SOURCE here, not a peer: it stands aside from the share-out, so nothing it pushes can
+-- be handed straight back to it, which is what a level-out did -- a proportional share left the buffer
+-- holding its own fraction for ever. What the other vessels take is spread by the usual capacity share.
+-- A drain is a FILL-shaped question -- where can water sitting here GO -- and the arguments have to say
+-- so. Read as a draw, the gate asks each vessel whether it could push water UP to the origin, so a
+-- barrel below the outlet is struck off and the buffer has nothing to empty into.
+function NetworkAccess.drainPurifierOutletsAt(originSquare)
     local summary = buildSummaryFromSquare(originSquare, "both", nil, SEALED)
-    if not summary or summary.isMixed or (summary.totalAmount or 0) <= 0 then
+    if not summary or summary.isMixed then
         return 0
-    end
-    if #summary.descriptors < 2 then
-        return 0   -- nothing to even out against
     end
 
-    -- Already level? Touch nothing. rebalanceSummary rewrites every vessel it is given -- empty, refill,
-    -- sync, transmit -- so running it once a minute per purifier would be a steady stream of packets.
-    local totalCapacity = math.max(summary.totalCapacity or 0, 0)
-    if totalCapacity <= 0 then
-        return 0
-    end
-    local ratio = math.min(summary.totalAmount / totalCapacity, 1)
-    local levelled = true
+    local outlets, held = {}, 0
     for _, descriptor in ipairs(summary.descriptors) do
-        local target = (descriptor.capacity or 0) * ratio
-        if math.abs((descriptor.waterAmount or 0) - target) > 0.01 then
-            levelled = false
-            break
+        if descriptor.fluidMode == "purifierOut" then
+            outlets[#outlets + 1] = descriptor
+            held = held + math.max(descriptor.waterAmount or 0, 0)
         end
     end
-    if levelled then
+    if held <= 0 then
         return 0
     end
 
-    rebalanceSummary(summary, summary.totalAmount)
-    return summary.totalAmount
+    -- The outlets leave the summary, so the totals below are the RECEIVING side's alone.
+    excludePurifierOutlets(summary)
+    if #summary.descriptors == 0 then
+        return 0
+    end
+    local before = summary.totalAmount or 0
+    local headroom = (summary.totalCapacity or 0) - before
+    if headroom <= 0 then
+        return 0
+    end
+
+    -- An outlet only ever holds clean Water, and it is only in the summary at all when the network is
+    -- clean or empty (see addPurifierOutletDescriptors), so what lands is never in question.
+    summary.fluidTypeName = "Water"
+    rebalanceSummary(summary, before + math.min(held, headroom))
+    local landed = math.max((summary.totalAmount or 0) - before, 0)
+    if landed <= 0 then
+        return 0
+    end
+
+    -- Take off each buffer the share of what landed that it supplied. The last one absorbs the rounding,
+    -- so the litres removed equal the litres added and nothing is conjured between the two writes.
+    local taken = 0
+    for index, descriptor in ipairs(outlets) do
+        local amount = math.max(descriptor.waterAmount or 0, 0)
+        local share = index == #outlets and (landed - taken) or (landed * amount / held)
+        share = math.max(math.min(share, amount), 0)
+        if share > 0 then
+            local left = amount - share
+            Adapter.writeDescriptorWaterAmount(descriptor, left, left > 0 and "Water" or nil)
+            descriptor.waterAmount = left
+            taken = taken + share
+        end
+    end
+    return taken
 end
 
 -- For visualization: the tiles of the physically-connected network, both directions, routers solid.

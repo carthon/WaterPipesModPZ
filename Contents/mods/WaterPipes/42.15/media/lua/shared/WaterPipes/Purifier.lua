@@ -391,15 +391,12 @@ function Purifier.step(purifier, inSquare, outSquare, dt)
     -- busy, and the readout used to call that "Stopped" purely because the levels looked static.
     local processed = false
 
-    -- 1. Output: even the OUT buffer out with the rest of the clean network.
-    -- It used to PUSH -- read the buffer, ask the network for headroom, fill it, subtract what was taken --
-    -- which is exactly wrong now that the buffer IS one of that network's containers: the fill rebalances
-    -- water back into the buffer and the subtraction removes it a second time. Settling moves nothing in or
-    -- out, it only lets the level equalise; with no barrels it is a no-op and a tap can still reach it.
-    local outAmount = Purifier.getOutAmount(purifier)
-    if outAmount > 0 then
-        local settled = NetworkAccess.settleAtSquare(outSquare)
-        if settled > 0 and Purifier.getOutAmount(purifier) ~= outAmount then
+    -- 1. Output: push the OUT buffer into the clean network. The buffer stands aside from the share-out
+    -- it feeds, the way a tank behind a router does, so it empties whenever anything downstream has room
+    -- rather than keeping its proportional share for ever. With no vessels to take it the water stays
+    -- put and a tap can still reach it.
+    if Purifier.getOutAmount(purifier) > 0 then
+        if NetworkAccess.drainPurifierOutletsAt(outSquare) > 0 then
             processed = true
         end
     end
