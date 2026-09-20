@@ -333,63 +333,8 @@ function FluidSource.captureOriginalState(endpoint)
     end
 end
 
--- Put the fixture's own FluidContainer back the way it was found, and nothing else. Split out because
--- an endpoint that is still connected but is not the tile's water anchor needs its tank taken away
--- WITHOUT its water-source flags being reset -- those say it is connected, and it still is.
-local function restoreContainer(endpoint, state)
-    local fluidContainer = getFluidContainer(endpoint)
-    if not fluidContainer then
-    return
-    end
-
-    setSyncing(endpoint, true)
-
-    if fluidContainer.setInputLocked then
-        pcall(fluidContainer.setInputLocked, fluidContainer, false)
-    end
-    if fluidContainer.Empty then
-        pcall(fluidContainer.Empty, fluidContainer)
-    elseif fluidContainer.removeFluid then
-        pcall(fluidContainer.removeFluid, fluidContainer)
-    end
-
-    local capacity = state and state.capacity or 0
-    if fluidContainer.setCapacity then
-        pcall(fluidContainer.setCapacity, fluidContainer, math.max(capacity, 0))
-    end
-    if state and (state.amount or 0) > 0 and state.fluidType and fluidContainer.addFluid then
-        local fluidType = getFluidTypeByName(state.fluidType)
-        if fluidType then
-            pcall(fluidContainer.addFluid, fluidContainer, fluidType, state.amount)
-        end
-    end
-    if fluidContainer.setInputLocked then
-        pcall(fluidContainer.setInputLocked, fluidContainer, (state and state.inputLocked) and true or false)
-    end
-
-    if endpoint.sync then
-        pcall(endpoint.sync, endpoint)
-    end
-    if endpoint.transmitModData then
-        pcall(endpoint.transmitModData, endpoint)
-    end
-
-    setSyncing(endpoint, false)
-    end
-end
-
--- Take the tank off an endpoint that stays connected. The capture is kept: the endpoint is still
--- plumbed, so an unplumb later still has the state to put back.
-function FluidSource.releaseMirror(endpoint)
-    if not isAuthoritative() or not endpoint then
-        return
-    end
-    local modData = getModData(endpoint)
-    restoreContainer(endpoint, modData and modData[Constants.ENDPOINT_ORIGINAL_FLUID_KEY] or nil)
-    setLastSync(endpoint, 0)
-end
-
--- Snapshot restored in full, flags included (used on unplumb).
+-- Restore the fixture's own FluidContainer to the captured pre-plumb state (used on unplumb), so
+-- it no longer shows the network's capacity/mirror.
 function FluidSource.restoreOriginalState(endpoint)
     if not isAuthoritative() or not endpoint then
         return
@@ -397,7 +342,43 @@ function FluidSource.restoreOriginalState(endpoint)
 
     local modData = getModData(endpoint)
     local state = modData and modData[Constants.ENDPOINT_ORIGINAL_FLUID_KEY] or nil
-    restoreContainer(endpoint, state)
+    local fluidContainer = getFluidContainer(endpoint)
+
+    if fluidContainer then
+        setSyncing(endpoint, true)
+
+        if fluidContainer.setInputLocked then
+            pcall(fluidContainer.setInputLocked, fluidContainer, false)
+        end
+        if fluidContainer.Empty then
+            pcall(fluidContainer.Empty, fluidContainer)
+        elseif fluidContainer.removeFluid then
+            pcall(fluidContainer.removeFluid, fluidContainer)
+        end
+
+        local capacity = state and state.capacity or 0
+        if fluidContainer.setCapacity then
+            pcall(fluidContainer.setCapacity, fluidContainer, math.max(capacity, 0))
+        end
+        if state and (state.amount or 0) > 0 and state.fluidType and fluidContainer.addFluid then
+            local fluidType = getFluidTypeByName(state.fluidType)
+            if fluidType then
+                pcall(fluidContainer.addFluid, fluidContainer, fluidType, state.amount)
+            end
+        end
+        if fluidContainer.setInputLocked then
+            pcall(fluidContainer.setInputLocked, fluidContainer, (state and state.inputLocked) and true or false)
+        end
+
+        if endpoint.sync then
+            pcall(endpoint.sync, endpoint)
+        end
+        if endpoint.transmitModData then
+            pcall(endpoint.transmitModData, endpoint)
+        end
+
+        setSyncing(endpoint, false)
+    end
 
     -- Restore the pre-plumb water-source flags. canBeWaterPiped governs the engine's infinite
     -- city-mains water: leaving it nil/false makes the fixture an infinite tap again (if the water
