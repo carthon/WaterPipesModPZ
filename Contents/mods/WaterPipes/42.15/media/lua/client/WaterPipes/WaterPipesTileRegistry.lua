@@ -23,6 +23,7 @@ require "WaterPipes/Irrigation"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Profiler"
 require "WaterPipes/Purifier"
+require "WaterPipes/Valve"
 require "WaterPipes/World"
 
 WaterPipes = WaterPipes or {}
@@ -88,6 +89,13 @@ local function classify(square)
 
     hydrant = Hydrant.findOnSquare(square)
     purifier = Purifier.findOnSquare(square)
+
+    -- A valve flipped by someone else replicates its STATE and not its sprite, so the handle is drawn
+    -- from that state here, where the tile is already in hand. Only tiles near the player are swept,
+    -- which is the only place a wrong handle could be seen.
+    if WaterPipes.Valve and WaterPipes.Valve.reconcileOnSquare then
+        pcall(WaterPipes.Valve.reconcileOnSquare, square)
+    end
 
     return emitter, hydrant, purifier
 end

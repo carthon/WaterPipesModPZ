@@ -68,9 +68,14 @@ function Valve.isClosedOnSquare(square)
     return valve ~= nil and not Valve.isOpen(valve)
 end
 
--- Put the open/closed sprite on the valve. Split out because BOTH ends need it: the server, which owns
--- the flip, and the client that asked for it -- a sprite set on the server does not travel to clients
--- with the modData, so the valve kept looking the way it did when the client loaded the tile.
+-- Put the open/closed sprite on the valve, and NOTHING else. A sprite set on the server does not
+-- travel with the modData, so each side draws its own from the state that does -- see
+-- Valve.reconcileOnSquare.
+--
+-- What is deliberately not here is transmitCompleteItemToClients. Sending the whole object to a client
+-- that already has this one ADDS a second copy instead of replacing it: two valves on the tile, an
+-- open handle drawn over a closed one, and a menu that reads whichever comes first in the object list.
+-- That copy never hears about a flip again, so the valve could be closed and never reopened.
 function Valve.applySprite(worldObject, open)
     local spriteName = open and Constants.VALVE_SPRITE_OPEN or Constants.VALVE_SPRITE_CLOSED
     local sprite = getSprite and getSprite(spriteName) or nil
@@ -81,9 +86,60 @@ function Valve.applySprite(worldObject, open)
         return
     end
     pcall(worldObject.setSprite, worldObject, sprite)
-    if worldObject.transmitCompleteItemToClients then
-        pcall(worldObject.transmitCompleteItemToClients, worldObject)
+end
+
+local function spriteNameOf(worldObject)
+    if not worldObject or not worldObject.getSpriteName then
+        return nil
     end
+    local ok, name = pcall(worldObject.getSpriteName, worldObject)
+    return ok and name or nil
+end
+
+-- Optimistic local flip, for the side that asked. The state is written here so the menu agrees with
+-- the handle at once; the owner's modData follows and confirms it. Nothing is sent from here.
+function Valve.setLocalState(worldObject, open)
+    local modData = getModData(worldObject)
+    if modData then
+        modData[Constants.VALVE_CLOSED_KEY] = (not open) and true or nil
+    end
+    Valve.applySprite(worldObject, open)
+end
+
+-- Every valve on the tile drawn the way its own state says. This is how a flip made elsewhere reaches
+-- a client: the modData replicates, the sprite does not, so it is derived where it is drawn.
+-- Returns how many it had to correct.
+function Valve.reconcileOnSquare(square)
+    if not square or not square.getObjects then
+        return 0
+    end
+    local ok, objects = pcall(square.getObjects, square)
+    if not ok or not objects then
+        return 0
+    end
+
+    local corrected, found = 0, 0
+    for i = 0, objects:size() - 1 do
+        local worldObject = objects:get(i)
+        if Valve.isValve(worldObject) then
+            found = found + 1
+            local open = Valve.isOpen(worldObject)
+            local wanted = open and Constants.VALVE_SPRITE_OPEN or Constants.VALVE_SPRITE_CLOSED
+            if spriteNameOf(worldObject) ~= wanted then
+                Valve.applySprite(worldObject, open)
+                corrected = corrected + 1
+            end
+        end
+    end
+
+    -- One tile, one valve. More than one means a copy was put there rather than the original updated,
+    -- and the menu would be reading whichever the object list happens to hand over first.
+    if found > 1 then
+        Logger.warn(string.format("%d valves on the tile at %d:%d:%d -- only one of them can be the "
+            .. "real one. Reconnecting rebuilds the tile from the server.",
+            found, square:getX(), square:getY(), square:getZ()))
+    end
+    return corrected
 end
 
 -- Flip it, authoritatively. Every toggle path lands here (the server command handler and the
