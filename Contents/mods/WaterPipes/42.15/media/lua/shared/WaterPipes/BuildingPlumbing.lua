@@ -830,11 +830,21 @@ end
 
 -- Connect the fixtures the pass reached. Must run after BuildingPlumbing.finish, which is what makes the
 -- network know the new pipes. Per square, as the server command addresses them.
-function BuildingPlumbing.plumbFixtures(plan, player)
+-- `laid` is what the pass actually put down. A pass that ran out of pipe partway can have "connected"
+-- a fixture in the plan whose branch never reached the floor, and that fixture must not be plumbed --
+-- but asking the WORLD is the wrong way to tell, because in multiplayer a pipe laid on the last tick
+-- has not come back from the server yet. That lost both halves of a bathtub: paid for, piped on the
+-- server, and never connected, because the client's own square was still empty when this ran.
+function BuildingPlumbing.plumbFixtures(plan, player, laid)
     local EndpointPlumbing = WaterPipes.EndpointPlumbing
     local EndpointObjectsModule = WaterPipes.EndpointObjects
     if not EndpointPlumbing or not EndpointObjectsModule then
         return 0
+    end
+
+    local laidHere = {}
+    for _, placement in ipairs(laid or {}) do
+        laidHere[keyOf(placement.x, placement.y, placement.z)] = true
     end
 
     local seen = {}
@@ -845,16 +855,14 @@ function BuildingPlumbing.plumbFixtures(plan, player)
         if not seen[key] then
             seen[key] = true
             local square = squareAt(fixture.x, fixture.y, fixture.z)
-            -- A pass that ran out of pipe partway can have "connected" a fixture in the plan whose
-            -- branch never reached the floor. No pipe on its tile, nothing to plumb.
-            if square and PipeObjectUtils.getPipeOnSquare(square) then
+            if laidHere[key] or (square and PipeObjectUtils.getPipeOnSquare(square)) then
                 if isClient and isClient() then
                     if player then
                         sendClientCommand(player, "WaterPipes", "plumbEndpointsOnSquare",
                             { x = fixture.x, y = fixture.y, z = fixture.z })
                         plumbed = plumbed + 1
                     end
-                else
+                elseif square then
                     for _, endpointObject in ipairs(EndpointObjectsModule.collectOnSquare(square)) do
                         if not EndpointPlumbing.isPlumbed(endpointObject) then
                             EndpointPlumbing.plumb(endpointObject)

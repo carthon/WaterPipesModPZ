@@ -73,8 +73,11 @@ end
 
 local getSquare = WaterPipes.World.squareAt
 
+-- Returns how many plumbed fixtures it refreshed, which is what says whether a targeted refresh
+-- reached anything at all.
 local function refreshPlumbedEndpointsNearCoordinates(coordinates)
     local visited = {}
+    local refreshed = 0
 
     for _, position in ipairs(coordinates or {}) do
         local square = getSquare(position.x, position.y, position.z)
@@ -87,10 +90,13 @@ local function refreshPlumbedEndpointsNearCoordinates(coordinates)
                     -- gets picked up the first time anything is built near one of its sinks.
                     State.registerEndpoint(position.x, position.y, position.z)
                     EndpointPlumbing.refreshEndpointSource(endpointObject)
+                    refreshed = refreshed + 1
                 end
             end
         end
     end
+
+    return refreshed
 end
 
 local function refreshPlumbedGeneratorsNearCoordinates(coordinates)
@@ -1347,14 +1353,16 @@ local function refreshEndpointsOnNetworkAt(square)
     end
     local squares = NetworkAccess.getNetworkSquares(square)
     if not squares or #squares == 0 then
-        return
+        Logger.warn(("Vessel refresh at %d:%d:%d reached no network squares -- nothing refreshed")
+            :format(square:getX(), square:getY(), square:getZ()))
+        return 0
     end
     local coordinates = {}
     for _, pipeSquare in ipairs(squares) do
         coordinates[#coordinates + 1] =
             { x = pipeSquare:getX(), y = pipeSquare:getY(), z = pipeSquare:getZ() }
     end
-    refreshPlumbedEndpointsNearCoordinates(coordinates)
+    return refreshPlumbedEndpointsNearCoordinates(coordinates), #squares
 end
 
 -- `square` may be given straight, because the client announces a vessel by coordinates: the server's
@@ -1384,9 +1392,9 @@ local function vesselChangedOnPipe(object, square)
         and not (object and Adapter.getWorldFluidKind(object)) then
         return
     end
-    Logger.log(("Vessel on a piped tile at %d:%d:%d -- refreshing that network now")
-        :format(square:getX(), square:getY(), square:getZ()))
-    refreshEndpointsOnNetworkAt(square)
+    local refreshed, reach = refreshEndpointsOnNetworkAt(square)
+    Logger.log(("Vessel on a piped tile at %d:%d:%d -- refreshed %d fixture(s) over %d network tile(s)")
+        :format(square:getX(), square:getY(), square:getZ(), refreshed or 0, reach or 0))
 end
 
 local function onObjectAdded(object)

@@ -112,7 +112,7 @@ function ISPlumbBuilding:settle()
     end
     self.settled = true
     BuildingPlumbing.finish(self.laid, self.character)
-    self.plumbed = BuildingPlumbing.plumbFixtures(self.plan, self.character)
+    self.plumbed = BuildingPlumbing.plumbFixtures(self.plan, self.character, self.laid)
     if isClient and isClient() then
         sendClientCommand(self.character, "WaterPipes", "endBuildingPlumbing", {})
     else
