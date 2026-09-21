@@ -331,8 +331,14 @@ end
 -- the settle refuses. Reported on change rather than every pass, so a working base stays quiet.
 local lastShapeReport = nil
 
+-- Same rule for the mixed-fluid refusal below. A group holding two fluids stays that way until the
+-- player empties a vessel, and saying so on every pass -- eight times a real minute -- buries
+-- everything else in the log.
+local lastMixedReport = nil
+
 function System.redistributeWater()
     local components = State.getComponents()
+    local mixed = {}
 
     local shape = {}
     for _, component in ipairs(components) do
@@ -406,14 +412,35 @@ function System.redistributeWater()
                 names[#names + 1] = tostring(fluidTypeName)
             end
             table.sort(names)
-            local where = containers[1]
-            Logger.warn(string.format(
+            -- The lowest tile key in the group, not whichever `pairs` handed over first: it has to name
+            -- the same tile every pass or "unchanged" could never be told from "changed".
+            local anchor = nil
+            for _, descriptor in ipairs(containers) do
+                local key = string.format("%d:%d:%d",
+                    descriptor.x or 0, descriptor.y or 0, descriptor.z or 0)
+                if not anchor or key < anchor then
+                    anchor = key
+                end
+            end
+            mixed[#mixed + 1] = string.format(
                 "NOT LEVELLING a group of %d vessel(s) near %s: it holds %d fluids (%s). A group has to be "
                 .. "of one mind about what it contains before water will move inside it.",
-                #containers,
-                where and string.format("%d:%d:%d", where.x or 0, where.y or 0, where.z or 0) or "?",
-                fluidTypeCount, table.concat(names, ", ")))
+                #containers, anchor or "?", fluidTypeCount, table.concat(names, ", "))
         end
+    end
+
+    table.sort(mixed)
+    local mixedSignature = table.concat(mixed, " | ")
+    if mixedSignature ~= lastMixedReport then
+        for _, message in ipairs(mixed) do
+            Logger.warn(message)
+        end
+        -- Said once when it clears, or the player who emptied the odd vessel never learns that it worked.
+        if mixedSignature == "" and lastMixedReport then
+            Logger.log("Every group holding vessels is of one mind about its fluid again -- levelling "
+                .. "resumed.")
+        end
+        lastMixedReport = mixedSignature
     end
 end
 
