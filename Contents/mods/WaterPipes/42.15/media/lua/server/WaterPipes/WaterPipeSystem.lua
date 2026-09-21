@@ -1357,25 +1357,33 @@ local function refreshEndpointsOnNetworkAt(square)
     refreshPlumbedEndpointsNearCoordinates(coordinates)
 end
 
-local function vesselChangedOnPipe(object)
-    if not object or not object.getSquare then
-        return
-    end
-    local ok, square = pcall(object.getSquare, object)
-    if not ok or not square then
-        return
+-- `square` may be given straight, because the client announces a vessel by coordinates: the server's
+-- own OnObjectAdded never fires for one a player placed. Measured on wptest -- the client logged the
+-- event, the server logged nothing, and the taps waited 158 s for the drift verifier to notice.
+local function vesselChangedOnPipe(object, square)
+    if not square then
+        if not object or not object.getSquare then
+            return
+        end
+        local ok, found = pcall(object.getSquare, object)
+        if not ok or not found then
+            return
+        end
+        square = found
     end
     -- A container connects only through a pipe on its OWN tile, which is also what keeps this off the
     -- path of every object dropped anywhere in the world.
     if not PipeObjectUtils.getPipeOnSquare(square) then
         return
     end
-    if not Adapter.hasSquareContainers(square) and not Adapter.getWorldFluidKind(object) then
+    -- Dropped BEFORE the tile is read back. What this event announces is that the classification of
+    -- this tile is wrong, and hasSquareContainers would otherwise answer from the very memo being
+    -- corrected -- which is how a newly hung vessel stayed invisible to a forced tick.
+    Invalidate.squareChanged(square)
+    if not Adapter.hasSquareContainers(square)
+        and not (object and Adapter.getWorldFluidKind(object)) then
         return
     end
-    -- Whether this event reaches the server at all is the whole question: a vessel the player places in
-    -- multiplayer is added client-side and replicated, and the minute's pass would cover for it either
-    -- way, so a handler that never fires looks exactly like one that had nothing to do.
     Logger.log(("Vessel on a piped tile at %d:%d:%d -- refreshing that network now")
         :format(square:getX(), square:getY(), square:getZ()))
     refreshEndpointsOnNetworkAt(square)
@@ -1424,8 +1432,8 @@ local function verifyCachesAgainstTheWorld()
                 disagreed = disagreed + 1
                 Logger.warn(string.format(
                     "CACHE DRIFT: vessel classification at %d:%d:%d disagreed with the world. An "
-                        .. "object left that tile without OnObjectAboutToBeRemoved firing. This is the "
-                        .. "case docs/removal-events.md is waiting for -- please report what was there.",
+                        .. "object arrived on or left that tile without either object event reaching "
+                        .. "this side. See docs/removal-events.md -- please report what was there.",
                     pipeData.x, pipeData.y, pipeData.z))
             end
             if PipeObjectUtils.verifySquareScan and not PipeObjectUtils.verifySquareScan(square) then
@@ -1943,6 +1951,17 @@ local function onClientCommand(module, command, player, args)
 
     -- The profiler measures the SERVER's periodic work, which is the only place it happens on a
     -- dedicated server. Admin only: it is a debug tool that costs time in every pass it measures.
+    if command == "vesselChanged" then
+        local square = resolveCommandSquare(args)
+        if square then
+            local ok, err = pcall(vesselChangedOnPipe, nil, square)
+            if not ok then
+                Logger.error("Vessel notice failed: " .. tostring(err))
+            end
+        end
+        return
+    end
+
     if command == "toggleProfiler" or command == "dumpProfile" then
         local level = player and player.getAccessLevel and player:getAccessLevel() or "None"
         if level == "None" or level == "" then
@@ -1971,6 +1990,9 @@ local function onClientCommand(module, command, player, args)
     end
 
     if command == "forceNetworkTick" then
+        -- Force means force. The tick's own rebuild passes afterLayoutChange=false and so keeps the
+        -- vessel memo, which made this debug tool unable to see a vessel the player had just hung.
+        Invalidate.layoutChanged()
         System.tick()
         sendServerCommand(player, "WaterPipes", "debugNetworkTickApplied", {})
     end
