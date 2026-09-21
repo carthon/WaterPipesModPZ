@@ -906,6 +906,8 @@ function System.forceGlobalWaterShutoff()
 end
 
 local function onInitGlobalModData()
+    -- Nothing was ever marked for a world that has only just been read: the first pass covers all of it.
+    Invalidate.everythingChanged()
     State.ensure()
     System.rebuild()
     System.refreshPlumbedEndpoints()

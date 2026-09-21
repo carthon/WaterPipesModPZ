@@ -33,6 +33,7 @@ local World = WaterPipes.World
 -- verifier stays. This gives its findings somewhere to be reported from, not a reason to delete it.
 
 local function adapter() return WaterPipes.ContainerAdapter end
+local function pipes() return WaterPipes.State end
 local function scans() return WaterPipes.PipeObjectUtils end
 local function field() return WaterPipes.Hydraulics end
 local function walks() return WaterPipes.NetworkAccess end
@@ -50,6 +51,28 @@ end
 --
 -- The order below is load order, and it does not matter: the four caches are independent and none of
 -- them reads another. It is fixed only so that a future reader is not left wondering.
+
+-- Counters, resolved off the global table like everything else here: a whole-map mark arriving often
+-- on a quiet base means a watcher is chattering, and the marks would then be worth less than a sweep.
+local function countPhase(name, amount)
+    local Profiler = WaterPipes.Profiler
+    if Profiler and Profiler.count then
+        Profiler.count(name, amount or 1)
+    end
+end
+
+-- Only a tile the mod has a pipe on can change what a fixture is served. Without this filter the set
+-- would fill with furniture: the object events fire hundreds of times a second while the world streams.
+local function markIfPiped(square)
+    local State = pipes()
+    if not State or not State.ensure or not square or not square.getX then
+        return
+    end
+    local key = State.squareKey(square:getX(), square:getY(), square:getZ())
+    if State.ensure().pipes[key] then
+        Invalidate.waterMovedAt(key, square:getX(), square:getY(), square:getZ())
+    end
+end
 
 -- An object was added to the world, or is about to leave it.
 function Invalidate.objectChanged(worldObject)
@@ -69,6 +92,7 @@ function Invalidate.squareChanged(square)
     call(scans(), "invalidateSquareScan", square)
     call(field(), "invalidateAroundSquare", square)
     call(walks(), "invalidateAroundSquare", square)
+    markIfPiped(square)
 end
 
 -- A square the engine rebuilt while streaming: its objects were never announced one by one.
@@ -112,6 +136,7 @@ end
 
 -- Pipe was built or dismantled, or the world was read cold: everything goes.
 function Invalidate.layoutChanged()
+    Invalidate.everythingChanged()
     call(adapter(), "invalidateVesselCache")
     call(scans(), "invalidateScanCache")
     -- The walks drop the head field with them, which is why Hydraulics is not called separately here.
@@ -125,6 +150,7 @@ end
 -- re-reads the containers itself, and the memo remembers which objects are containers rather than
 -- what they hold.
 function Invalidate.registryRebuilt()
+    Invalidate.everythingChanged()
     call(scans(), "invalidateScanCache")
     call(walks(), "invalidateTraversalCache")
 end
@@ -134,6 +160,7 @@ end
 -- The walks are DELIBERATELY not dropped: re-walking every network costs a visible stutter once a
 -- minute, and the verifier's own finding is about tile contents rather than about shape.
 function Invalidate.worldVerified()
+    Invalidate.everythingChanged()
     call(adapter(), "invalidateVesselCache")
     call(scans(), "invalidateScanCache")
     call(field(), "invalidate")
@@ -141,11 +168,13 @@ end
 
 -- A valve or a hydrant moved: the walks are priced on it, and they take the field with them.
 function Invalidate.flowPathChanged()
+    Invalidate.everythingChanged()
     call(walks(), "invalidateTraversalCache")
 end
 
 -- A pump was switched, or lost power. Only the field is priced on that.
 function Invalidate.pumpStateChanged()
+    Invalidate.everythingChanged()
     call(field(), "invalidate")
 end
 
@@ -206,11 +235,15 @@ function Invalidate.waterMovedAt(squareKey, x, y, z)
     end
     dirtyTiles[key] = { x = x, y = y, z = z }
     dirtyCount = dirtyCount + 1
+    countPhase("dirty: tiles marked")
 end
 
 -- Too much changed to name tiles, or something changed that has no tile. Overrides the marks already
 -- held: they are a subset of what the full sweep will cover anyway.
 function Invalidate.everythingChanged()
+    if not everythingDirty then
+        countPhase("dirty: whole map marked")
+    end
     everythingDirty = true
     dirtyTiles = {}
     dirtyCount = 0
