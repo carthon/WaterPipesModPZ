@@ -1612,6 +1612,17 @@ local function onEveryOneMinute()
         Logger.error("Hydrant processing failed: " .. tostring(errHydrants))
     end
 
+    -- Nothing acts on the marks yet: taken and counted, because a set nobody drains escalates to the
+    -- whole map once and then stays there, and the cadence would be unreadable. Read the two counters
+    -- against each other before the refresh is moved onto the marks.
+    local marked, wholeMap = Invalidate.takeDirtyTiles()
+    local markedCount = 0
+    for _ in pairs(marked) do
+        markedCount = markedCount + 1
+    end
+    Profiler.count(wholeMap and "dirty: minutes marked whole" or "dirty: minutes marked by tile", 1)
+    Profiler.count("dirty: tiles taken", markedCount)
+
     local ok, err = pcall(Profiler.time, "1min/endpoints", System.refreshPlumbedEndpoints)
     if not ok then
         Logger.error("Endpoint plumbing refresh failed: " .. tostring(err))
