@@ -623,11 +623,17 @@ end
 
 -- Real milliseconds, on this machine, for this mod's periodic work. Turning it on resets the window,
 -- so the numbers describe what happened since you asked rather than since the save loaded.
+-- Both halves, because they are separate Lua states: on a dedicated server the periodic work is the
+-- server's and a client-only toggle would measure an empty window. The server writes to its own
+-- console.txt.
 function ContextMenu.toggleProfiler(playerObj)
     if not isDebugActive() then
         return
     end
-    WaterPipes.Profiler.toggle()
+    local on = WaterPipes.Profiler.toggle()
+    if playerObj and isClient and isClient() then
+        sendClientCommand(playerObj, "WaterPipes", "toggleProfiler", { on = on })
+    end
 end
 
 function ContextMenu.dumpProfile(playerObj)
@@ -635,6 +641,9 @@ function ContextMenu.dumpProfile(playerObj)
         return
     end
     WaterPipes.Profiler.dump()
+    if playerObj and isClient and isClient() then
+        sendClientCommand(playerObj, "WaterPipes", "dumpProfile", {})
+    end
 end
 
 -- One log line per removal this mod would care about, naming what left and which of the mod's tables

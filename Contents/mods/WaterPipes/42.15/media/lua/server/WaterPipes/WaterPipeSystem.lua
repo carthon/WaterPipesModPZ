@@ -1941,6 +1941,28 @@ local function onClientCommand(module, command, player, args)
         return
     end
 
+    -- The profiler measures the SERVER's periodic work, which is the only place it happens on a
+    -- dedicated server. Admin only: it is a debug tool that costs time in every pass it measures.
+    if command == "toggleProfiler" or command == "dumpProfile" then
+        local level = player and player.getAccessLevel and player:getAccessLevel() or "None"
+        if level == "None" or level == "" then
+            Logger.warn("Profiler command refused: " .. tostring(command) .. " needs an admin.")
+            return
+        end
+        if command == "dumpProfile" then
+            Profiler.dump()
+            return
+        end
+        local on = args and args.on
+        if on == nil then
+            Profiler.toggle()
+        else
+            Profiler.setEnabled(on)
+        end
+        Logger.log("Profiler on the server is now " .. (Profiler.isEnabled() and "ON" or "OFF"))
+        return
+    end
+
     if command == "forceGlobalWaterShutoff" then
         System.forceGlobalWaterShutoff()
         System.tick()
