@@ -188,13 +188,26 @@ local function isSyncing(endpoint)
     return modData and modData[Constants.ENDPOINT_FLUID_SYNCING_KEY] == true or false
 end
 
-local function setLastSync(endpoint, amount)
+-- One transmit, and only on a change. This runs on every plumbed fixture every minute, and announcing
+-- numbers nobody moved is steady multiplayer traffic for nothing.
+local function setLastSync(endpoint, amount, mirror)
     local modData = getModData(endpoint)
-    if modData then
-        modData[Constants.ENDPOINT_FLUID_LAST_SYNC_KEY] = amount
+    if not modData then
+        return
     end
 
-    if endpoint.transmitModData then
+    local previous = modData[MIRROR_KEY]
+    local moved = modData[Constants.ENDPOINT_FLUID_LAST_SYNC_KEY] ~= amount
+    if mirror and (type(previous) ~= "table"
+        or previous.amount ~= mirror.amount
+        or previous.capacity ~= mirror.capacity
+        or previous.fluid ~= mirror.fluid) then
+        modData[MIRROR_KEY] = mirror
+        moved = true
+    end
+    modData[Constants.ENDPOINT_FLUID_LAST_SYNC_KEY] = amount
+
+    if moved and endpoint.transmitModData then
         pcall(endpoint.transmitModData, endpoint)
     end
 end
@@ -283,17 +296,27 @@ local function writeSnapshot(endpoint, amount, fluidTypeName, networkCapacity)
         warnNoTank(endpoint)
         return false
     end
-    writeFluid(endpoint, amount, fluidTypeName, networkCapacity)
-    setLastSync(endpoint, readAmount(endpoint))
-
+    -- Already reading what it should? Touch nothing. The write empties the tank and refills it, and
+    -- every step of that syncs and transmits -- once a minute per plumbed fixture, for numbers nobody
+    -- moved. Most refreshes on a settled base have nothing to do.
     local modData = getModData(endpoint)
-    if modData then
-        modData[MIRROR_KEY] = { amount = readAmount(endpoint), capacity = ownCapacity(endpoint),
-                                fluid = fluidTypeName }
+    local previous = modData and modData[MIRROR_KEY]
+    local wantedCapacity = ownCapacity(endpoint)
+    if networkCapacity and hasOurTank(endpoint) then
+        wantedCapacity = math.max(networkCapacity, 1)
     end
-    if endpoint.transmitModData then
-        pcall(endpoint.transmitModData, endpoint)
+    local wanted = math.max(math.min(amount or 0, wantedCapacity), 0)
+    local settled = type(previous) == "table"
+        and previous.fluid == fluidTypeName
+        and math.abs((tonumber(previous.capacity) or -1) - wantedCapacity) <= CONSUME_EPSILON
+        and math.abs(readAmount(endpoint) - wanted) <= CONSUME_EPSILON
+
+    if not settled then
+        writeFluid(endpoint, amount, fluidTypeName, networkCapacity)
     end
+    local landed = readAmount(endpoint)
+    setLastSync(endpoint, landed,
+        { amount = landed, capacity = ownCapacity(endpoint), fluid = fluidTypeName })
     return true
 end
 

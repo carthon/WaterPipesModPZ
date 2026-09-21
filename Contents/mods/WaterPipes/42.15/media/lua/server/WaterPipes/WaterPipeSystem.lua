@@ -1366,6 +1366,11 @@ local function vesselChangedOnPipe(object)
     if not Adapter.hasSquareContainers(square) and not Adapter.getWorldFluidKind(object) then
         return
     end
+    -- Whether this event reaches the server at all is the whole question: a vessel the player places in
+    -- multiplayer is added client-side and replicated, and the minute's pass would cover for it either
+    -- way, so a handler that never fires looks exactly like one that had nothing to do.
+    Logger.log(("Vessel on a piped tile at %d:%d:%d -- refreshing that network now")
+        :format(square:getX(), square:getY(), square:getZ()))
     refreshEndpointsOnNetworkAt(square)
 end
 
