@@ -149,6 +149,91 @@ function Invalidate.pumpStateChanged()
     call(field(), "invalidate")
 end
 
+-- ===== What moved since the last pass =====
+-- Which tiles had water, shape or contents change. What reads them refreshes the fixtures of those
+-- networks instead of every plumbed fixture on the map; the ten-minute sweep stays underneath as the
+-- net that catches whatever raised no event at all.
+--
+-- Square keys, never zone ids: a zone id lives as long as one solve and does not survive an
+-- invalidation, so it is a memo within a pass and useless as a stored mark. The set is a module local
+-- and never State, which is persisted to ModData.
+
+local dirtyTiles = {}
+local dirtyCount = 0
+local everythingDirty = false
+
+-- Past this many tiles, walking them one at a time costs more than the sweep they stand in for.
+local DIRTY_TILE_LIMIT = 64
+
+local function coordinatesFromKey(key)
+    local x, y, z = tostring(key):match("^(-?%d+):(-?%d+):(-?%d+)$")
+    if not x then
+        return nil
+    end
+    return tonumber(x), tonumber(y), tonumber(z)
+end
+
+-- Water moved on a tile. `squareKey` is the prebuilt one where the caller has it, so the hottest path
+-- in the mod pays no concatenation; the coordinates are read back off the key when it does not.
+function Invalidate.waterMovedAt(squareKey, x, y, z)
+    if everythingDirty then
+        return
+    end
+
+    local key = squareKey
+    if key == nil and x and y and z then
+        key = tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)
+    end
+    if key == nil then
+        -- Something moved and there is no saying where: the whole map is the honest answer.
+        Invalidate.everythingChanged()
+        return
+    end
+    if dirtyTiles[key] then
+        return
+    end
+    if not (x and y and z) then
+        x, y, z = coordinatesFromKey(key)
+        if not x then
+            Invalidate.everythingChanged()
+            return
+        end
+    end
+
+    if dirtyCount >= DIRTY_TILE_LIMIT then
+        Invalidate.everythingChanged()
+        return
+    end
+    dirtyTiles[key] = { x = x, y = y, z = z }
+    dirtyCount = dirtyCount + 1
+end
+
+-- Too much changed to name tiles, or something changed that has no tile. Overrides the marks already
+-- held: they are a subset of what the full sweep will cover anyway.
+function Invalidate.everythingChanged()
+    everythingDirty = true
+    dirtyTiles = {}
+    dirtyCount = 0
+end
+
+function Invalidate.isEverythingDirty()
+    return everythingDirty
+end
+
+function Invalidate.dirtyTileCount()
+    return dirtyCount
+end
+
+-- Handed over and cleared in one step. The pass that consumes these moves water itself, so marks its
+-- own writes raise belong to the next pass rather than to the one in progress.
+function Invalidate.takeDirtyTiles()
+    local taken, global = dirtyTiles, everythingDirty
+    dirtyTiles = {}
+    dirtyCount = 0
+    everythingDirty = false
+    return taken, global
+end
+
 -- ===== The supply hold =====
 -- One irrigation pass is one instant of simulated time, so the field it drinks from is priced once
 -- rather than once per emitter. Delegated rather than reimplemented; the counting lives in Hydraulics.
