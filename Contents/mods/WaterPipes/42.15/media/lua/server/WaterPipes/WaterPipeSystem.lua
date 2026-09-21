@@ -771,6 +771,7 @@ function System.refreshPlumbedEndpoints()
     end
 
     local stale = nil
+    local visited = 0
 
     for key, position in pairs(State.getEndpoints()) do
         local square = getSquare(position.x, position.y, position.z)
@@ -780,6 +781,7 @@ function System.refreshPlumbedEndpoints()
             for _, endpointObject in ipairs(EndpointObjects.collectOnSquare(square)) do
                 if EndpointPlumbing.isPlumbed(endpointObject) then
                     found = found + 1
+                    visited = visited + 1
                     EndpointPlumbing.refreshEndpointSource(endpointObject)
                 end
             end
@@ -806,6 +808,9 @@ function System.refreshPlumbedEndpoints()
     for _, key in ipairs(stale or {}) do
         State.getEndpoints()[key] = nil
     end
+
+    -- Visited here against written in EndpointFluidSource: the gap is what this pass costs for nothing.
+    Profiler.count("endpoints: fixtures visited", visited)
 end
 
 -- `afterLayoutChange` defaults to true: a build or a removal really has changed the shape.

@@ -16,6 +16,15 @@ local CONSUME_EPSILON = 0.001
 -- Using the vanilla "own container" path (usesExternalWaterSource = false) means the engine serves
 -- Drink/Wash/Fill straight from it, and consumption is reconciled back through NetworkAccess.useFluid.
 
+-- Counters for the profiler, resolved off the global table so this module keeps no dependency on a
+-- debug tool.
+local function countPhase(name, amount)
+    local Profiler = WaterPipes.Profiler
+    if Profiler and Profiler.count then
+        Profiler.count(name, amount or 1)
+    end
+end
+
 local function isAuthoritative()
     if isServer and isServer() then
         return true
@@ -311,6 +320,8 @@ local function writeSnapshot(endpoint, amount, fluidTypeName, networkCapacity)
         and math.abs((tonumber(previous.capacity) or -1) - wantedCapacity) <= CONSUME_EPSILON
         and math.abs(readAmount(endpoint) - wanted) <= CONSUME_EPSILON
 
+    -- Written against already-right: a settled base should be almost all of the second.
+    countPhase(settled and "endpoints: mirror already right" or "endpoints: mirror written")
     if not settled then
         writeFluid(endpoint, amount, fluidTypeName, networkCapacity)
     end
