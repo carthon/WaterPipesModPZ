@@ -786,6 +786,13 @@ local function writeIsNoOp(descriptor, fluidAmount, fluidTypeName)
     return descriptor.fluidType == fluidTypeName
 end
 
+-- Every litre this mod moves passes through the function below, which is why the tile is marked here
+-- and not in the four passes that call it: a pass added later cannot forget to mark. The prebuilt
+-- squareKey is used where the descriptor has one, so the hottest path pays no concatenation.
+local function markWaterMoved(descriptor)
+    pcall(Invalidate.waterMovedAt, descriptor.squareKey, descriptor.x, descriptor.y, descriptor.z)
+end
+
 -- Returns (ok, touchedTheWorld).
 -- The second value is what lets a caller keep its books straight. `ok` means "the vessel is in the state
 -- you asked for", which is ALSO true when the request was close enough that writing was not worth it --
@@ -810,11 +817,17 @@ function Adapter.writeDescriptorWaterAmount(descriptor, fluidAmount, fluidTypeNa
         if ok and (before > 0) ~= ((fluidAmount or 0) > 0) and descriptor.x then
             pcall(Invalidate.supplyChangedAt, World.squareAt(descriptor.x, descriptor.y, descriptor.z))
         end
+        if ok then
+            markWaterMoved(descriptor)
+        end
         return ok, ok
     end
 
     if descriptor.fluidMode == "worldObject" then
         local ok = Adapter.writeWorldFluidAmount(descriptor.object, fluidAmount, fluidTypeName)
+        if ok then
+            markWaterMoved(descriptor)
+        end
         return ok, ok
     end
 
@@ -822,6 +835,9 @@ function Adapter.writeDescriptorWaterAmount(descriptor, fluidAmount, fluidTypeNa
         local ok = Adapter.writeWaterAmount(descriptor.container, fluidAmount)
         if ok and descriptor.container.setTaintedWater then
             pcall(descriptor.container.setTaintedWater, descriptor.container, fluidTypeName == "TaintedWater")
+        end
+        if ok then
+            markWaterMoved(descriptor)
         end
         return ok, ok
     end
