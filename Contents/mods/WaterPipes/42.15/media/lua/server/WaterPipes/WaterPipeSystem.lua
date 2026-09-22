@@ -790,6 +790,53 @@ function System.reclassifyExternalFixtures()
     return changed
 end
 
+-- One fixture tile, refreshed. Returns (found, fixtures): `found` counts everything plumbed on the
+-- tile and decides whether the index entry still earns its place, `fixtures` counts only the fixtures
+-- and is what the profile reads. A square that is not loaded returns nil, which says neither.
+local function refreshEndpointsAt(position)
+    local square = getSquare(position.x, position.y, position.z)
+    if not square then
+        return nil
+    end
+
+    local found, fixtures = 0, 0
+    for _, endpointObject in ipairs(EndpointObjects.collectOnSquare(square)) do
+        if EndpointPlumbing.isPlumbed(endpointObject) then
+            found = found + 1
+            fixtures = fixtures + 1
+            EndpointPlumbing.refreshEndpointSource(endpointObject)
+        end
+    end
+
+    if square.getObjects then
+        local objects = square:getObjects()
+        for i = 0, objects:size() - 1 do
+            local worldObject = objects:get(i)
+            if GeneratorFuel.isGenerator(worldObject) and GeneratorFuel.isPlumbed(worldObject) then
+                found = found + 1
+                GeneratorFuel.refresh(worldObject)
+            end
+        end
+    end
+
+    return found, fixtures
+end
+
+-- A fixture sits beside the line as often as on it, so its own tile and its four cardinal neighbours
+-- all count -- the same rule the plumbing itself uses to decide a fixture is connected.
+local function withinReach(reach, position)
+    if reach[State.squareKey(position.x, position.y, position.z)] then
+        return true
+    end
+    for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
+        if reach[State.squareKey(position.x + offset.x, position.y + offset.y,
+            position.z + offset.z)] then
+            return true
+        end
+    end
+    return false
+end
+
 function System.refreshPlumbedEndpoints()
     -- A save made before the index existed has plumbed fixtures and no record of them. Find them once, on
     -- the first pass after loading, and never again.
@@ -807,30 +854,9 @@ function System.refreshPlumbedEndpoints()
     local visited = 0
 
     for key, position in pairs(State.getEndpoints()) do
-        local square = getSquare(position.x, position.y, position.z)
-        if square then
-            local found = 0
-
-            for _, endpointObject in ipairs(EndpointObjects.collectOnSquare(square)) do
-                if EndpointPlumbing.isPlumbed(endpointObject) then
-                    found = found + 1
-                    visited = visited + 1
-                    EndpointPlumbing.refreshEndpointSource(endpointObject)
-                end
-            end
-
-            if square.getObjects then
-                local objects = square:getObjects()
-                for i = 0, objects:size() - 1 do
-                    local worldObject = objects:get(i)
-                    if GeneratorFuel.isGenerator(worldObject)
-                        and GeneratorFuel.isPlumbed(worldObject) then
-                        found = found + 1
-                        GeneratorFuel.refresh(worldObject)
-                    end
-                end
-            end
-
+        local found, fixtures = refreshEndpointsAt(position)
+        if found then
+            visited = visited + fixtures
             if found == 0 then
                 stale = stale or {}
                 stale[#stale + 1] = key
@@ -844,6 +870,62 @@ function System.refreshPlumbedEndpoints()
 
     -- Visited here against written in EndpointFluidSource: the gap is what this pass costs for nothing.
     Profiler.count("endpoints: fixtures visited", visited)
+end
+
+-- The same refresh, narrowed to the networks something actually moved on. The marks are raised in
+-- ContainerAdapter.writeDescriptorWaterAmount, the one place every litre of this mod passes through.
+--
+-- Expanded by HYDRAULIC ZONE and deliberately NOT by NetworkAccess.getNetworkSquares: that one keeps
+-- routers solid, while a draw crosses a bare one (Hydraulics.drawReachableFrom follows viaRouter
+-- transitively). Expanding with it would leave every fixture downstream of a router reading a stale
+-- number after the tile upstream filled. A zone covers bare routers, so it is a SUPERSET of the real
+-- reach: it refreshes too much, which is the failure worth having.
+function System.refreshDirtyEndpoints()
+    local marks, wholeMap = Invalidate.takeDirtyTiles()
+    if wholeMap then
+        Profiler.count("endpoints: dirty passes gone global", 1)
+        System.refreshPlumbedEndpoints()
+        return
+    end
+
+    local reach, seenZone, marked = {}, {}, 0
+
+    for key, position in pairs(marks) do
+        marked = marked + 1
+        -- The marked tile is always in reach, even when its network has gone: refreshEndpointSource is
+        -- what disconnects a fixture whose pipe was removed, and it has to be reached to do it.
+        reach[key] = true
+
+        local square = getSquare(position.x, position.y, position.z)
+        local solution = square and Hydraulics.solveAt(square) or nil
+        local zoneId = solution and Hydraulics.zoneIdOf(solution) or nil
+        -- Memoised for THIS pass and no longer. A zone id lives as long as one solve and does not
+        -- survive an invalidation, so it is a memo here and worthless as anything kept.
+        if solution and not (zoneId and seenZone[zoneId]) then
+            if zoneId then
+                seenZone[zoneId] = true
+            end
+            for _, pipeSquare in ipairs(Hydraulics.pipeSquares(solution)) do
+                reach[State.squareKey(pipeSquare:getX(), pipeSquare:getY(), pipeSquare:getZ())] = true
+            end
+        end
+    end
+
+    Profiler.count("endpoints: dirty tiles taken", marked)
+    if marked == 0 then
+        return
+    end
+
+    local visited = 0
+    for _, position in pairs(State.getEndpoints()) do
+        if withinReach(reach, position) then
+            local _, fixtures = refreshEndpointsAt(position)
+            visited = visited + (fixtures or 0)
+        end
+    end
+    -- No index pruning here. This pass looks at a subset, and a tile it did not visit is not evidence
+    -- of anything; the sweep is what decides an entry has stopped earning its place.
+    Profiler.count("endpoints: dirty fixtures visited", visited)
 end
 
 -- `afterLayoutChange` defaults to true: a build or a removal really has changed the shape.
@@ -1655,16 +1737,14 @@ local function onEveryOneMinute()
         Logger.error("Hydrant processing failed: " .. tostring(errHydrants))
     end
 
-    -- Nothing acts on the marks yet: taken and counted, because a set nobody drains escalates to the
-    -- whole map once and then stays there, and the cadence would be unreadable. Read the two counters
-    -- against each other before the refresh is moved onto the marks.
-    local marked, wholeMap = Invalidate.takeDirtyTiles()
-    local markedCount = 0
-    for _ in pairs(marked) do
-        markedCount = markedCount + 1
+    -- First, so the sweep behind it finds the marked networks already settled -- which is the reading
+    -- needed before the sweep can go. The sweep is still here on purpose: it carries the consumption
+    -- reconciliation and the disconnection check for every fixture, marked or not, and delaying the
+    -- charge lets two fixtures draw the same litres. Splitting those off is its own step.
+    local okDirty, errDirty = pcall(Profiler.time, "1min/dirty-endpoints", System.refreshDirtyEndpoints)
+    if not okDirty then
+        Logger.error("Marked endpoint refresh failed: " .. tostring(errDirty))
     end
-    Profiler.count(wholeMap and "dirty: minutes marked whole" or "dirty: minutes marked by tile", 1)
-    Profiler.count("dirty: tiles taken", markedCount)
 
     local ok, err = pcall(Profiler.time, "1min/endpoints", System.refreshPlumbedEndpoints)
     if not ok then
