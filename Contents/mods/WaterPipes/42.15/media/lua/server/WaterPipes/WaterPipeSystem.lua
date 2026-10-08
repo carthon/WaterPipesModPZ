@@ -1528,8 +1528,10 @@ local function scheduleVesselChange(square)
 end
 
 -- Asked while the object still exists: on a removal there is nothing left to ask a tick later.
+-- A pipe is never a vessel, and is turned away before the tile's pipe scan is read: reading it while
+-- a leaving pipe is still there caches it, and its removal is then taken for a cancelled one.
 local function noteVesselEvent(object)
-    if not object or not object.getSquare then
+    if not object or not object.getSquare or PipeObjectUtils.isPipeObject(object) then
         return
     end
     local ok, square = pcall(object.getSquare, object)
