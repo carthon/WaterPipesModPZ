@@ -1481,6 +1481,8 @@ local function vesselChangedOnPipe(square)
         return
     end
     Invalidate.squareChanged(square)
+    -- The levelling reads the registry of containers: rebuilt here, the vessel joins the next pass.
+    System.rebuild(false)
     local refreshed, reach = refreshEndpointsOnNetworkAt(square)
     Logger.log(("Vessel on a piped tile at %d:%d:%d -- refreshed %d fixture(s) over %d network tile(s)")
         :format(square:getX(), square:getY(), square:getZ(), refreshed or 0, reach or 0))
