@@ -1474,40 +1474,74 @@ local function refreshEndpointsOnNetworkAt(square)
     return refreshPlumbedEndpointsNearCoordinates(coordinates), #squares
 end
 
--- `square` may be given straight, because the client announces a vessel by coordinates: the server's
--- own OnObjectAdded never fires for one a player placed. Measured on wptest -- the client logged the
--- event, the server logged nothing, and the taps waited 158 s for the drift verifier to notice.
-local function vesselChangedOnPipe(object, square)
-    if not square then
-        if not object or not object.getSquare then
-            return
-        end
-        local ok, found = pcall(object.getSquare, object)
-        if not ok or not found then
-            return
-        end
-        square = found
-    end
-    -- A container connects only through a pipe on its OWN tile, which is also what keeps this off the
-    -- path of every object dropped anywhere in the world.
+-- Runs a tick after the event, once the object has really arrived or left: re-reading the tile inside
+-- OnObjectAboutToBeRemoved put the leaving vessel straight back into the classification.
+local function vesselChangedOnPipe(square)
     if not PipeObjectUtils.getPipeOnSquare(square) then
         return
     end
-    -- Dropped BEFORE the tile is read back. What this event announces is that the classification of
-    -- this tile is wrong, and hasSquareContainers would otherwise answer from the very memo being
-    -- corrected -- which is how a newly hung vessel stayed invisible to a forced tick.
     Invalidate.squareChanged(square)
-    if not Adapter.hasSquareContainers(square)
-        and not (object and Adapter.getWorldFluidKind(object)) then
-        return
-    end
     local refreshed, reach = refreshEndpointsOnNetworkAt(square)
     Logger.log(("Vessel on a piped tile at %d:%d:%d -- refreshed %d fixture(s) over %d network tile(s)")
         :format(square:getX(), square:getY(), square:getZ(), refreshed or 0, reach or 0))
 end
 
+local pendingVesselSquares = {}
+local vesselChangeScheduled = false
+
+local function processPendingVesselChanges()
+    vesselChangeScheduled = false
+    if Events and Events.OnTick then
+        Events.OnTick.Remove(processPendingVesselChanges)
+    end
+    local squares = pendingVesselSquares
+    pendingVesselSquares = {}
+    for _, position in pairs(squares) do
+        local square = getSquare(position.x, position.y, position.z)
+        if square then
+            local ok, err = pcall(vesselChangedOnPipe, square)
+            if not ok then
+                Logger.error("Vessel change failed: " .. tostring(err))
+            end
+        end
+    end
+end
+
+-- By tile, because the client's notice names a tile and the object may be gone when it is handled.
+local function scheduleVesselChange(square)
+    if not square then
+        return
+    end
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    pendingVesselSquares[State.squareKey(x, y, z)] = { x = x, y = y, z = z }
+    if vesselChangeScheduled then
+        return
+    end
+    if Events and Events.OnTick then
+        vesselChangeScheduled = true
+        Events.OnTick.Add(processPendingVesselChanges)
+    else
+        processPendingVesselChanges()
+    end
+end
+
+-- Asked while the object still exists: on a removal there is nothing left to ask a tick later.
+local function noteVesselEvent(object)
+    if not object or not object.getSquare then
+        return
+    end
+    local ok, square = pcall(object.getSquare, object)
+    if not ok or not square then
+        return
+    end
+    if not PipeObjectUtils.getPipeOnSquare(square) or not Adapter.getWorldFluidKind(object) then
+        return
+    end
+    scheduleVesselChange(square)
+end
+
 local function onObjectAdded(object)
-    local ok, err = pcall(vesselChangedOnPipe, object)
+    local ok, err = pcall(noteVesselEvent, object)
     if not ok then
         Logger.error("Vessel added handler failed: " .. tostring(err))
     end
@@ -1517,7 +1551,7 @@ local function onObjectAboutToBeRemoved(object)
     schedulePipeRemoval(object, true)
     schedulePurifierRemoval(object, true)
     scheduleFittingRemoval(object)
-    local ok, err = pcall(vesselChangedOnPipe, object)
+    local ok, err = pcall(noteVesselEvent, object)
     if not ok then
         Logger.error("Vessel removed handler failed: " .. tostring(err))
     end
@@ -2067,12 +2101,9 @@ local function onClientCommand(module, command, player, args)
     -- The profiler measures the SERVER's periodic work, which is the only place it happens on a
     -- dedicated server. Admin only: it is a debug tool that costs time in every pass it measures.
     if command == "vesselChanged" then
-        local square = resolveCommandSquare(args)
-        if square then
-            local ok, err = pcall(vesselChangedOnPipe, nil, square)
-            if not ok then
-                Logger.error("Vessel notice failed: " .. tostring(err))
-            end
+        local ok, err = pcall(scheduleVesselChange, resolveCommandSquare(args))
+        if not ok then
+            Logger.error("Vessel notice failed: " .. tostring(err))
         end
         return
     end
