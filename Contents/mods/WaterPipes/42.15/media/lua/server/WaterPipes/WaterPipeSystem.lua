@@ -1853,6 +1853,14 @@ local function onWaterAmountChange(object, prevAmount)
         return
     end
 
+    -- Its network's taps are due a refresh: this change did not go through the adapter's marks.
+    if object.getSquare then
+        local okSquare, square = pcall(object.getSquare, object)
+        if okSquare and square then
+            pcall(Invalidate.vesselWaterChanged, square)
+        end
+    end
+
     -- Somebody else moved this vessel's water. The head field cares only WHETHER a vessel holds water, so
     -- it has to hear about a crossing whoever caused it -- and an external writer is the only one left
     -- that will not report its own.

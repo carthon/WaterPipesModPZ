@@ -238,6 +238,12 @@ function Invalidate.waterMovedAt(squareKey, x, y, z)
     countPhase("dirty: tiles marked")
 end
 
+-- A vessel's water moved without the mod moving it: a player drinking from it or pouring into it.
+-- Only the marks care -- the caches remember which objects are containers, never what they hold.
+function Invalidate.vesselWaterChanged(square)
+    markIfPiped(square)
+end
+
 -- Too much changed to name tiles, or something changed that has no tile. Overrides the marks already
 -- held: they are a subset of what the full sweep will cover anyway.
 function Invalidate.everythingChanged()
