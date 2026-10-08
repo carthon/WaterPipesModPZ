@@ -336,6 +336,28 @@ local lastShapeReport = nil
 -- everything else in the log.
 local lastMixedReport = nil
 
+-- What each vessel held when this pass last looked. Transfer Fluids, rain and other mods fill a vessel
+-- with no event; this pass reads every vessel anyway, so a change it did not make is noticed here,
+-- whatever the size of the save.
+local censusSeen = {}
+
+local function noticeUnannounced(descriptor, square)
+    -- Never seen before counts as empty: a vessel hung and filled before this pass first looked has
+    -- to be noticed too, and its zone may well have been priced without it.
+    local seen = censusSeen[descriptor.key] or 0
+    local now = math.max(descriptor.waterAmount or 0, 0)
+    if math.abs(now - seen) <= Constants.FLUID_WRITE_EPSILON then
+        return
+    end
+    -- Crossing empty is what the zone's pressure is priced on; any change is due to the taps.
+    if (seen > 0) ~= (now > 0) then
+        pcall(Invalidate.supplyChangedAt, square)
+        Logger.log(string.format("Vessel at %d:%d:%d went from %.0f to %.0f L with no event -- its network "
+            .. "was told", square:getX(), square:getY(), square:getZ(), seen, now))
+    end
+    pcall(Invalidate.vesselWaterChanged, square)
+end
+
 function System.redistributeWater()
     local components = State.getComponents()
     local mixed = {}
@@ -388,6 +410,10 @@ function System.redistributeWater()
                         totalWater = totalWater + math.max(descriptor.waterAmount or 0, 0)
                     end
 
+                    if descriptor then
+                        noticeUnannounced(descriptor, square)
+                    end
+
                     if descriptor and descriptor.fluidType and (descriptor.waterAmount or 0) > 0 then
                         totalByFluidType[descriptor.fluidType] = (totalByFluidType[descriptor.fluidType] or 0) + descriptor.waterAmount
                     end
@@ -426,6 +452,11 @@ function System.redistributeWater()
                 "NOT LEVELLING a group of %d vessel(s) near %s: it holds %d fluids (%s). A group has to be "
                 .. "of one mind about what it contains before water will move inside it.",
                 #containers, anchor or "?", fluidTypeCount, table.concat(names, ", "))
+        end
+
+        -- After the settle, so this pass's own levelling is not taken for somebody else's.
+        for _, descriptor in ipairs(containers) do
+            censusSeen[descriptor.key] = math.max(descriptor.waterAmount or 0, 0)
         end
     end
 
