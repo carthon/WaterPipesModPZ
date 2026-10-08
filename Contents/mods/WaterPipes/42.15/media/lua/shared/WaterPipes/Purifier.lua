@@ -128,7 +128,20 @@ function Purifier.wearFilter(worldObject, volume)
         return   -- wear disabled via sandbox: the filter never degrades
     end
     local worn = Purifier.getFilterCondition(worldObject) - volume * perUnit
+    -- Snapped, so a filter worn down to its last float is spent rather than trickling forever.
+    if worn < 1e-6 then
+        worn = 0
+    end
     Purifier.setFilterCondition(worldObject, worn)
+end
+
+-- Litres of tainted water the filter can still clean before it is spent.
+function Purifier.filterLitresLeft(worldObject)
+    local perUnit = filterWearPerUnit()
+    if perUnit <= 0 then
+        return math.huge
+    end
+    return Purifier.getFilterCondition(worldObject) / perUnit
 end
 
 -- Restore the filter to full (the "Repair Filter" action, after consuming the repair kit).
@@ -413,6 +426,8 @@ function Purifier.step(purifier, inSquare, outSquare, dt)
                 -- filter; at 0 condition it stops and the water waits in IN until the player repairs it.
                 if Purifier.canFilter(purifier) then
                     local before = Purifier.getInAmount(purifier)
+                    -- No more than the filter has life left for.
+                    move = math.min(move, Purifier.filterLitresLeft(purifier))
                     Purifier.moveInToOut(purifier, move)   -- lands in the OUT buffer as clean Water
                     local converted = before - Purifier.getInAmount(purifier)
                     Purifier.wearFilter(purifier, converted)
