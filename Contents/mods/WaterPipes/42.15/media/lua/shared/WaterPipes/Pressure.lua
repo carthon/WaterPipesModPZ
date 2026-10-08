@@ -118,6 +118,12 @@ end
 
 -- ===== The lift gate =====
 
+-- Whether a head goes on a dial as a number. At or below zero the tile stands above the water with
+-- nothing lifting it, and the player is told there is no pressure rather than shown a negative figure.
+function Pressure.onDial(head)
+    return head ~= nil and head > 0
+end
+
 -- The FILL side: can fluid entering the network at originZ reach a container at targetZ? Only lift is
 -- priced, not distance -- filling is the network settling, not a consumer drawing.
 -- With no pump this reproduces the old "down" traversal exactly: climbing needs lift > 0 and is

@@ -1339,8 +1339,13 @@ local function buildGaugeTooltip(square)
         lines[#lines + 1] = getText("IGUI_WaterPipesPressureModelOff")
     else
         local tap = NetworkAccess.getPressureAtSquare(square, Constants.PRESSURE_KIND_TAP)
-        lines[#lines + 1] = tap and getText("IGUI_WaterPipesGaugeReading", formatHead(tap))
-            or getText("IGUI_WaterPipesGaugeNoSupply")
+        if tap == nil then
+            lines[#lines + 1] = getText("IGUI_WaterPipesGaugeNoSupply")
+        elseif not Pressure.onDial(tap) then
+            lines[#lines + 1] = getText("IGUI_WaterPipesGaugeNoPressure")
+        else
+            lines[#lines + 1] = getText("IGUI_WaterPipesGaugeReading", formatHead(tap))
+        end
     end
 
     tooltip.description = table.concat(lines, " <LINE> ")
@@ -1388,7 +1393,9 @@ local function buildEmitterTooltip(emitterObject)
             needed = WaterPipes.Hydraulics.headNeededToServe(solution, square, status.kind)
         end
 
-        if head then
+        if head and not Pressure.onDial(head) then
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterNoPressure")
+        elseif head then
             lines[#lines + 1] = getText("IGUI_WaterPipesEmitterPressure", formatHead(head))
         elseif status.hasWater then
             lines[#lines + 1] = getText("IGUI_WaterPipesEmitterNoSupply")
