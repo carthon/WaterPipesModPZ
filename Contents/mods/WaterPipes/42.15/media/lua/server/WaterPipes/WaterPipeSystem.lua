@@ -336,18 +336,28 @@ local lastShapeReport = nil
 -- everything else in the log.
 local lastMixedReport = nil
 
--- What each vessel held when this pass last looked. Transfer Fluids, rain and other mods fill a vessel
--- with no event; this pass reads every vessel anyway, so a change it did not make is noticed here,
--- whatever the size of the save.
+-- What each vessel held when this pass last looked, by OBJECT: a vessel set down where another stood is
+-- a new one. Transfer Fluids, rain and other mods fill a vessel with no event; this pass reads every
+-- vessel anyway, so a change it did not make is noticed here, whatever the size of the save.
 local censusSeen = {}
+
+local function censusKey(descriptor)
+    return descriptor.object and tostring(descriptor.object) or descriptor.key
+end
 
 local function noticeUnannounced(descriptor, square)
     -- Never seen before counts as empty: a vessel hung and filled before this pass first looked has
     -- to be noticed too, and its zone may well have been priced without it.
-    local firstLook = censusSeen[descriptor.key] == nil
-    local seen = censusSeen[descriptor.key] or 0
+    local key = censusKey(descriptor)
+    local firstLook = censusSeen[key] == nil
+    local seen = censusSeen[key] or 0
     local now = math.max(descriptor.waterAmount or 0, 0)
     if math.abs(now - seen) <= Constants.FLUID_WRITE_EPSILON then
+        return
+    end
+    -- Still where this mod last left it: its own write has already told the network.
+    local left = descriptor.object and Adapter.lastLeftAt(descriptor.object)
+    if left and math.abs(now - left) <= Constants.FLUID_WRITE_EPSILON then
         return
     end
     -- Crossing empty is what the zone's pressure is priced on; any change is due to the taps.
@@ -365,6 +375,8 @@ end
 function System.redistributeWater()
     local components = State.getComponents()
     local mixed = {}
+    -- Rebuilt every pass, so a vessel that is gone is forgotten with it.
+    local seenThisPass = {}
 
     local shape = {}
     for _, component in ipairs(components) do
@@ -460,9 +472,10 @@ function System.redistributeWater()
 
         -- After the settle, so this pass's own levelling is not taken for somebody else's.
         for _, descriptor in ipairs(containers) do
-            censusSeen[descriptor.key] = math.max(descriptor.waterAmount or 0, 0)
+            seenThisPass[censusKey(descriptor)] = math.max(descriptor.waterAmount or 0, 0)
         end
     end
+    censusSeen = seenThisPass
 
     table.sort(mixed)
     local mixedSignature = table.concat(mixed, " | ")

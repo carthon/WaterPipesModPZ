@@ -529,6 +529,15 @@ local function verifyWorldFluidWrite(worldObject, prevAmount, requestedAmount)
     return false
 end
 
+-- What this mod last left the vessel holding, or nil if it never wrote it. A vessel still at that
+-- amount has not been touched by anyone else since.
+function Adapter.lastLeftAt(worldObject)
+    if not worldObject then
+        return nil
+    end
+    return leftVesselAt[tostring(resolveFluidTarget(worldObject))]
+end
+
 local function writeWorldFluidUnmuted(worldObject, fluidAmount, fluidTypeName)
     if not worldObject then
         return false
