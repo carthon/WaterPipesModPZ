@@ -95,9 +95,8 @@ function Invalidate.squareChanged(square)
     markIfPiped(square)
 end
 
--- A square the engine rebuilt while streaming: its objects were never announced one by one.
--- Note what is NOT here: the head field. Hydraulics never listened to LoadGridsquare, on the grounds
--- that a streamed-in square cannot change a zone that was solved without it. Kept as it was.
+-- A square the engine rebuilt while streaming: its objects were never announced one by one, and every
+-- cache holding the OLD square object -- the head field included -- would go on reading the dead one.
 function Invalidate.squareStreamedIn(square)
     if not square then
         return
@@ -105,6 +104,7 @@ function Invalidate.squareStreamedIn(square)
     call(adapter(), "invalidateSquareVessels", square)
     call(scans(), "invalidateSquareScan", square)
     call(walks(), "invalidateAroundSquare", square)
+    call(field(), "invalidateAroundSquare", square)
 end
 
 -- ===== What changed, in the mod's own words =====
