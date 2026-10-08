@@ -1596,6 +1596,14 @@ local function verifyCachesAgainstTheWorld()
                         .. "docs/removal-events.md.",
                     pipeData.x, pipeData.y, pipeData.z))
             end
+            -- Not drift and not a reason for the wholesale drop: a re-pricing repairs it, without a walk.
+            if Hydraulics.verifySupplyAt and not Hydraulics.verifySupplyAt(square) then
+                Logger.warn(string.format(
+                    "SUPPLY DRIFT: the zone at %d:%d:%d was priced with no supply and its storage now "
+                        .. "holds water -- filled without an event (rain, Transfer Fluids, another mod). "
+                        .. "Re-priced.",
+                    pipeData.x, pipeData.y, pipeData.z))
+            end
         end
     end
 

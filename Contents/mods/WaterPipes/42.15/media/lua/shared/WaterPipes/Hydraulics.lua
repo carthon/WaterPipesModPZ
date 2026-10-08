@@ -1351,6 +1351,42 @@ function Hydraulics.invalidateAroundSquare(square)
     end
 end
 
+-- A zone priced with no supply refuses every consumer, and a vessel filled with no event (rain, Transfer
+-- Fluids, another mod) never re-prices it: the refusal stops the writes that would notice. This looks
+-- without being told. Returns false when it found the zone mispriced and marked it for re-pricing.
+function Hydraulics.verifySupplyAt(square)
+    if not square then
+        return true
+    end
+
+    local zoneId = zoneOfNode[squareKey(square)]
+    local solution = zoneId and solutionCache[zoneId] or nil
+    if not solution or not solution.topology then
+        return true
+    end
+
+    -- Counted, not asked with next(): PZ's Lua does not expose it.
+    for _ in pairs(solution.supply or {}) do
+        return true
+    end
+
+    local vessels = Hydraulics.vesselSquares(solution)
+    if #vessels == 0 then
+        return true
+    end
+
+    for _, vessel in ipairs(vessels) do
+        for _, descriptor in pairs(Adapter.collectSquareContainers(vessel.square) or {}) do
+            if (descriptor.waterAmount or 0) > 0 then
+                staleSupplyInZone(zoneId)
+                return false
+            end
+        end
+    end
+
+    return true
+end
+
 -- The same tile scoping, but for a change that cannot have moved a pipe: a vessel crossing between
 -- empty and not. Callers must be sure of that premise -- it holds for OnWaterAmountChange and for
 -- nothing else here, since an object appearing or leaving CAN be a pipe and goes to the drop above.
