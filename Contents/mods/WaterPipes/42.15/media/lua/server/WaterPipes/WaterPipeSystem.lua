@@ -344,6 +344,7 @@ local censusSeen = {}
 local function noticeUnannounced(descriptor, square)
     -- Never seen before counts as empty: a vessel hung and filled before this pass first looked has
     -- to be noticed too, and its zone may well have been priced without it.
+    local firstLook = censusSeen[descriptor.key] == nil
     local seen = censusSeen[descriptor.key] or 0
     local now = math.max(descriptor.waterAmount or 0, 0)
     if math.abs(now - seen) <= Constants.FLUID_WRITE_EPSILON then
@@ -352,8 +353,11 @@ local function noticeUnannounced(descriptor, square)
     -- Crossing empty is what the zone's pressure is priced on; any change is due to the taps.
     if (seen > 0) ~= (now > 0) then
         pcall(Invalidate.supplyChangedAt, square)
-        Logger.log(string.format("Vessel at %d:%d:%d went from %.0f to %.0f L with no event -- its network "
-            .. "was told", square:getX(), square:getY(), square:getZ(), seen, now))
+        -- Not said on the first look: after a restart every vessel holding water is one.
+        if not firstLook then
+            Logger.log(string.format("Vessel at %d:%d:%d went from %.0f to %.0f L with no event -- its "
+                .. "network was told", square:getX(), square:getY(), square:getZ(), seen, now))
+        end
     end
     pcall(Invalidate.vesselWaterChanged, square)
 end
