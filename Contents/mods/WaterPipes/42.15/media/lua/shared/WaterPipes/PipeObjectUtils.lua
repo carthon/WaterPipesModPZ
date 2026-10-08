@@ -89,7 +89,7 @@ function PipeObjectUtils.getBuildMaterial(worldObject)
         return stamped, "modData=" .. tostring(stamped)
     end
 
-    return nil, "no material stamp (built before the stamp existed), assuming metal"
+    return nil, "no material stamp, which is metal: only clay is stamped"
 end
 
 function PipeObjectUtils.isClayBuilt(worldObject)
