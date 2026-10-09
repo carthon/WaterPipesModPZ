@@ -1055,7 +1055,9 @@ function NetworkAccess.drainPurifierOutletsAt(originSquare)
         share = math.max(math.min(share, amount), 0)
         if share > 0 then
             local left = amount - share
-            Adapter.writeDescriptorWaterAmount(descriptor, left, left > 0 and "Water" or nil)
+            -- Forced: the receiving side already took the share, so a write within the no-op epsilon
+            -- would leave it here as well.
+            Adapter.writeDescriptorWaterAmount(descriptor, left, left > 0 and "Water" or nil, true)
             descriptor.waterAmount = left
             taken = taken + share
         end
