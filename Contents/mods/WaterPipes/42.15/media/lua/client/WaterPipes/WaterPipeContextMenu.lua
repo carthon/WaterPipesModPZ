@@ -1085,6 +1085,8 @@ local function findGaugeInWorldObjects(worldobjects)
     return nil
 end
 
+-- Looked up on the clicked squares too: the valve is drawn over its pipe, so the click can pick the
+-- pipe instead of the valve.
 local function findValveInWorldObjects(worldobjects)
     if not worldobjects then
         return nil
@@ -1092,6 +1094,13 @@ local function findValveInWorldObjects(worldobjects)
     for _, worldObject in ipairs(worldobjects) do
         if Valve.isValve(worldObject) then
             return worldObject
+        end
+    end
+    for _, worldObject in ipairs(worldobjects) do
+        local square = worldObject and worldObject.getSquare and worldObject:getSquare() or nil
+        local valve = square and Valve.findOnSquare(square) or nil
+        if valve then
+            return valve
         end
     end
     return nil
@@ -1430,11 +1439,17 @@ end
 
 -- The valve's state is stated here, not left to its sprite: a sprite that fails to resolve makes a shut
 -- valve look open.
-local function buildValveTooltip(valve)
+local function buildValveTooltip(valve, hasWrench)
     local tooltip = ISWorldObjectContextMenu.addToolTip()
     local open = Valve.isOpen(valve)
     tooltip:setName(getText(open and "IGUI_WaterPipesValveOpenName" or "IGUI_WaterPipesValveClosedName"))
-    tooltip.description = getText(open and "IGUI_WaterPipesValveOpenDesc" or "IGUI_WaterPipesValveClosedDesc")
+    local lines = { getText(open and "IGUI_WaterPipesValveOpenDesc" or "IGUI_WaterPipesValveClosedDesc") }
+    if not hasWrench then
+        lines[#lines + 1] = " "
+        lines[#lines + 1] = getText("Tooltip_WaterPipesRepairNeeds")
+        lines[#lines + 1] = "  1 x " .. (getItemNameFromFullType(Constants.PIPE_TOOL_TYPE) or "Pipe Wrench")
+    end
+    tooltip.description = table.concat(lines, " <LINE> ")
     return tooltip
 end
 
@@ -1540,9 +1555,10 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     local gaugeObject = findGaugeInWorldObjects(worldobjects)
     local hasGaugeOption = gaugeObject ~= nil
 
-    -- Turning a valve is plumbing, so it needs the wrench -- the same gate the hydrant uses.
+    -- Turning a valve needs the wrench. Without one the option still shows, disabled, saying so: a
+    -- valve that offers nothing reads as broken.
     local valveObject = findValveInWorldObjects(worldobjects)
-    local hasValveOption = valveObject ~= nil and playerHasPipeWrench(playerObj)
+    local hasValveOption = valveObject ~= nil
 
     -- Plumbing a whole building. Offered on ANY tile of a building, not only on a fixture: the root of
     -- the tree is wherever the player clicked, so where they click is the decision they are making.
@@ -1660,7 +1676,9 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         local label = open and getText("ContextMenu_WaterPipesCloseValve")
             or getText("ContextMenu_WaterPipesOpenValve")
         local option = context:addOption(label, playerObj, ContextMenu.setValveOpen, valveObject, not open)
-        option.toolTip = buildValveTooltip(valveObject)
+        local hasWrench = playerHasPipeWrench(playerObj)
+        option.notAvailable = not hasWrench
+        option.toolTip = buildValveTooltip(valveObject, hasWrench)
     end
 
     if hasGaugeOption then
