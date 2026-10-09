@@ -112,10 +112,9 @@ end
 -- is left at whatever the fixture says it holds.
 local OUR_TANK_KEY = "waterpipesOwnTank"
 
--- What the tank should read, recorded on the object so it travels as modData. A FluidContainer does
--- NOT replicate: its capacity reaches a client only with the whole object, and sending a fixture whole
--- puts a second copy of it in the client's world. So the numbers go over as data and each client fills
--- its own copy of the tank from them.
+-- What the tank should read, recorded on the object so it travels as modData. Its contents reach a
+-- client with sync(); the CAPACITY of a tank we attached does not, short of sending the whole object,
+-- which puts a second copy of the fixture in the client's world. So each client sizes its own copy.
 local MIRROR_KEY = "waterpipesMirror"
 
 local reportedClient = {}
@@ -238,7 +237,7 @@ end
 -- a fixture holding more than it can is not a thing the engine can show. A tank we attached has no
 -- size of its own, so it is sized to the network.
 -- The syncing flag stops our own write coming back as consumption to reconcile.
-local function writeFluid(endpoint, amount, fluidTypeName, networkCapacity, localOnly)
+local function writeFluid(endpoint, amount, fluidTypeName, networkCapacity)
     local fluidContainer = getFluidContainer(endpoint)
     if networkCapacity and hasOurTank(endpoint) and fluidContainer and fluidContainer.setCapacity then
         local wanted = math.max(networkCapacity, 1)
@@ -282,15 +281,11 @@ local function writeFluid(endpoint, amount, fluidTypeName, networkCapacity, loca
         pcall(fluidContainer.setInputLocked, fluidContainer, true)
     end
 
-    -- A client is filling in its OWN copy of a tank the server already owns. Announcing that would
-    -- send the client's guess back over the top of the authority it came from.
-    if not localOnly then
-        if endpoint.sync then
-            pcall(endpoint.sync, endpoint)
-        end
-        if endpoint.transmitModData then
-            pcall(endpoint.transmitModData, endpoint)
-        end
+    if endpoint.sync then
+        pcall(endpoint.sync, endpoint)
+    end
+    if endpoint.transmitModData then
+        pcall(endpoint.transmitModData, endpoint)
     end
 
     setSyncing(endpoint, false)
@@ -390,14 +385,10 @@ function FluidSource.mirrorForClient(endpoint)
         return false
     end
 
+    -- Only the size. The litres come with the server's sync(); a fluid write on a client does nothing.
     local fluidContainer = getFluidContainer(endpoint)
     if fluidContainer and fluidContainer.setCapacity and ownCapacity(endpoint) ~= capacity then
         pcall(fluidContainer.setCapacity, fluidContainer, capacity)
-    end
-
-    local amount = math.max(tonumber(mirror.amount) or 0, 0)
-    if math.abs(readAmount(endpoint) - amount) > CONSUME_EPSILON then
-        writeFluid(endpoint, amount, mirror.fluid, nil, true)
     end
     return true
 end
