@@ -1084,6 +1084,8 @@ end
 -- still see the pipe. The next-tick guard also covers multi-pipe squares and cancelled removals.
 local pendingPipeRemovals = {}
 local pendingMaterialDrops = {}
+-- Valves taken off their pipe: the registry's closed flag on that tile is cleared once they are gone.
+local pendingValveRemovals = {}
 local pendingRemovalScheduled = false
 
 -- Chance a dismantled pipe hands its build material back. The scrap table cannot know what the pipe was
@@ -1179,6 +1181,19 @@ local function takeDownFittingsOn(square, returnsMaterial)
     pcall(square.RecalcAllWithNeighbours, square, true)
 end
 
+local function squareHoldsObject(square, object)
+    local objects = square and square.getObjects and square:getObjects() or nil
+    if not objects then
+        return false
+    end
+    for index = 0, objects:size() - 1 do
+        if objects:get(index) == object then
+            return true
+        end
+    end
+    return false
+end
+
 local function processPendingPipeRemovals()
     pendingRemovalScheduled = false
     if Events and Events.OnTick then
@@ -1197,6 +1212,25 @@ local function processPendingPipeRemovals()
     -- would spawn its own pipe. The server side pays; SP is neither client nor server and pays as before.
     if isClient and isClient() then
         drops = {}
+    end
+
+    -- A valve that really left stops splitting the network now, not at the ten-minute scan.
+    local valves = pendingValveRemovals
+    pendingValveRemovals = {}
+    local reopened = false
+    for _, entry in ipairs(valves) do
+        local square = getSquare(entry.x, entry.y, entry.z)
+        if square and not squareHoldsObject(square, entry.object) then
+            Invalidate.squareChanged(square)
+            if not (isClient and isClient()) then
+                reopened = State.setPipeValveClosed(entry.x, entry.y, entry.z, false) or reopened
+            end
+        end
+    end
+    if reopened then
+        Invalidate.layoutChanged()
+        System.rebuild()
+        System.refreshPlumbedEndpoints()
     end
 
     for _, drop in ipairs(drops) do
@@ -1297,19 +1331,6 @@ local pendingPurifierScheduled = false
 -- Anchors whose footprint we are dismantling RIGHT NOW. Removing the other three quadrants raises the
 -- very events that brought us here; without this the tank would re-queue itself and pay out again.
 local purifiersComingDown = {}
-
-local function squareHoldsObject(square, object)
-    local objects = square and square.getObjects and square:getObjects() or nil
-    if not objects then
-        return false
-    end
-    for index = 0, objects:size() - 1 do
-        if objects:get(index) == object then
-            return true
-        end
-    end
-    return false
-end
 
 -- Take every tank quadrant off a square. Returns how many went.
 local function removeTankPartsOn(square)
@@ -1466,6 +1487,14 @@ System.processPurifierRemovals = processPendingPurifierRemovals
 local function scheduleFittingRemoval(object)
     if not object or fittingsComingDown[object] then
         return
+    end
+    if Valve.isValve(object) and object.getSquare then
+        local square = object:getSquare()
+        if square then
+            pendingValveRemovals[#pendingValveRemovals + 1] = {
+                x = square:getX(), y = square:getY(), z = square:getZ(), object = object,
+            }
+        end
     end
     local returns = fittingReturnsFor(object)
     if not returns then
