@@ -25,6 +25,9 @@ local BuildingPlumbing = WaterPipes.BuildingPlumbing
 --   hasPipe(x, y, z)        -> boolean   a pipe is already there; the plan reuses it and pays nothing
 --   wallEdge(x, y, z)       -> "N"|"W"|nil   the wall THIS tile owns, if any (risers need one)
 --   hasRiser(x, y, z, edge) -> boolean   a riser already stands on that tile and edge
+--   riserEdges(x, y, z)     -> "N"|"W"|"NW"|nil   optional: every riser on the tile, whatever wall it owns
+--   outsidePipes()          -> { {x=,y=,z=,riser=}, ... }   optional: pipe outside the building that is
+--                              joined to it; the plan must not close a ring through it either
 --   fixtures()              -> { {x=,y=,z=,name=,plumbed=}, ... }   what we are trying to reach; a
 --                              plumbed one is already connected and is never connected again
 
@@ -146,13 +149,26 @@ end
 -- ===== Keeping the tree a tree =====
 -- Pipe joins its cardinal neighbours on a floor; a riser joins its tile to the one above and the one past
 -- its wall. A branch that would close a ring is never laid.
+-- A riser map holds "N", "W" or "NW": a tile can carry one on each edge.
 
-local function riserTargets(x, y, z, edge)
+local function hasEdge(edges, edge)
+    return edges ~= nil and edges:find(edge, 1, true) ~= nil
+end
+
+local function withEdge(edges, edge)
+    if not edges then
+        return edge
+    end
+    return hasEdge(edges, edge) and edges or (edges .. edge)
+end
+
+local function riserTargets(x, y, z, edges)
     local out = { keyOf(x, y, z + 1) }
-    if edge == "N" then
-        out[2] = keyOf(x, y - 1, z + 1)
-    elseif edge == "W" then
-        out[2] = keyOf(x - 1, y, z + 1)
+    if hasEdge(edges, "N") then
+        out[#out + 1] = keyOf(x, y - 1, z + 1)
+    end
+    if hasEdge(edges, "W") then
+        out[#out + 1] = keyOf(x - 1, y, z + 1)
     end
     return out
 end
@@ -165,8 +181,8 @@ local function linksOf(x, y, z, riser)
         for _, k in ipairs(riserTargets(x, y, z, own)) do out[#out + 1] = k end
     end
     if riser[keyOf(x, y, z - 1)] then out[#out + 1] = keyOf(x, y, z - 1) end
-    if riser[keyOf(x, y + 1, z - 1)] == "N" then out[#out + 1] = keyOf(x, y + 1, z - 1) end
-    if riser[keyOf(x + 1, y, z - 1)] == "W" then out[#out + 1] = keyOf(x + 1, y, z - 1) end
+    if hasEdge(riser[keyOf(x, y + 1, z - 1)], "N") then out[#out + 1] = keyOf(x, y + 1, z - 1) end
+    if hasEdge(riser[keyOf(x + 1, y, z - 1)], "W") then out[#out + 1] = keyOf(x + 1, y, z - 1) end
     return out
 end
 
@@ -363,10 +379,10 @@ local function routeFixture(probe, net, origin, fixture, budget, connectedKeys)
                     local view, newRiser = chainView, false
                     if s.riserAt then
                         local rk = keyOf(s.riserAt.x, s.riserAt.y, s.riserAt.z)
-                        newRiser = view[rk] ~= s.edge
+                        newRiser = not hasEdge(view[rk], s.edge)
                         if newRiser then
                             cost = cost + 1
-                            view = setmetatable({ [rk] = s.edge }, { __index = chainView })
+                            view = setmetatable({ [rk] = withEdge(view[rk], s.edge) }, { __index = chainView })
                         end
                     end
                     local selfLinked = false
@@ -409,9 +425,23 @@ local function planOnce(origin, probe, dist, coords, reachable, maxTiles, connec
             net.piped[key] = true
             existing[#existing + 1] = key
         end
-        local edge = probe.wallEdge(x, y, z)
-        if edge and probe.hasRiser(x, y, z, edge) then
-            net.riser[key] = edge
+        local edges
+        if probe.riserEdges then
+            edges = probe.riserEdges(x, y, z)
+        else
+            local edge = probe.wallEdge(x, y, z)
+            edges = edge and probe.hasRiser(x, y, z, edge) and edge or nil
+        end
+        net.riser[key] = edges
+    end
+    -- Pipe outside joins the same union-find: a branch touching it twice closes a ring all the same.
+    for _, c in ipairs(probe.outsidePipes and probe.outsidePipes() or {}) do
+        local key = keyOf(c.x, c.y, c.z)
+        if not net.piped[key] then
+            net.piped[key] = true
+            net.riser[key] = c.riser
+            coords[key] = coords[key] or { x = c.x, y = c.y, z = c.z }
+            existing[#existing + 1] = key
         end
     end
     table.sort(existing)
@@ -439,7 +469,7 @@ local function planOnce(origin, probe, dist, coords, reachable, maxTiles, connec
                     local rk = keyOf(node.riserAt.x, node.riserAt.y, node.riserAt.z)
                     branch[#branch + 1] = { x = node.riserAt.x, y = node.riserAt.y, z = node.riserAt.z,
                                             kind = RISER, edge = node.edge, key = rk .. ":riser:" .. node.edge }
-                    trial.riser[rk] = node.edge
+                    trial.riser[rk] = withEdge(trial.riser[rk], node.edge)
                     risersLaid[rk] = node.edge
                     if not coords[rk] then
                         coords[rk] = { x = node.riserAt.x, y = node.riserAt.y, z = node.riserAt.z }
@@ -637,18 +667,28 @@ function BuildingPlumbing.probeAt(originSquare)
     local tiles = {}         -- key -> true, every tile a pipe may stand on
     local walls = {}         -- key -> "N"/"W"
     local piped = {}         -- key -> true, a floor pipe is already there
-    local risers = {}        -- key -> edge of a riser already on the tile's own wall
+    local risers = {}        -- key -> "N"/"W"/"NW", every riser on the tile, whatever wall it owns
     local fixtures = {}
+    local admitted = {}      -- the tiles in flood order, for the outside sweep below
+
+    local function riserEdgesOf(square)
+        local edges = nil
+        for _, edge in ipairs({ "N", "W" }) do
+            if WaterPipes.Build.squareHasRiserEdge(square, edge) then
+                edges = withEdge(edges, edge)
+            end
+        end
+        return edges
+    end
 
     local function admit(square)
         local x, y, z = square:getX(), square:getY(), square:getZ()
         local key = keyOf(x, y, z)
         tiles[key] = true
+        admitted[#admitted + 1] = { x = x, y = y, z = z }
         walls[key] = wallEdgeOf(square)
         piped[key] = WaterPipes.Build.squareHasFloorPipe(square)
-        if walls[key] and WaterPipes.Build.squareHasRiserEdge(square, walls[key]) then
-            risers[key] = walls[key]
-        end
+        risers[key] = riserEdgesOf(square)
         for _, endpointObject in ipairs(EndpointObjects.collectOnSquare(square)) do
             fixtures[#fixtures + 1] = {
                 x = x, y = y, z = z,
@@ -711,15 +751,52 @@ function BuildingPlumbing.probeAt(originSquare)
         return nil
     end
 
-    Logger.log(string.format("Building plumbing scan at %d:%d:%d -> %d tile(s), %d fixture(s)%s",
-        ox, oy, originSquare:getZ(), math.min(index - 1, #queue), #fixtures,
+    -- Pipe outside that touches the building, followed as far as it runs: a branch that joins it twice
+    -- closes a ring through it as surely as through pipe indoors.
+    local outside, outsideSeen = {}, {}
+    local function noteOutside(x, y, z)
+        local key = keyOf(x, y, z)
+        if tiles[key] or outsideSeen[key] then
+            return
+        end
+        outsideSeen[key] = true
+        local square = squareAt(x, y, z)
+        if not square then
+            return
+        end
+        local edges = riserEdgesOf(square)
+        if edges or WaterPipes.Build.squareHasFloorPipe(square) then
+            outside[#outside + 1] = { x = x, y = y, z = z, riser = edges }
+        end
+    end
+    local function linksOut(c)
+        for _, offset in ipairs(CARDINALS) do
+            noteOutside(c.x + offset.dx, c.y + offset.dy, c.z)
+        end
+        for _, v in ipairs(PipeObjectUtils.getRiserVerticalNeighborCoords(c.x, c.y, c.z)) do
+            noteOutside(v.x, v.y, v.z)
+        end
+    end
+    for _, c in ipairs(admitted) do
+        linksOut(c)
+    end
+    local cursor = 1
+    while cursor <= #outside and cursor <= maxTiles do
+        linksOut(outside[cursor])
+        cursor = cursor + 1
+    end
+
+    Logger.log(string.format("Building plumbing scan at %d:%d:%d -> %d tile(s), %d fixture(s), %d pipe tile(s) outside%s",
+        ox, oy, originSquare:getZ(), math.min(index - 1, #queue), #fixtures, #outside,
         truncated and " (stopped at the scan limit)" or ""))
 
     return {
         isBuildingTile = function(x, y, z) return tiles[keyOf(x, y, z)] == true end,
         hasPipe = function(x, y, z) return piped[keyOf(x, y, z)] == true end,
         wallEdge = function(x, y, z) return walls[keyOf(x, y, z)] end,
-        hasRiser = function(x, y, z, edge) return edge ~= nil and risers[keyOf(x, y, z)] == edge end,
+        hasRiser = function(x, y, z, edge) return edge ~= nil and hasEdge(risers[keyOf(x, y, z)], edge) end,
+        riserEdges = function(x, y, z) return risers[keyOf(x, y, z)] end,
+        outsidePipes = function() return outside end,
         fixtures = function() return fixtures end,
         truncated = truncated,
     }
