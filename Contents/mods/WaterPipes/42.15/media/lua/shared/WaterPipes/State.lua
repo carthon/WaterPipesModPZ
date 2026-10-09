@@ -189,6 +189,18 @@ function State.replaceContainers(containerMap)
     end
 end
 
+-- How many containers the registry holds on one tile.
+function State.containerCountAt(x, y, z)
+    local squareKey = State.squareKey(x, y, z)
+    local count = 0
+    for _, containerData in pairs(State.ensure().containers) do
+        if containerData.squareKey == squareKey then
+            count = count + 1
+        end
+    end
+    return count
+end
+
 function State.rebuildGraph()
     local state = State.ensure()
     Graph.clear(state.graph)

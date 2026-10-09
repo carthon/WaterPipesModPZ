@@ -1109,6 +1109,11 @@ function Adapter.reclassifySquare(square)
     local fresh = classifySquareVessels(square)
     vesselMemo[key] = fresh
     if not remembered then
+        -- A forgotten tile is not a change by itself: the registry says what the network counts there.
+        local State = WaterPipes.State
+        if State and State.containerCountAt then
+            return #fresh ~= State.containerCountAt(square:getX(), square:getY(), square:getZ())
+        end
         return #fresh > 0
     end
     return not sameVessels(fresh, remembered)
