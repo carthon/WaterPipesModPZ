@@ -929,12 +929,13 @@ end
 -- transitively). Expanding with it would leave every fixture downstream of a router reading a stale
 -- number after the tile upstream filled. A zone covers bare routers, so it is a SUPERSET of the real
 -- reach: it refreshes too much, which is the failure worth having.
+-- Returns true when the marks had gone global and this WAS the full sweep.
 function System.refreshDirtyEndpoints()
     local marks, wholeMap = Invalidate.takeDirtyTiles()
     if wholeMap then
         Profiler.count("endpoints: dirty passes gone global", 1)
         System.refreshPlumbedEndpoints()
-        return
+        return true
     end
 
     local reach, seenZone, marked = {}, {}, 0
@@ -1845,14 +1846,18 @@ local function onEveryOneMinute()
     -- needed before the sweep can go. The sweep is still here on purpose: it carries the consumption
     -- reconciliation and the disconnection check for every fixture, marked or not, and delaying the
     -- charge lets two fixtures draw the same litres. Splitting those off is its own step.
-    local okDirty, errDirty = pcall(Profiler.time, "1min/dirty-endpoints", System.refreshDirtyEndpoints)
+    local okDirty, sweptAll = pcall(Profiler.time, "1min/dirty-endpoints", System.refreshDirtyEndpoints)
     if not okDirty then
-        Logger.error("Marked endpoint refresh failed: " .. tostring(errDirty))
+        Logger.error("Marked endpoint refresh failed: " .. tostring(sweptAll))
+        sweptAll = false
     end
 
-    local ok, err = pcall(Profiler.time, "1min/endpoints", System.refreshPlumbedEndpoints)
-    if not ok then
-        Logger.error("Endpoint plumbing refresh failed: " .. tostring(err))
+    -- Marks gone global already ran the full sweep this minute.
+    if sweptAll ~= true then
+        local ok, err = pcall(Profiler.time, "1min/endpoints", System.refreshPlumbedEndpoints)
+        if not ok then
+            Logger.error("Endpoint plumbing refresh failed: " .. tostring(err))
+        end
     end
 
     -- Levelling between vessels used to ride the ten-minute tick, which is why a barrel took ten in-game
