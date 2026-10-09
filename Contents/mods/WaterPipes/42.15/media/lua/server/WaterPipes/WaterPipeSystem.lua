@@ -29,6 +29,7 @@ require "WaterPipes/Profiler"
 require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
 require "WaterPipes/World"
+require "WaterPipes/ActionWatch"
 
 local Invalidate = WaterPipes.Invalidate
 local Adapter = WaterPipes.ContainerAdapter
@@ -1575,6 +1576,14 @@ local function scheduleVesselChange(square)
     end
 end
 
+-- A timed action finished on this tile. If it changed which objects there hold fluid -- an object made
+-- a vessel in place raises no event at all -- the network hears it as it would a vessel set down.
+function System.recheckVesselsAt(square)
+    if square and PipeObjectUtils.getPipeOnSquare(square) and Adapter.reclassifySquare(square) then
+        scheduleVesselChange(square)
+    end
+end
+
 -- Asked while the object still exists: on a removal there is nothing left to ask a tick later.
 -- A pipe is never a vessel, and is turned away before the tile's pipe scan is read: reading it while
 -- a leaving pipe is still there caches it, and its removal is then taken for a cancelled one.
@@ -1899,6 +1908,14 @@ local function onWaterAmountChange(object, prevAmount)
 
     if not object then
         return
+    end
+
+    -- A vessel made in place raised no add event, so it joins the network the way one set down does.
+    if Adapter.isUnclassifiedVessel then
+        local okVessel, unclassified = pcall(Adapter.isUnclassifiedVessel, object)
+        if okVessel and unclassified then
+            pcall(noteVesselEvent, object)
+        end
     end
 
     -- Its network's taps are due a refresh: this change did not go through the adapter's marks.

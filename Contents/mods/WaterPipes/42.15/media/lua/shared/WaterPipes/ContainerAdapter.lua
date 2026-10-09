@@ -982,6 +982,21 @@ local function classifySquareVesselsCached(square)
     return cached
 end
 
+local function sameVessels(fresh, remembered)
+    if #fresh ~= #remembered then
+        return false
+    end
+    for index = 1, #fresh do
+        -- Object identity AND position in the list: the index is baked into every descriptor key, so a renumber
+        -- is just as wrong as a substitution even when the same objects are present.
+        if fresh[index].object ~= remembered[index].object
+            or fresh[index].objectIndex ~= remembered[index].objectIndex then
+            return false
+        end
+    end
+    return true
+end
+
 -- (Defined here, below classifySquareVessels, and not beside the other invalidation helpers: it closes
 -- over that local, and a function compiled above it would bind the name to a nil GLOBAL instead --
 -- silently, since that is valid Lua and luac -p cannot see it. test_container_cache.lua now calls it.)
@@ -1007,19 +1022,81 @@ function Adapter.verifySquareVessels(square)
     local fresh = classifySquareVessels(square)
     vesselMemo[key] = fresh
 
-    if #fresh ~= #remembered then
+    return sameVessels(fresh, remembered)
+end
+
+-- Re-read one tile now. True when which objects there hold fluid changed -- or, with nothing remembered
+-- to compare against, when it holds any, so the caller never misses one.
+function Adapter.reclassifySquare(square)
+    if not square or not square.getObjects then
         return false
     end
-    for index = 1, #fresh do
-        -- Object identity AND position in the list: the index is baked into every descriptor key, so a renumber
-        -- is just as wrong as a substitution even when the same objects are present.
-        if fresh[index].object ~= remembered[index].object
-            or fresh[index].objectIndex ~= remembered[index].objectIndex then
-            return false
+    local key = vesselMemoKey(square)
+    local remembered = vesselMemo[key]
+    local fresh = classifySquareVessels(square)
+    vesselMemo[key] = fresh
+    if not remembered then
+        return #fresh > 0
+    end
+    return not sameVessels(fresh, remembered)
+end
+local function isRemembered(remembered, worldObject)
+    for _, vessel in ipairs(remembered) do
+        if vessel.object == worldObject then
+            return true
         end
     end
-    return true
+    return false
 end
+
+-- A vessel the tile's remembered classification misses. An object can become a vessel in place, with no
+-- add or remove event: Useful Barrels adds the FluidContainer to the barrel itself when its lid is cut.
+function Adapter.isUnclassifiedVessel(worldObject)
+    local square = worldObject and worldObject.getSquare and worldObject:getSquare() or nil
+    if not square or not square.getObjects then
+        return false
+    end
+    if isRemembered(classifySquareVesselsCached(square), worldObject) or not getDirectWorldFluidKind(worldObject) then
+        return false
+    end
+    return isRemembered(classifySquareVessels(square), worldObject)
+end
+
+-- Debug readout: every object on the tile that holds fluid, and whether the network counts it.
+function Adapter.describeSquareVessels(square)
+    local lines = {}
+    if not square or not square.getObjects then
+        return lines
+    end
+
+    local remembered = classifySquareVesselsCached(square)
+    local fresh = classifySquareVessels(square)
+    local objects = square:getObjects()
+    for objectIndex = 0, objects:size() - 1 do
+        local worldObject = objects:get(objectIndex)
+        local holdsFluid = getWorldFluidContainer(worldObject) ~= nil
+            or (worldObject and (worldObject.getReserveWaterMax or worldObject.getReserveWaterAmount)) ~= nil
+        if holdsFluid then
+            local verdict
+            if isRemembered(remembered, worldObject) then
+                verdict = "counted"
+            elseif isRemembered(fresh, worldObject) then
+                verdict = "MISSED: the tile's remembered classification is stale"
+            elseif EndpointObjects.isEndpointCandidate(worldObject) then
+                verdict = "not storage: read as a fixture (endpoint)"
+            elseif isExcludedByName(worldObject) then
+                verdict = "not storage: excluded by name"
+            else
+                verdict = "not storage: no usable capacity"
+            end
+            lines[#lines + 1] = string.format("  #%d %s  %.1f / %.1f L  -> %s", objectIndex,
+                describeVessel(worldObject), getRawWorldFluidAmount(worldObject) or 0,
+                getRawWorldFluidCapacity(worldObject) or 0, verdict)
+        end
+    end
+    return lines
+end
+
 -- Is there any network vessel on this square at all? The router walk asks this per crossing and does not
 -- care what is inside, so it never pays for a fluid read.
 function Adapter.hasSquareContainers(square)

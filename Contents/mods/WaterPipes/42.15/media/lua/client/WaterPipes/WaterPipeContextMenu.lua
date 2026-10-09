@@ -602,6 +602,28 @@ function ContextMenu.inspectPressure(playerObj, square)
         Logger.log(line)
     end
 
+    -- Every fluid-holding object here and on the network's tiles, counted or not and why. A vessel only
+    -- joins when it shares its tile with a pipe, so the clicked tile is listed even off the network.
+    local Adapter = WaterPipes.ContainerAdapter
+    if Adapter and Adapter.describeSquareVessels then
+        local function logSection(title, squares)
+            Logger.log(title)
+            local found = 0
+            for _, listed in ipairs(squares) do
+                local lines = Adapter.describeSquareVessels(listed)
+                for _, line in ipairs(lines) do
+                    Logger.log(line)
+                end
+                found = found + #lines
+            end
+            if found == 0 then
+                Logger.log("  none")
+            end
+        end
+        logSection("Fluid objects on this tile:", { square })
+        logSection("Fluid objects on this network's tiles:", NetworkAccess.getNetworkSquares(square) or {})
+    end
+
     if playerObj and HaloTextHelper then
         local tap = report.kinds and report.kinds[Constants.PRESSURE_KIND_TAP]
         HaloTextHelper.addText(playerObj, tap and tap.head
