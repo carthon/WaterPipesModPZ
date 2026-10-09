@@ -578,6 +578,8 @@ Constants.BUILDING_PLUMB_MAX_SCAN_TILES = 8000
 -- Server fallback when a requested tile has no building to check against: how far from the player it
 -- may be.
 Constants.BUILDING_PLUMB_REACH = 34
+-- How far from a player a vesselChanged notice may name a tile: about what a client has loaded.
+Constants.VESSEL_NOTICE_REACH = 120
 -- How long one frame may spend laying pipe, in milliseconds. At least one tile is always laid.
 Constants.BUILDING_PLUMB_MS_PER_TICK = 8
 -- In multiplayer a client only sends each tile to the server, which costs it nothing, so the budget above

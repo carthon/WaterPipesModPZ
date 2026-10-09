@@ -2212,6 +2212,12 @@ local function onClientCommand(module, command, player, args)
     -- The profiler measures the SERVER's periodic work, which is the only place it happens on a
     -- dedicated server. Admin only: it is a debug tool that costs time in every pass it measures.
     if command == "vesselChanged" then
+        -- A client only sees vessels near it; a notice for a tile far from the sender is not one it saw.
+        local reach = Constants.VESSEL_NOTICE_REACH
+        if not player or type(args) ~= "table" or type(args.x) ~= "number" or type(args.y) ~= "number"
+            or math.abs(args.x - player:getX()) > reach or math.abs(args.y - player:getY()) > reach then
+            return
+        end
         local ok, err = pcall(scheduleVesselChange, resolveCommandSquare(args))
         if not ok then
             Logger.error("Vessel notice failed: " .. tostring(err))
