@@ -1941,7 +1941,9 @@ local function onWaterAmountChange(object, prevAmount)
     end
 
     -- A vessel made in place raised no add event, so it joins the network the way one set down does.
-    if Adapter.isUnclassifiedVessel then
+    -- Not asked for a fixture, which drinking raises this for constantly, nor off the pipes.
+    if Adapter.isUnclassifiedVessel and not EndpointObjects.isEndpointCandidate(object)
+        and object.getSquare and PipeObjectUtils.getPipeOnSquare(object:getSquare()) then
         local okVessel, unclassified = pcall(Adapter.isUnclassifiedVessel, object)
         if okVessel and unclassified then
             pcall(noteVesselEvent, object)
