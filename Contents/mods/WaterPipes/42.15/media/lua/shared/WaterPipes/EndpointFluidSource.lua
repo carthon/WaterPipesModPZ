@@ -260,6 +260,10 @@ local function writeFluid(endpoint, amount, fluidTypeName, networkCapacity)
         pcall(fluidContainer.setInputLocked, fluidContainer, false)
     end
 
+    -- Both calls raise OnWaterAmountChange from the engine. The mod's own handler is muted for them, as
+    -- for a vessel write: it would mark this network's taps dirty for the mod's own write.
+    local muted = WaterPipes._suppressWaterEvent
+    WaterPipes._suppressWaterEvent = true
     if endpoint.emptyFluid then
         pcall(endpoint.emptyFluid, endpoint)
     elseif fluidContainer and fluidContainer.Empty then
@@ -276,16 +280,15 @@ local function writeFluid(endpoint, amount, fluidTypeName, networkCapacity)
             end
         end
     end
+    WaterPipes._suppressWaterEvent = muted
 
     if fluidContainer and fluidContainer.setInputLocked then
         pcall(fluidContainer.setInputLocked, fluidContainer, true)
     end
 
+    -- The litres travel with sync(). The modData goes once, from the caller, with the mirror in it.
     if endpoint.sync then
         pcall(endpoint.sync, endpoint)
-    end
-    if endpoint.transmitModData then
-        pcall(endpoint.transmitModData, endpoint)
     end
 
     setSyncing(endpoint, false)
