@@ -98,13 +98,20 @@ end
 -- that already has this one ADDS a second copy instead of replacing it: two valves on the tile, an
 -- open handle drawn over a closed one, and a menu that reads whichever comes first in the object list.
 -- That copy never hears about a flip again, so the valve could be closed and never reopened.
+-- Valves already warned about, by object: the sweep redraws every few seconds.
+local warnedSprite = {}
+
 function Valve.applySprite(worldObject, open)
     local spriteName = wantedSprite(worldObject, open)
     local sprite = getSprite and getSprite(spriteName) or nil
     if not sprite or not worldObject or not worldObject.setSprite then
-        Logger.warn("Valve sprite " .. tostring(spriteName) .. " did not resolve -- the valve is "
-            .. (open and "open" or "CLOSED") .. " but will not look it. Restart the game fully: "
-            .. "tilesets load only at boot, so a pack added this session is not there yet.")
+        local key = tostring(worldObject)
+        if not warnedSprite[key] then
+            warnedSprite[key] = true
+            Logger.warn("Valve sprite " .. tostring(spriteName) .. " did not resolve -- the valve is "
+                .. (open and "open" or "CLOSED") .. " but will not look it. Restart the game fully: "
+                .. "tilesets load only at boot, so a pack added this session is not there yet.")
+        end
         return
     end
     pcall(worldObject.setSprite, worldObject, sprite)
