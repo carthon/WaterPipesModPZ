@@ -107,8 +107,30 @@ local function squareHasGauge(square)
     return false
 end
 
--- The shut-off valve is not a pipe either; same scan as the gauge above. Kept local rather than going
--- through WaterPipes.Valve because this file must be loaded before the entity scripts are parsed.
+-- Floor devices the valve has no body for.
+local VALVE_EXCLUDED_KEYS = {
+    Constants.ROUTER_MODDATA_KEY, Constants.PUMP_MODDATA_KEY,
+    Constants.DRIP_MODDATA_KEY, Constants.SPRINKLER_MODDATA_KEY,
+}
+
+local function squareHasPlainFloorPipe(square)
+    if not square then
+        return false
+    end
+    for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+        if PipeObjectUtils.getPipePlacement(worldObject).surface == Constants.PIPE_SURFACE_FLOOR then
+            local modData = getModData(worldObject)
+            for _, key in ipairs(VALVE_EXCLUDED_KEYS) do
+                if modData and modData[key] == true then
+                    return false
+                end
+            end
+            return true
+        end
+    end
+    return false
+end
+
 -- ===== OnIsValid (both sides) =====
 
 -- One floor pipe per square (any orientation) -- they auto-connect.
@@ -457,10 +479,11 @@ Build.sprinklerOnIsValid = Build.floorOnIsValid
 Build.dripOnIsValid = Build.floorOnIsValid
 
 -- The gauge is a dial that sits on a pipe at floor level: it reads the network but never carries fluid,
--- so it never registers and never affects the graph. One per tile, and it needs a pipe under it.
+-- so it never registers and never affects the graph. One per tile, it needs a pipe under it, and it
+-- never shares the tile with a valve: both are drawn on the same spot.
 function Build.gaugeOnIsValid(params)
     local square = params and params.square
-    return squareHasFloorPipe(square) and not squareHasGauge(square)
+    return squareHasFloorPipe(square) and not squareHasGauge(square) and not Valve.hasValveOnSquare(square)
 end
 
 function Build.gaugeOnCreate(params)
@@ -478,10 +501,12 @@ function Build.gaugeOnCreate(params)
 end
 
 -- The shut-off valve follows the gauge: a device fitted onto an existing floor pipe. It never registers
--- as a pipe; State.rebuildGraph reads whether its tile conducts.
+-- as a pipe; State.rebuildGraph reads whether its tile conducts. Never on a router, pump or emitter,
+-- and never sharing a tile with a gauge.
 function Build.valveOnIsValid(params)
     local square = params and params.square
-    return squareHasFloorPipe(square) and not Valve.hasValveOnSquare(square)
+    return squareHasPlainFloorPipe(square) and not Valve.hasValveOnSquare(square)
+        and not squareHasGauge(square)
 end
 
 -- Built OPEN, always: no closed key. Placing a valve must never change how the network behaves until
@@ -498,6 +523,9 @@ function Build.valveOnCreate(params)
     if thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)
     end
+    -- Shaped to its pipe at once, as a pipe is autotiled on build: OnObjectAdded fires before the
+    -- valve key above is set, so nothing else would paint it until the next sweep.
+    Valve.applySprite(thumpable, true)
 end
 
 -- Global alias used by the entity SpriteConfig OnCreate/OnIsValid dotted paths.

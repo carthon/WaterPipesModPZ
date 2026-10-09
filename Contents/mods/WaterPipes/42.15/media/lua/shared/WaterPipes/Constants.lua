@@ -589,10 +589,28 @@ Constants.VALVE_MODDATA_KEY = "waterpipesValve"
 -- ABSENT MEANS OPEN, the same idiom as PUMP_ENABLED_KEY: building a valve must never change how the
 -- network behaves until the player deliberately closes it.
 Constants.VALVE_CLOSED_KEY = "waterpipesValveClosed"
--- PLACEHOLDER ART (tools/texturepack/gen_valve.py): a handwheel, flat and green when open, turned and
--- red when closed. Cells 47/48 are the final indices, so the artist's drop replaces the pixels only.
-Constants.VALVE_SPRITE_OPEN = "waterpipes_01_47"
-Constants.VALVE_SPRITE_CLOSED = "waterpipes_01_48"
+-- One body per pipe shape, keyed by the floor sprite the pipe under it shows. Green light open, red
+-- closed. End caps borrow the body that closes their open side. Cell 47 is only the build ghost.
+Constants.VALVE_SPRITES = {
+    [Constants.PIPE_FLOOR_WEST_SPRITE]      = { open = "waterpipes_01_48", closed = "waterpipes_01_64" },
+    [Constants.PIPE_FLOOR_NORTH_SPRITE]     = { open = "waterpipes_01_49", closed = "waterpipes_01_65" },
+    [Constants.PIPE_FLOOR_CORNER_NE_SPRITE] = { open = "waterpipes_01_50", closed = "waterpipes_01_66" },
+    [Constants.PIPE_FLOOR_CORNER_ES_SPRITE] = { open = "waterpipes_01_51", closed = "waterpipes_01_67" },
+    [Constants.PIPE_FLOOR_CORNER_SW_SPRITE] = { open = "waterpipes_01_52", closed = "waterpipes_01_68" },
+    [Constants.PIPE_FLOOR_CORNER_WN_SPRITE] = { open = "waterpipes_01_53", closed = "waterpipes_01_69" },
+    [Constants.PIPE_FLOOR_T_NOW_SPRITE]     = { open = "waterpipes_01_54", closed = "waterpipes_01_70" },
+    [Constants.PIPE_FLOOR_T_NOE_SPRITE]     = { open = "waterpipes_01_55", closed = "waterpipes_01_71" },
+    [Constants.PIPE_FLOOR_T_NOS_SPRITE]     = { open = "waterpipes_01_56", closed = "waterpipes_01_72" },
+    [Constants.PIPE_FLOOR_T_NON_SPRITE]     = { open = "waterpipes_01_57", closed = "waterpipes_01_73" },
+    [Constants.PIPE_FLOOR_CROSS_SPRITE]     = { open = "waterpipes_01_58", closed = "waterpipes_01_74" },
+    [Constants.PIPE_FLOOR_END_W_SPRITE]     = { open = "waterpipes_01_53", closed = "waterpipes_01_69" },
+    [Constants.PIPE_FLOOR_END_N_SPRITE]     = { open = "waterpipes_01_53", closed = "waterpipes_01_69" },
+    [Constants.PIPE_FLOOR_END_E_SPRITE]     = { open = "waterpipes_01_48", closed = "waterpipes_01_64" },
+    [Constants.PIPE_FLOOR_END_S_SPRITE]     = { open = "waterpipes_01_49", closed = "waterpipes_01_65" },
+}
+-- No pipe shape to match: the straight E/W body.
+Constants.VALVE_SPRITE_OPEN = "waterpipes_01_48"
+Constants.VALVE_SPRITE_CLOSED = "waterpipes_01_64"
 
 -- Appliances that use water to run but manage it themselves (a washing machine only needs its own
 -- FluidContainer non-empty to start a cycle, and its cycle logic never touches fluid). They carry the

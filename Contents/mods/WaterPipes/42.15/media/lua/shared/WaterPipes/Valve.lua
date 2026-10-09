@@ -35,8 +35,24 @@ function Valve.isOpen(worldObject)
     return not (modData and modData[Constants.VALVE_CLOSED_KEY] == true)
 end
 
+-- The body matches the shape the pipe under it is drawn in. PipeAutotile is read off the WaterPipes
+-- table, not required: its requires lead back to this module.
+local function wantedSprite(worldObject, open)
+    local square = worldObject and worldObject.getSquare and worldObject:getSquare() or nil
+    local autotile = WaterPipes.PipeAutotile
+    local shape = nil
+    if square and autotile and autotile.floorShapeAt then
+        shape = autotile.floorShapeAt(square:getX(), square:getY(), square:getZ())
+    end
+    local pair = shape and Constants.VALVE_SPRITES[shape] or nil
+    if pair then
+        return open and pair.open or pair.closed
+    end
+    return open and Constants.VALVE_SPRITE_OPEN or Constants.VALVE_SPRITE_CLOSED
+end
+
 function Valve.spriteFor(worldObject)
-    return Valve.isOpen(worldObject) and Constants.VALVE_SPRITE_OPEN or Constants.VALVE_SPRITE_CLOSED
+    return wantedSprite(worldObject, Valve.isOpen(worldObject))
 end
 
 -- The valve is not a pipe, so it is not in getPipeObjectsOnSquare; scan the square's objects, the
@@ -77,7 +93,7 @@ end
 -- open handle drawn over a closed one, and a menu that reads whichever comes first in the object list.
 -- That copy never hears about a flip again, so the valve could be closed and never reopened.
 function Valve.applySprite(worldObject, open)
-    local spriteName = open and Constants.VALVE_SPRITE_OPEN or Constants.VALVE_SPRITE_CLOSED
+    local spriteName = wantedSprite(worldObject, open)
     local sprite = getSprite and getSprite(spriteName) or nil
     if not sprite or not worldObject or not worldObject.setSprite then
         Logger.warn("Valve sprite " .. tostring(spriteName) .. " did not resolve -- the valve is "
@@ -86,6 +102,12 @@ function Valve.applySprite(worldObject, open)
         return
     end
     pcall(worldObject.setSprite, worldObject, sprite)
+
+    -- The dismantle cursor finds its object by sprite name: a repaint under it must drop its cache.
+    local autotile = WaterPipes.PipeAutotile
+    if autotile and autotile.invalidateMoveableCursorCache then
+        autotile.invalidateMoveableCursorCache()
+    end
 end
 
 local function spriteNameOf(worldObject)
@@ -124,7 +146,7 @@ function Valve.reconcileOnSquare(square)
         if Valve.isValve(worldObject) then
             found = found + 1
             local open = Valve.isOpen(worldObject)
-            local wanted = open and Constants.VALVE_SPRITE_OPEN or Constants.VALVE_SPRITE_CLOSED
+            local wanted = wantedSprite(worldObject, open)
             if spriteNameOf(worldObject) ~= wanted then
                 Valve.applySprite(worldObject, open)
                 corrected = corrected + 1

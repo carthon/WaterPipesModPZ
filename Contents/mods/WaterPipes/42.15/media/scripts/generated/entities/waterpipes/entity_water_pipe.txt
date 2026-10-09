@@ -380,8 +380,9 @@ module WaterPipes
         }
     }
 
-    /* Inline shut-off valve, fitted onto an existing floor pipe. One face (cell 47, open); cell 48
-       (closed) is swapped in by Valve.setOpen and is not a face, as entity faces must be unique. */
+    /* Inline shut-off valve, fitted onto an existing floor pipe. One face: cell 47, the build ghost
+       (a copy of the straight E/W body). Once placed, Valve swaps in the body that matches the pipe's
+       shape and state (Constants.VALVE_SPRITES); those cells are not faces, as faces must be unique. */
     entity WaterPipeValve
     {
         component SpriteConfig
