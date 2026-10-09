@@ -81,26 +81,31 @@ function Stagnation.readStamp(worldObject)
     return type(v) == "number" and v or nil
 end
 
+-- Server-side only and never sent: only the server reads it, and it is saved with the server's world.
+-- Sending a vessel's modData can start a multiplayer sync loop (see ContainerAdapter.finishWorldFluidWrite).
 function Stagnation.stamp(worldObject, hours)
+    if isClient and isClient() then
+        return
+    end
     local modData = getModData(worldObject)
     if not modData then
         return
     end
     modData[Constants.STAGNATION_STAMP_KEY] = hours
-    if worldObject.transmitModData then
-        pcall(worldObject.transmitModData, worldObject)
-    end
 end
 
 -- Movement resets the clock. Called from OnWaterAmountChange for a container that still holds CLEAN
 -- water -- tainted water has nothing left to protect, so we do not bother stamping it, which also
 -- means the act of tainting a vessel never refreshes its own stamp.
+-- The server keeps the clock, and re-stamps at most once an in-game hour: limits are counted in days.
+-- Stamping on every event, on both sides, sent the vessel's modData each time its water moved.
 function Stagnation.noteMovement(worldObject, fluidTypeName, hours)
-    if not Stagnation.isEnabled() or fluidTypeName ~= "Water" then
+    if not Stagnation.isEnabled() or fluidTypeName ~= "Water" or (isClient and isClient()) then
         return
     end
     hours = hours or Stagnation.nowHours()
-    if hours then
+    local previous = Stagnation.readStamp(worldObject)
+    if hours and not (previous and hours - previous < 1) then
         Stagnation.stamp(worldObject, hours)
     end
 end

@@ -539,8 +539,8 @@ Constants.IRRIGATION_MAX_WATER_LEVEL = 100
 
 -- ===== Fluid writes =====
 -- Litres below which writing a vessel is not worth doing. A write resolves the sprite-grid target,
--- empties the FluidContainer, refills it, sync()s the object, transmitModData()s it and fires
--- OnWaterAmountChange for external mods -- all to move a hundredth of a litre, multiplied by vessels x
+-- changes the FluidContainer, sync()s the object and raises OnWaterAmountChange for external mods --
+-- all to move a hundredth of a litre, multiplied by vessels x
 -- emitters on a farm network.
 -- Anything the guard skips is carried to the next vessel by the caller (see rebalanceSummary), so
 -- conservation is exact whatever this is set to.

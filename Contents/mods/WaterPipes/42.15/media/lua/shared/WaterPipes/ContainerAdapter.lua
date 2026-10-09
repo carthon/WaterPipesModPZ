@@ -419,8 +419,23 @@ function Adapter.noteEmptinessCrossing(worldObject, prevAmount, newAmount)
     end
 end
 
+-- OnWaterAmountChange events the engine raised during the write in progress (nil outside a write). The
+-- write adds its own event only when the engine raised none: a listener that redraws and syncs on each
+-- one was told three times per write.
+local engineEventsDuringWrite = nil
+if Events and Events.OnWaterAmountChange then
+    Events.OnWaterAmountChange.Add(function()
+        if engineEventsDuringWrite then
+            engineEventsDuringWrite = engineEventsDuringWrite + 1
+        end
+    end)
+end
+
 local function fireExternalWaterChange(worldObject, prevAmount)
     if not worldObject or not worldObject.getModData then
+        return
+    end
+    if engineEventsDuringWrite and engineEventsDuringWrite > 0 then
         return
     end
     if not LuaEventManager or not LuaEventManager.triggerEvent then
@@ -538,6 +553,99 @@ function Adapter.lastLeftAt(worldObject)
     return leftVesselAt[tostring(resolveFluidTarget(worldObject))]
 end
 
+local function resolveFluidType(fluidTypeName)
+    if fluidTypeName == "Water" then
+        return (FluidType and FluidType.Water) or (Fluid and Fluid.Water)
+    elseif fluidTypeName == "TaintedWater" then
+        return (FluidType and FluidType.TaintedWater) or (Fluid and Fluid.TaintedWater)
+    elseif FluidType and FluidType.FromNameLower then
+        return FluidType.FromNameLower(string.lower(fluidTypeName))
+    elseif Fluid and Fluid.FromNameLower then
+        return Fluid.FromNameLower(string.lower(fluidTypeName))
+    end
+    return nil
+end
+
+local function isMixture(fluidContainer)
+    if not fluidContainer or not fluidContainer.isMixture then
+        return nil
+    end
+    local ok, mixed = pcall(fluidContainer.isMixture, fluidContainer)
+    if not ok then
+        return nil
+    end
+    return mixed == true
+end
+
+-- Move only the difference when the vessel already holds the one fluid asked for: one engine event, and
+-- listeners never see it pass through empty. Adding is limited to clean water, so a top-up never mixes
+-- fluids; removing never changes what is in there. False when it does not apply or did not land where
+-- asked -- the caller then rewrites the vessel in full, which ends at the target either way.
+local function writeDifference(worldObject, fluidContainer, prevAmount, fluidAmount, fluidTypeName)
+    if not fluidContainer or not fluidTypeName or not fluidContainer.removeFluid then
+        return false
+    end
+    local epsilon = Constants.FLUID_WRITE_EPSILON
+    if prevAmount <= epsilon or (fluidAmount or 0) <= epsilon or fluidAmount == prevAmount then
+        return false
+    end
+    if isMixture(fluidContainer) ~= false or readRawWorldFluidType(worldObject) ~= fluidTypeName then
+        return false
+    end
+
+    local delta = fluidAmount - prevAmount
+    local ok = false
+    if delta > 0 then
+        local fluidType = fluidTypeName == "Water" and resolveFluidType(fluidTypeName) or nil
+        if not fluidType then
+            return false
+        end
+        if worldObject.addFluid then
+            ok = pcall(worldObject.addFluid, worldObject, fluidType, delta)
+        elseif fluidContainer.addFluid then
+            ok = pcall(fluidContainer.addFluid, fluidContainer, fluidType, delta)
+        end
+    else
+        ok = pcall(fluidContainer.removeFluid, fluidContainer, -delta, false)
+    end
+    if not ok then
+        return false
+    end
+
+    local capacity = getRawWorldFluidCapacity(worldObject) or 0
+    local target = capacity > 0 and math.min(fluidAmount, capacity) or fluidAmount
+    return math.abs((getRawWorldFluidAmount(worldObject) or 0) - target) <= epsilon
+        and isMixture(fluidContainer) == false
+        and readRawWorldFluidType(worldObject) == fluidTypeName
+end
+
+-- The common end of every world-vessel write. Verified before sync/transmit: a refused write must not be
+-- broadcast as if it had landed. The crossing is reported from the TRUE before and after, since a full
+-- rewrite goes through empty and the engine's own events describe a trip to 0 that never happened.
+--
+-- The modData is sent only for a vessel that keeps its water IN the modData. A FluidContainer travels with
+-- sync(), and sending its modData starts a multiplayer loop: a client receiving a vessel's modData raises
+-- OnWaterAmountChange whenever the amount is not a whole number (the engine compares it truncated); a
+-- listener that sync()s on that event reaches the server, whose SyncIsoObject handler sends the modData
+-- straight back -- to every client, the sender included -- and round it goes for good.
+local function finishWorldFluidWrite(worldObject, prevAmount, attempted, waterInModData)
+    if not verifyWorldFluidWrite(worldObject, prevAmount, attempted) then
+        return false
+    end
+
+    if worldObject.sync then
+        pcall(worldObject.sync, worldObject)
+    end
+
+    if waterInModData and worldObject.transmitModData then
+        pcall(worldObject.transmitModData, worldObject)
+    end
+
+    noteEmptinessCrossing(worldObject, prevAmount, attempted)
+    fireExternalWaterChange(worldObject, prevAmount)
+    return true
+end
+
 local function writeWorldFluidUnmuted(worldObject, fluidAmount, fluidTypeName)
     if not worldObject then
         return false
@@ -591,22 +699,7 @@ local function writeWorldFluidUnmuted(worldObject, fluidAmount, fluidTypeName)
             pcall(worldObject.setTaintedWater, worldObject, clampedAmount > 0 and fluidTypeName == "TaintedWater")
         end
 
-        -- Before sync/transmit: a refused write must not be broadcast as if it had landed.
-        if not verifyWorldFluidWrite(worldObject, prevAmount, clampedAmount) then
-            return false
-        end
-
-        if worldObject.sync then
-            pcall(worldObject.sync, worldObject)
-        end
-
-        if worldObject.transmitModData then
-            pcall(worldObject.transmitModData, worldObject)
-        end
-
-        noteEmptinessCrossing(worldObject, prevAmount, clampedAmount)
-        fireExternalWaterChange(worldObject, prevAmount)
-        return true
+        return finishWorldFluidWrite(worldObject, prevAmount, clampedAmount, true)
     end
 
     local fluidContainer = getWorldFluidContainer(worldObject)
@@ -627,6 +720,11 @@ local function writeWorldFluidUnmuted(worldObject, fluidAmount, fluidTypeName)
         end
     end
 
+    if writeDifference(worldObject, fluidContainer, prevAmount, fluidAmount, fluidTypeName) then
+        restoreInputLock()
+        return finishWorldFluidWrite(worldObject, prevAmount, fluidAmount)
+    end
+
     local cleared = emptyWorldFluid(worldObject, fluidContainer)
 
     if not cleared then
@@ -643,16 +741,7 @@ local function writeWorldFluidUnmuted(worldObject, fluidAmount, fluidTypeName)
 
     if fluidAmount > 0 and fluidTypeName then
         attempted = fluidAmount
-        local fluidType = nil
-        if fluidTypeName == "Water" then
-            fluidType = (FluidType and FluidType.Water) or (Fluid and Fluid.Water)
-        elseif fluidTypeName == "TaintedWater" then
-            fluidType = (FluidType and FluidType.TaintedWater) or (Fluid and Fluid.TaintedWater)
-        elseif FluidType.FromNameLower then
-            fluidType = FluidType.FromNameLower(string.lower(fluidTypeName))
-        elseif Fluid and Fluid.FromNameLower then
-            fluidType = Fluid.FromNameLower(string.lower(fluidTypeName))
-        end
+        local fluidType = resolveFluidType(fluidTypeName)
 
         if not fluidType then
             restoreInputLock()
@@ -673,26 +762,7 @@ local function writeWorldFluidUnmuted(worldObject, fluidAmount, fluidTypeName)
     end
 
     restoreInputLock()
-
-    -- Before sync/transmit: a refused write must not be broadcast as if it had landed.
-    if not verifyWorldFluidWrite(worldObject, prevAmount, attempted) then
-        return false
-    end
-
-    if worldObject.sync then
-        pcall(worldObject.sync, worldObject)
-    end
-
-    if worldObject.transmitModData then
-        pcall(worldObject.transmitModData, worldObject)
-    end
-
-    -- The crossing, from the TRUE before and after. The write gets there via empty-then-refill, so the
-    -- engine's own events describe a trip to 0 and back that never happened as far as the network is
-    -- concerned; this is the one report that is about the actual change.
-    noteEmptinessCrossing(worldObject, prevAmount, attempted)
-    fireExternalWaterChange(worldObject, prevAmount)
-    return true
+    return finishWorldFluidWrite(worldObject, prevAmount, attempted)
 end
 
 -- emptyFluid and addFluid raise OnWaterAmountChange THEMSELVES, from the engine -- not only the one we
@@ -706,9 +776,12 @@ end
 function Adapter.writeWorldFluidAmount(worldObject, fluidAmount, fluidTypeName)
     WaterPipes = WaterPipes or {}
     local saved = WaterPipes._suppressWaterEvent
+    local savedCount = engineEventsDuringWrite
     WaterPipes._suppressWaterEvent = true
+    engineEventsDuringWrite = 0
     local ok, result = pcall(writeWorldFluidUnmuted, worldObject, fluidAmount, fluidTypeName)
     WaterPipes._suppressWaterEvent = saved
+    engineEventsDuringWrite = savedCount
     if not ok then
         Logger.error("writeWorldFluidAmount failed: " .. tostring(result))
         return false
