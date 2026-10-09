@@ -94,11 +94,11 @@ def scan(path):
             bound_elsewhere.update(p.strip() for p in match.group(2).split(",") if p.strip())
             continue
 
-        if "function" in line:
-            params = re.search(r"\(([^)]*)\)", line)
-            if params:
-                bound_elsewhere.update(
-                    p.strip() for p in params.group(1).split(",") if p.strip())
+        # The parameter list right after `function`, not the first `(` on the line: an inline
+        # `table.sort(list, function(a, b)` used to read `list, function(a` as the parameters.
+        for params in re.finditer(r"\bfunction\b[\w.:\s]*\(([^)]*)\)", line):
+            bound_elsewhere.update(
+                p.strip() for p in params.group(1).split(",") if p.strip())
 
         match = re.match(r"\s*local\s+(" + NAME + r"[\w,\s]*?)\s*(?:=|$)", line)
         if match:
