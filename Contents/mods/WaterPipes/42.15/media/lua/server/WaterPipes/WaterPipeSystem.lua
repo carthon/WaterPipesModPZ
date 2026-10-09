@@ -1527,13 +1527,7 @@ end
 
 -- Runs a tick after the event, once the object has really arrived or left: re-reading the tile inside
 -- OnObjectAboutToBeRemoved put the leaving vessel straight back into the classification.
-local function vesselChangedOnPipe(square)
-    if not PipeObjectUtils.getPipeOnSquare(square) then
-        return
-    end
-    Invalidate.squareChanged(square)
-    -- The levelling reads the registry of containers: rebuilt here, the vessel joins the next pass.
-    System.rebuild(false)
+local function refreshAfterVesselChange(square)
     local refreshed, reach = refreshEndpointsOnNetworkAt(square)
     Logger.log(("Vessel on a piped tile at %d:%d:%d -- refreshed %d fixture(s) over %d network tile(s)")
         :format(square:getX(), square:getY(), square:getZ(), refreshed or 0, reach or 0))
@@ -1549,13 +1543,30 @@ local function processPendingVesselChanges()
     end
     local squares = pendingVesselSquares
     pendingVesselSquares = {}
+
+    local changed = {}
     for _, position in pairs(squares) do
         local square = getSquare(position.x, position.y, position.z)
-        if square then
-            local ok, err = pcall(vesselChangedOnPipe, square)
-            if not ok then
-                Logger.error("Vessel change failed: " .. tostring(err))
-            end
+        if square and PipeObjectUtils.getPipeOnSquare(square) then
+            Invalidate.squareChanged(square)
+            changed[#changed + 1] = square
+        end
+    end
+    if #changed == 0 then
+        return
+    end
+
+    -- The levelling reads the registry of containers: rebuilt once for the batch, the vessels join the
+    -- next pass.
+    local okRebuild, errRebuild = pcall(System.rebuild, false)
+    if not okRebuild then
+        Logger.error("Vessel change failed: " .. tostring(errRebuild))
+        return
+    end
+    for _, square in ipairs(changed) do
+        local ok, err = pcall(refreshAfterVesselChange, square)
+        if not ok then
+            Logger.error("Vessel change failed: " .. tostring(err))
         end
     end
 end
