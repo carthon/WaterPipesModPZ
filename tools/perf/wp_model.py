@@ -1157,11 +1157,18 @@ def pass_registry_sweep(sc, radius=20, px=10, py=10, pz=0):
             if sq is None:
                 continue
             # classify(): one pipe scan + hydrant + purifier lookup
-            getPipeObjectsOnSquare(sq)
+            pipes = getPipeObjectsOnSquare(sq)
             for o in sq.objects:
                 bc("isEmitter", 2)          # isSprinkler + isDrip modData reads
             Hydrant_findOnSquare(sq)
             Purifier_findOnSquare(sq)
+            # Valve.reconcileOnSquare, on piped tiles only: a full object scan
+            # reading each object's modData (isValve).
+            if pipes:
+                bc("getObjects", 1)
+                for o in sq.objects:
+                    bc("getObjects", 1)
+                    bc("getModData", 1)
 
 
 # (kind, coord) -> the square and object that tile resolved to. Kept until the

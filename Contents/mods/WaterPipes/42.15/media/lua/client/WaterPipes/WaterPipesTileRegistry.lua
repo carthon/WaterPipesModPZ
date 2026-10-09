@@ -76,12 +76,13 @@ local getCellSquare = WaterPipes.World.squareAt
 
 -- ===== Population =====
 
--- What, if anything, on this square is worth remembering. One object-list scan serves all three
--- lookups; the emitter check reuses the pipe scan the other two do not need.
+-- What, if anything, on this square is worth remembering. The emitter check and the valve pass read
+-- the memoised pipe scan; the hydrant and purifier lookups each scan the tile themselves.
 local function classify(square)
     local emitter, hydrant, purifier = nil, nil, nil
 
-    for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+    local pipes = PipeObjectUtils.getPipeObjectsOnSquare(square)
+    for _, worldObject in ipairs(pipes) do
         if not emitter and (Irrigation.isSprinkler(worldObject) or Irrigation.isDrip(worldObject)) then
             emitter = worldObject
         end
@@ -92,8 +93,8 @@ local function classify(square)
 
     -- A valve flipped by someone else replicates its STATE and not its sprite, so the handle is drawn
     -- from that state here, where the tile is already in hand. Only tiles near the player are swept,
-    -- which is the only place a wrong handle could be seen.
-    if WaterPipes.Valve and WaterPipes.Valve.reconcileOnSquare then
+    -- which is the only place a wrong handle could be seen. A valve only sits on a pipe.
+    if #pipes > 0 and WaterPipes.Valve and WaterPipes.Valve.reconcileOnSquare then
         pcall(WaterPipes.Valve.reconcileOnSquare, square)
     end
 
