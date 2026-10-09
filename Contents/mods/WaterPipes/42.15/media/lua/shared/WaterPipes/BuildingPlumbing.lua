@@ -787,6 +787,7 @@ function BuildingPlumbing.place(placement, player)
         riser = placement.kind == RISER or nil,
         edge = placement.kind == RISER and placement.edge or nil,
         hidden = true,
+        generated = true,
     })
 
     GameEntityFactory.CreateIsoObjectEntity(object, parent, true)
@@ -1056,6 +1057,11 @@ function BuildingPlumbing.beginPaidPass(args, player)
         end
     end
 
+    -- A pass names what it is for; one with nothing to charge would lay pipe for free.
+    if count == 0 then
+        return nil, "noFixtures"
+    end
+
     local price = count * unit
     local inventory = player.getInventory and player:getInventory() or nil
     if price > 0 and BuildingPlumbing.countPipes(inventory) < price then
@@ -1065,7 +1071,7 @@ function BuildingPlumbing.beginPaidPass(args, player)
         return nil, "noPipes"
     end
 
-    passes[playerKey(player)] = { unit = unit, owed = owed, plumbed = {} }
+    passes[playerKey(player)] = { unit = unit, owed = owed, plumbed = {}, laid = 0 }
     return price
 end
 
@@ -1077,11 +1083,18 @@ function BuildingPlumbing.placePaid(args, player)
     if not pass then
         return nil, "noPass"
     end
+    if pass.laid >= Constants.BUILDING_PLUMB_MAX_TILES then
+        return nil, "overCap"
+    end
     local placement, reason = validRequest(args, player)
     if not placement then
         return nil, reason
     end
-    return BuildingPlumbing.place(placement, player)
+    local object, why = BuildingPlumbing.place(placement, player)
+    if object then
+        pass.laid = pass.laid + 1
+    end
+    return object, why
 end
 
 -- Records that the pass reached one of the fixtures it paid for.

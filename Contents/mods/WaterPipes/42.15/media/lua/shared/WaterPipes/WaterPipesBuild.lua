@@ -270,7 +270,7 @@ end
 -- ===== OnCreate (server / single-player) =====
 
 -- What a pipe's modData IS.
--- opts: surface, riser, edge, hidden, router, routerDirection, pump, drip, sprinkler, axis.
+-- opts: surface, riser, edge, hidden, router, routerDirection, pump, drip, sprinkler, axis, clay, generated.
 -- Every pipe variant is stamped here, so a router / pump / drip / sprinkler is one extra modData flag.
 -- Shared with the building generator, which registers once per pass instead of once per pipe.
 function Build.stampPipeModData(thumpable, opts)
@@ -285,7 +285,8 @@ function Build.stampPipeModData(thumpable, opts)
         modData[Constants.PIPE_SURFACE_MODDATA_KEY] = opts.surface
         modData[Constants.PIPE_AXIS_MODDATA_KEY] = opts.axis or Constants.PIPE_AXIS_EW
         -- Build material: only stamped when it is not the metal default, so old pipes stay metal.
-        modData[Constants.PIPE_MATERIAL_MODDATA_KEY] = opts.clay and Constants.PIPE_MATERIAL_CLAY or nil
+        modData[Constants.PIPE_MATERIAL_MODDATA_KEY] = opts.clay and Constants.PIPE_MATERIAL_CLAY
+            or opts.generated and Constants.PIPE_MATERIAL_GENERATED or nil
         modData[Constants.PIPE_RISER_MODDATA_KEY] = opts.riser and true or nil
         modData[Constants.PIPE_RISER_EDGE_MODDATA_KEY] = opts.edge or nil
         -- Concealed variant: baked in at build; clients render it with a transparent tile.

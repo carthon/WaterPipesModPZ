@@ -1090,7 +1090,7 @@ local pendingRemovalScheduled = false
 local DISMANTLE_RETURN_CHANCE = 90
 
 -- Diagnostics for the build-material stamp, logged once per outcome (see schedulePipeRemoval).
-local loggedDismantleMaterial = { [true] = false, [false] = false }
+local loggedDismantleMaterial = {}
 
 -- Every key a pipe's modData carries, sorted: a pipe that lost all its modData is a different bug from
 -- one that only lost the material stamp.
@@ -1248,21 +1248,24 @@ local function schedulePipeRemoval(object, returnsMaterial)
     -- CLAY GIVES NOTHING BACK. A fired clay segment cannot be unfired, so it is spent the moment it is
     -- laid. That is the trade against metal: clay is cheap and needs no forge, but it is one-way, while a
     -- metal pipe is salvage. Without this, clay would be strictly better and nobody would forge one.
+    -- Pipe a building pass laid gives nothing back either: the pass is priced per fixture, not per tile.
     if returnsMaterial then
-        local clay, source = PipeObjectUtils.isClayBuilt(object)
+        local material, source = PipeObjectUtils.getBuildMaterial(object)
+        material = material or "metal"
+        local spent = material == Constants.PIPE_MATERIAL_CLAY or material == Constants.PIPE_MATERIAL_GENERATED
 
         -- Once per outcome per session. The build side logs what it stamped; this logs what the other end
         -- concluded, which is the only way to tell "never stamped" from "stamped and lost".
-        if not loggedDismantleMaterial[clay] then
-            loggedDismantleMaterial[clay] = true
+        if not loggedDismantleMaterial[material] then
+            loggedDismantleMaterial[material] = true
             local okMod, modData = pcall(object.getModData, object)
             Logger.log(string.format(
                 "dismantle at %d:%d:%d -> %s (via %s, modData keys=%s)",
-                x, y, z, clay and "CLAY, returns nothing" or "metal, returns a pipe",
+                x, y, z, spent and (material:upper() .. ", returns nothing") or "metal, returns a pipe",
                 source, describeModDataKeys(okMod and modData or nil)))
         end
 
-        if not clay then
+        if not spent then
             pendingMaterialDrops[#pendingMaterialDrops + 1] = {
                 x = x, y = y, z = z, object = object,
                 itemType = "Base.MetalPipe",

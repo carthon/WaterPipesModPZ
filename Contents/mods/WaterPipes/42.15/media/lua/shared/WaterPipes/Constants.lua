@@ -25,6 +25,8 @@ Constants.PIPE_AXIS_MODDATA_KEY = "waterpipesAxis"
 -- salvage, clay is spent the moment it is laid.
 Constants.PIPE_MATERIAL_MODDATA_KEY = "waterpipesMaterial"
 Constants.PIPE_MATERIAL_CLAY = "clay"
+-- Laid by a building-plumbing pass, which is paid per fixture: gives nothing back, like clay.
+Constants.PIPE_MATERIAL_GENERATED = "generated"
 Constants.PIPE_CLAY_ITEM_TYPE = "Base.ClayPipeSegment"
 Constants.PLUMBED_ENDPOINT_MODDATA_KEY = "waterpipesEndpointPlumbed"
 Constants.PLUMBED_ENDPOINT_SOURCE_MODDATA_KEY = "waterpipesEndpointSource"
