@@ -870,6 +870,7 @@ function BuildingPlumbing.place(placement, player)
         edge = placement.kind == RISER and placement.edge or nil,
         hidden = true,
         generated = true,
+        transmit = false,   -- not on a tile yet; transmitCompleteItemToClients below carries it
     })
 
     GameEntityFactory.CreateIsoObjectEntity(object, parent, true)
@@ -943,7 +944,14 @@ function BuildingPlumbing.plumbFixtures(plan, player, laid)
                     if player then
                         sendClientCommand(player, "WaterPipes", "plumbEndpointsOnSquare",
                             { x = fixture.x, y = fixture.y, z = fixture.z })
-                        plumbed = plumbed + 1
+                        -- Counted by fixture, as single player counts, not by command.
+                        local waiting = 0
+                        for _, endpointObject in ipairs(square and EndpointObjectsModule.collectOnSquare(square) or {}) do
+                            if not EndpointPlumbing.isPlumbed(endpointObject) then
+                                waiting = waiting + 1
+                            end
+                        end
+                        plumbed = plumbed + math.max(waiting, 1)
                     end
                 elseif square then
                     local landed = false

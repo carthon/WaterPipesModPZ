@@ -1526,9 +1526,6 @@ local function onDestroyIsoThumpable(thump, player)
     schedulePurifierRemoval(thump, false)
 end
 
--- Fires for moveable "Pick Up" and other lua-driven removals; without it a removed pipe would stay
--- registered and its endpoints would still read as connected. Dismantling comes through here, so this
--- path hands the build material back.
 -- A vessel joining or leaving the line changes what every fixture on it can serve, and until now that
 -- only reached them on the next minute's pass -- two of them, in fact: one to notice the vessel and one
 -- to refresh the fixtures. A barrel hung on a freshly plumbed house left its taps reading empty for
@@ -1663,6 +1660,9 @@ local function onObjectAdded(object)
     end
 end
 
+-- Fires for moveable "Pick Up" and other lua-driven removals; without it a removed pipe would stay
+-- registered and its endpoints would still read as connected. Dismantling comes through here, so this
+-- path hands the build material back.
 local function onObjectAboutToBeRemoved(object)
     schedulePipeRemoval(object, true)
     schedulePurifierRemoval(object, true)
@@ -2253,8 +2253,6 @@ local function onClientCommand(module, command, player, args)
         return
     end
 
-    -- The profiler measures the SERVER's periodic work, which is the only place it happens on a
-    -- dedicated server. Admin only: it is a debug tool that costs time in every pass it measures.
     if command == "vesselChanged" then
         -- A client only sees vessels near it; a notice for a tile far from the sender is not one it saw.
         local reach = Constants.VESSEL_NOTICE_REACH
@@ -2269,6 +2267,8 @@ local function onClientCommand(module, command, player, args)
         return
     end
 
+    -- The profiler measures the SERVER's periodic work, which is the only place it happens on a
+    -- dedicated server. Admin only: it is a debug tool that costs time in every pass it measures.
     if command == "toggleProfiler" or command == "dumpProfile" then
         local level = player and player.getAccessLevel and player:getAccessLevel() or "None"
         if level == "None" or level == "" then

@@ -270,7 +270,8 @@ end
 -- ===== OnCreate (server / single-player) =====
 
 -- What a pipe's modData IS.
--- opts: surface, riser, edge, hidden, router, routerDirection, pump, drip, sprinkler, axis, clay, generated.
+-- opts: surface, riser, edge, hidden, router, routerDirection, pump, drip, sprinkler, axis, clay, generated,
+-- transmit (false for an object not on a tile yet: its modData goes with the whole object instead).
 -- Every pipe variant is stamped here, so a router / pump / drip / sprinkler is one extra modData flag.
 -- Shared with the building generator, which registers once per pass instead of once per pipe.
 function Build.stampPipeModData(thumpable, opts)
@@ -306,7 +307,7 @@ function Build.stampPipeModData(thumpable, opts)
         end
         modData[Constants.SPRINKLER_MODDATA_KEY] = opts.sprinkler and true or nil
     end
-    if thumpable.transmitModData then
+    if opts.transmit ~= false and thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)
     end
 end

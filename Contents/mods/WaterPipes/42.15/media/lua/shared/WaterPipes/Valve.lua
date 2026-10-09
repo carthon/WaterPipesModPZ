@@ -205,7 +205,6 @@ function Valve.setOpen(worldObject, open)
 
     Valve.applySprite(worldObject, open)
 
-
     local square = worldObject.getSquare and worldObject:getSquare() or nil
     if square then
         -- State.rebuildGraph decides where a network ENDS from the registry, not from the world, so the
@@ -215,7 +214,7 @@ function Valve.setOpen(worldObject, open)
             square:getX(), square:getY(), square:getZ(), open and "open" or "closed"))
         -- The registry is what State.rebuildGraph reads to decide where a network ends. If the tile has
         -- no entry the walks would cut while the graph did not, which is a split only half the mod can
-        -- see. scanContainersAroundPipes re-derives it within the minute, but say so.
+        -- see. scanContainersAroundPipes re-derives it at the next ten-minute scan, but say so.
         if not recorded then
             Logger.warn(string.format(
                 "Valve at %d:%d:%d has no pipe in the registry: the graph will not agree with the walks "

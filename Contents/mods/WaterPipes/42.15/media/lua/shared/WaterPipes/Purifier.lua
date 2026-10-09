@@ -187,8 +187,6 @@ function Purifier.getOutAmount(worldObject)
     return type(value) == "number" and math.max(value, 0) or 0
 end
 
--- Was fluid actually moving on the last server tick? Distinct from isWorking, which only says the
--- tile has electricity.
 -- ===== Inlet head =====
 -- Head (m.c.a.) the dirty side delivers to the IN tile, recorded by Purifier.step. Stored rather than
 -- solved, because the clean zone cannot solve the dirty one without cross-zone recursion.
@@ -229,6 +227,8 @@ function Purifier.passedHead(worldObject)
     return Purifier.getInletHead(worldObject) * Pressure.purifierHeadTransfer()
 end
 
+-- Was fluid actually moving on the last server tick? Distinct from isWorking, which only says the
+-- tile has electricity.
 function Purifier.isProcessing(worldObject)
     local modData = getModData(worldObject)
     return modData and modData[Constants.PURIFIER_PROCESSING_KEY] == true or false
