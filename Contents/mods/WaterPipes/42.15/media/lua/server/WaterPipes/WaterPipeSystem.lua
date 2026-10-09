@@ -1552,7 +1552,9 @@ local function processPendingVesselChanges()
             changed[#changed + 1] = square
         end
     end
-    if #changed == 0 then
+    -- lua/server runs on clients too: there, only the local caches. The registry and the fixtures are
+    -- the server's.
+    if #changed == 0 or (isClient and isClient()) then
         return
     end
 
