@@ -54,5 +54,5 @@
     "Sandbox_WaterPipes_HydrantHead": "Presión de la boca de incendios (décimas)",
     "Sandbox_WaterPipes_HydrantHead_tooltip": "Presión a la que una boca de incendios abierta y con suministro mantiene su red, en décimas de metro de columna de agua. 400 = 40.0, muy por encima de la acometida doméstica (25.0) y de los 20.0 de un aspersor, porque una boca es una toma de alto caudal del colector municipal. Abrir una mueve aspersores lejos de cualquier barril y sin bomba, hasta el día del corte; después la boca sigue dando su reserva pero sin presión. Bájalo para que las bocas sean menos una bomba gratis.",
     "Sandbox_WaterPipes_BuildingPlumbCostPerFixture": "Tuberías de metal por aparato",
-    "Sandbox_WaterPipes_BuildingPlumbCostPerFixture_tooltip": "Tuberías de metal que cuesta cada aparato al fontanear un edificio entero. 1 = una tubería por cada fregadero, inodoro o lavadora conectado, por lejos que haya que tender la línea hasta él. 0 = gratis."
+    "Sandbox_WaterPipes_BuildingPlumbCostPerFixture_tooltip": "Tuberías de metal que cuesta cada aparato al fontanear un edificio entero. 1 = una tubería por cada fregadero, inodoro o lavadora conectado, por lejos que haya que tender la línea hasta él. 0 = gratis. La tubería puesta así no devuelve nada al desmontarla."
 }

@@ -68,7 +68,7 @@
     "IGUI_WaterPipesValveClosedName": "阀门：已关闭",
     "IGUI_WaterPipesValveOpenDesc": "水可以通过。两侧属于同一个管网。",
     "IGUI_WaterPipesValveClosedDesc": "两个方向都不通。两侧是独立的管网，不共享水量、压力与污染。",
-    "IGUI_WaterPipesPlumbBuildingDesc": "从你点击的格子开始，铺设一棵隐藏管道树，连接建筑内每个水槽、马桶与洗衣机，并沿墙体上行到其他楼层。每铺一格消耗一根金属管，随施工进度扣除。已有的管道会被复用，绝不覆盖。",
+    "IGUI_WaterPipesPlumbBuildingDesc": "从你点击的格子开始，铺设一棵隐藏管道树，连接建筑内每个水槽、马桶与洗衣机，并沿墙体上行到其他楼层。每连接一个设备消耗 %1 根金属管，开工时扣除；无法到达的设备会退还。已有的管道会被复用，绝不覆盖。以此方式铺设的管道拆除时不返还任何材料。",
     "IGUI_WaterPipesPlumbBuildingNoBuilding": "你不在建筑内。",
     "IGUI_WaterPipesPlumbBuildingNoFixtures": "这里没有可布管的东西。",
     "IGUI_WaterPipesPlumbBuildingNothingToDo": "这栋建筑已经布好管了。",
@@ -84,6 +84,6 @@
     "IGUI_WaterPipesPlumbBuildingReason_overCap": "超出距离上限，请在别处再次铺设",
     "IGUI_WaterPipesPlumbBuildingRefused": "服务器已停止施工：%1。",
     "IGUI_WaterPipesPlumbBuildingRefusal_noPipes": "金属管不足",
-    "IGUI_WaterPipesPlumbBuildingRefusal_noFixtures": "这里没有需要连接的设施了",
+    "IGUI_WaterPipesPlumbBuildingRefusal_noFixtures": "这里没有需要连接的设备了",
     "IGUI_WaterPipesPlumbBuildingRefusal_badRequest": "请求无效"
 }

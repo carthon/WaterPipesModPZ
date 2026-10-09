@@ -1697,7 +1697,8 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
             ContextMenu.plumbBuilding, plumbSquare)
         local tooltip = ISWorldObjectContextMenu.addToolTip()
         tooltip:setName(getText("ContextMenu_WaterPipesPlumbBuilding"))
-        tooltip.description = getText("IGUI_WaterPipesPlumbBuildingDesc")
+        tooltip.description = getText("IGUI_WaterPipesPlumbBuildingDesc",
+            tostring(BuildingPlumbing.costPerFixture()))
         option.toolTip = tooltip
     end
 

@@ -68,7 +68,7 @@
     "IGUI_WaterPipesValveClosedName": "Válvula: cerrada",
     "IGUI_WaterPipesValveOpenDesc": "El agua pasa. Este lado y el otro son una sola red.",
     "IGUI_WaterPipesValveClosedDesc": "No pasa nada, en ningún sentido. Los dos lados son redes separadas y no comparten agua, presión ni contaminación.",
-    "IGUI_WaterPipesPlumbBuildingDesc": "Tiende un árbol de tubería oculta desde la casilla donde has hecho clic hasta cada fregadero, inodoro y lavadora del edificio, subiendo de planta por las paredes. Cuesta una tubería de metal por casilla, que se gasta según avanza el trabajo. Las tuberías que ya habías puesto se reutilizan, nunca se construye encima.",
+    "IGUI_WaterPipesPlumbBuildingDesc": "Tiende un árbol de tubería oculta desde la casilla donde has hecho clic hasta cada fregadero, inodoro y lavadora del edificio, subiendo de planta por las paredes. Cuesta %1 tubería(s) de metal por aparato conectado, que se cobran al empezar; si no llega a alguno, se te devuelve. Las tuberías que ya habías puesto se reutilizan, nunca se construye encima. La tubería puesta así no devuelve nada al desmontarla.",
     "IGUI_WaterPipesPlumbBuildingNoBuilding": "No estás dentro de un edificio.",
     "IGUI_WaterPipesPlumbBuildingNoFixtures": "Aquí no hay nada que fontanear.",
     "IGUI_WaterPipesPlumbBuildingNothingToDo": "Este edificio ya está fontaneado.",

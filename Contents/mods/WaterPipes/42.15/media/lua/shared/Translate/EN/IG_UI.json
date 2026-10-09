@@ -68,7 +68,7 @@
     "IGUI_WaterPipesValveClosedName": "Valve: closed",
     "IGUI_WaterPipesValveOpenDesc": "Water passes through. This side and the far side are one network.",
     "IGUI_WaterPipesValveClosedDesc": "Nothing passes, either way. The two sides are separate networks and share no water, pressure or contamination.",
-    "IGUI_WaterPipesPlumbBuildingDesc": "Runs a concealed pipe tree from the tile you clicked to every sink, toilet and washer in the building, climbing to other floors through the walls. Costs one metal pipe per tile laid, spent as the work goes. Pipes you already laid are reused, never built over.",
+    "IGUI_WaterPipesPlumbBuildingDesc": "Runs a concealed pipe tree from the tile you clicked to every sink, toilet and washer in the building, climbing to other floors through the walls. Costs %1 metal pipe(s) per fixture connected, taken when the work starts; a fixture it cannot reach is refunded. Pipes you already laid are reused, never built over. Pipe laid this way gives nothing back when dismantled.",
     "IGUI_WaterPipesPlumbBuildingNoBuilding": "Not inside a building.",
     "IGUI_WaterPipesPlumbBuildingNoFixtures": "Nothing here to plumb.",
     "IGUI_WaterPipesPlumbBuildingNothingToDo": "This building is already plumbed.",

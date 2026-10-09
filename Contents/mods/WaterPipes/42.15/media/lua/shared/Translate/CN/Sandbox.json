@@ -54,5 +54,5 @@
     "Sandbox_WaterPipes_HydrantHead": "消防栓压力（十分之一）",
     "Sandbox_WaterPipes_HydrantHead_tooltip": "打开且由市政供水供给的消防栓使其网络保持的压力，单位为十分之一米水柱。400 = 40.0，远高于家用市政供水（25.0）和喷洒器所需的 20.0，因为消防栓是城市干管上的大流量接口。打开一个即可在远离任何水桶且无需水泵的情况下驱动喷洒器，直到停水那天；此后消防栓仍能放出其储水，但没有压力。调低此值可让消防栓不再像一台免费水泵。",
     "Sandbox_WaterPipes_BuildingPlumbCostPerFixture": "每个洁具的金属管消耗",
-    "Sandbox_WaterPipes_BuildingPlumbCostPerFixture_tooltip": "为整栋建筑布管时，每个洁具所需的金属管数量。1 = 每连接一个水槽、马桶或洗衣机耗费一根管，无论管路要铺多远。0 = 免费。"
+    "Sandbox_WaterPipes_BuildingPlumbCostPerFixture_tooltip": "为整栋建筑布管时，每个洁具所需的金属管数量。1 = 每连接一个水槽、马桶或洗衣机耗费一根管，无论管路要铺多远。0 = 免费。以此方式铺设的管道拆除时不返还任何材料。"
 }

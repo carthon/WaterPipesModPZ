@@ -54,5 +54,5 @@
     "Sandbox_WaterPipes_HydrantHead": "Fire hydrant pressure (tenths)",
     "Sandbox_WaterPipes_HydrantHead_tooltip": "Pressure an open, mains-fed fire hydrant holds its network at, in tenths of a metre of water column. 400 = 40.0, well above the household mains (25.0) and a sprinkler's 20.0, because a hydrant is a high-flow tap on the town main. Opening one runs sprinklers far from any barrel with no pump, right up to the day the water is cut, after which the hydrant still yields its reserve but with no pressure. Lower it to make hydrants less of a free pump.",
     "Sandbox_WaterPipes_BuildingPlumbCostPerFixture": "Metal pipe per fixture",
-    "Sandbox_WaterPipes_BuildingPlumbCostPerFixture_tooltip": "Metal pipes each fixture costs when plumbing a whole building. 1 = one pipe per sink, toilet or washer connected, however far the pipe has to run to reach it. 0 = free."
+    "Sandbox_WaterPipes_BuildingPlumbCostPerFixture_tooltip": "Metal pipes each fixture costs when plumbing a whole building. 1 = one pipe per sink, toilet or washer connected, however far the pipe has to run to reach it. 0 = free. Pipe laid this way gives nothing back when dismantled."
 }
