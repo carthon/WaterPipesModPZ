@@ -132,6 +132,11 @@ function Valve.setLocalState(worldObject, open)
         modData[Constants.VALVE_CLOSED_KEY] = (not open) and true or nil
     end
     Valve.applySprite(worldObject, open)
+    -- This side's walks and head field were priced on the old state.
+    local square = worldObject and worldObject.getSquare and worldObject:getSquare() or nil
+    if square then
+        Invalidate.squareChanged(square)
+    end
 end
 
 -- Every valve on the tile drawn the way its own state says. This is how a flip made elsewhere reaches
@@ -166,6 +171,14 @@ function Valve.reconcileOnSquare(square)
         Logger.warn(string.format("%d valves on the tile at %d:%d:%d -- only one of them can be the "
             .. "real one. Reconnecting rebuilds the tile from the server.",
             found, square:getX(), square:getY(), square:getZ()))
+    end
+
+    -- A redrawn handle is a state this side's caches never heard of; so is a valve the scan memo
+    -- missed (its modData arrived after the object did).
+    local Utils = WaterPipes.PipeObjectUtils
+    if corrected > 0 or (found > 0 and Utils and Utils.squareHasNoValve
+        and Utils.squareHasNoValve(square, true)) then
+        Invalidate.squareChanged(square)
     end
     return corrected
 end
