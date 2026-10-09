@@ -29,6 +29,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, os.pardir, os.pardir))
 SHARED = "Contents/mods/WaterPipes/42.15/media/lua/shared/WaterPipes"
+SERVER = "Contents/mods/WaterPipes/42.15/media/lua/server/WaterPipes"
 COMMON = "Contents/mods/WaterPipes/common/media/lua/shared/WaterPipes"
 SCRIPTS = "Contents/mods/WaterPipes/42.15/media/scripts"
 TESTS_DIR = os.path.join(REPO, "tools", "conservation")
@@ -96,7 +97,7 @@ def extract(rev, path, into, suffix=".lua", flatten=True):
     return count
 
 
-def run_test(name, env_root=None, env_common=None, env_scripts=None):
+def run_test(name, env_root=None, env_common=None, env_scripts=None, env_server=None):
     env = dict(os.environ)
     if env_root:
         env["WP_LUA_ROOT"] = env_root
@@ -107,10 +108,14 @@ def run_test(name, env_root=None, env_common=None, env_scripts=None):
         # modules, and a fix that edits only a recipe is invisible to a baseline that keeps
         # serving today's copy -- it would report itself as carried-forward coverage.
         env["WP_SCRIPTS_ROOT"] = env_scripts or ""
+        # And the server tree: WaterPipeSystem lives there, and a fix to it is invisible to a
+        # baseline that keeps loading today's copy.
+        env["WP_LUA_SERVER"] = env_server or ""
     else:
         env.pop("WP_LUA_ROOT", None)
         env.pop("WP_LUA_COMMON", None)
         env.pop("WP_SCRIPTS_ROOT", None)
+        env.pop("WP_LUA_SERVER", None)
     try:
         done = subprocess.run(["lua", name], cwd=TESTS_DIR, capture_output=True,
                               text=True, encoding="utf-8", errors="replace",
@@ -179,7 +184,9 @@ def main():
         root = os.path.join(workdir, "shared")
         common = os.path.join(workdir, "common")
         scripts = os.path.join(workdir, "scripts")
+        server = os.path.join(workdir, "server")
         n = extract(baseline, SHARED, root)
+        extract(baseline, SERVER, server)
         extract(baseline, COMMON, common)
         extract(baseline, SCRIPTS, scripts, suffix=".txt", flatten=False)
         if n == 0:
@@ -189,7 +196,7 @@ def main():
         print("-- and it must FAIL against the previous release --")
         proves, carried = [], []
         for name in tests:
-            ok, detail = run_test(name, root + os.sep, common + os.sep, scripts + os.sep)
+            ok, detail = run_test(name, root + os.sep, common + os.sep, scripts + os.sep, server + os.sep)
             if ok:
                 carried.append(name)
                 print("  %-28s passes there too   (carried forward)" % name)
