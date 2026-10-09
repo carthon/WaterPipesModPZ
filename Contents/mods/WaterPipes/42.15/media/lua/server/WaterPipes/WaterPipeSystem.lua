@@ -1594,9 +1594,20 @@ end
 -- A timed action finished on this tile. If it changed which objects there hold fluid -- an object made
 -- a vessel in place raises no event at all -- the network hears it as it would a vessel set down.
 function System.recheckVesselsAt(square)
-    if square and PipeObjectUtils.getPipeOnSquare(square) and Adapter.reclassifySquare(square) then
-        scheduleVesselChange(square)
+    if not (square and PipeObjectUtils.getPipeOnSquare(square) and Adapter.reclassifySquare(square)) then
+        return
     end
+    -- An action finished on a client changes the server's world without any event the server hears.
+    if isClient and isClient() then
+        Invalidate.squareChanged(square)
+        local player = getPlayer and getPlayer() or nil
+        if player and sendClientCommand then
+            sendClientCommand(player, "WaterPipes", "vesselChanged",
+                { x = square:getX(), y = square:getY(), z = square:getZ() })
+        end
+        return
+    end
+    scheduleVesselChange(square)
 end
 
 -- Asked while the object still exists: on a removal there is nothing left to ask a tick later.
