@@ -272,6 +272,12 @@ where the ones covering this cycle's fixes must **fail**. It sorts them into:
 
 - **proves a fix** -- fails on the old build. The test would have caught the bug.
 - **carried forward** -- passes on both. Real coverage, but it earned no trust this cycle.
+- **breaks on load** -- dies on the old build with no failing check (a missing module or
+  function). Not a demonstration: what it tests may simply not exist there.
+
+A test that documents a known, unfixed problem carries `-- OPEN: <reason>` in its header.
+It still runs and is listed, red on purpose, but does not block; if it turns green the gate
+says so, because the problem looks fixed and the marker should go.
 
 If a release claims to fix something and nothing fails against the last one, the fix has no
 test behind it. That is the signal the gate exists to produce.
