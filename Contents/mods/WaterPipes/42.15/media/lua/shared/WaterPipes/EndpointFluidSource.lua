@@ -301,7 +301,13 @@ local function writeSnapshot(endpoint, amount, fluidTypeName, networkCapacity)
     if not endpoint or not endpoint.addFluid or not endpoint.emptyFluid then
         return false
     end
-    if ownCapacity(endpoint) <= 0 and not attachTank(endpoint, networkCapacity) then
+    -- An empty-sized tank already there is the one we attached and shrank on unplumb: reuse it, since
+    -- attaching a second component is what duplicates a fixture.
+    local tankModData = getModData(endpoint)
+    if ownCapacity(endpoint) <= 0 and tankModData and getFluidContainer(endpoint) then
+        tankModData[OUR_TANK_KEY] = true
+    end
+    if ownCapacity(endpoint) <= 0 and not hasOurTank(endpoint) and not attachTank(endpoint, networkCapacity) then
         warnNoTank(endpoint)
         return false
     end
@@ -508,11 +514,15 @@ function FluidSource.restoreOriginalState(endpoint)
 
     local modData = getModData(endpoint)
     local state = modData and modData[Constants.ENDPOINT_ORIGINAL_FLUID_KEY] or nil
+    local ours = hasOurTank(endpoint)
 
-    -- The water it held before we took it over. Its capacity was never ours to change, so there is
-    -- nothing to put back but the litres.
+    -- The water it held before we took it over. A fixture's own tank keeps its capacity; a tank we
+    -- attached was sized to the network, so it goes back to what the fixture held: nothing, mostly.
     writeFluid(endpoint, state and state.amount or 0, state and state.fluidType or nil)
     local fluidContainer = getFluidContainer(endpoint)
+    if ours and fluidContainer and fluidContainer.setCapacity then
+        pcall(fluidContainer.setCapacity, fluidContainer, math.max(state and state.capacity or 0, 0))
+    end
     if fluidContainer and fluidContainer.setInputLocked then
         pcall(fluidContainer.setInputLocked, fluidContainer, (state and state.inputLocked) and true or false)
     end
@@ -520,8 +530,12 @@ function FluidSource.restoreOriginalState(endpoint)
     -- Restore the pre-plumb water-source flags. canBeWaterPiped governs the engine's infinite
     -- city-mains water: leaving it nil/false makes the fixture an infinite tap again (if the water
     -- service is on), which is exactly the pre-plumb behaviour we want back.
+    -- Cleared before the transmit, so the clients forget the mirror too.
     if modData then
         modData.canBeWaterPiped = state and state.canBeWaterPiped
+        modData[Constants.ENDPOINT_ORIGINAL_FLUID_KEY] = nil
+        modData[OUR_TANK_KEY] = nil
+        modData[MIRROR_KEY] = nil
     end
     if endpoint.setUsesExternalWaterSource then
         pcall(endpoint.setUsesExternalWaterSource, endpoint, (state and state.usesExternalWaterSource) and true or false)
@@ -533,9 +547,6 @@ function FluidSource.restoreOriginalState(endpoint)
         pcall(endpoint.sync, endpoint)
     end
 
-    if modData then
-        modData[Constants.ENDPOINT_ORIGINAL_FLUID_KEY] = nil
-    end
     setLastSync(endpoint, 0)
 end
 
@@ -543,6 +554,11 @@ end
 function FluidSource.clearForEndpoint(endpoint)
     if not isAuthoritative() or not endpoint then
         return
+    end
+
+    local modData = getModData(endpoint)
+    if modData then
+        modData[MIRROR_KEY] = nil
     end
 
     local fluidContainer = getFluidContainer(endpoint)
