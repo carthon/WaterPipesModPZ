@@ -307,6 +307,21 @@ local function writeSnapshot(endpoint, amount, fluidTypeName, networkCapacity)
     if ownCapacity(endpoint) <= 0 and tankModData and getFluidContainer(endpoint) then
         tankModData[OUR_TANK_KEY] = true
     end
+    -- Plumbed before the ownership mark existed: the tank on a fixture that held nothing is ours, and a
+    -- fixture's own tank left at another size gets its own back. Done the first time each is touched.
+    local original = tankModData and tankModData[Constants.ENDPOINT_ORIGINAL_FLUID_KEY]
+    if type(original) == "table" and not tankModData[OUR_TANK_KEY] then
+        local was = tonumber(original.capacity) or 0
+        local tank = getFluidContainer(endpoint)
+        if was <= 0 and tank then
+            tankModData[OUR_TANK_KEY] = true
+        elseif was > 0 and tank and tank.setCapacity
+            and math.abs(ownCapacity(endpoint) - was) > CONSUME_EPSILON then
+            Logger.log(("EndpointFluidSource: %s tank restored %.0f -> %.0f L (plumbed by an older version)")
+                :format(describeObject(endpoint), ownCapacity(endpoint), was))
+            pcall(tank.setCapacity, tank, was)
+        end
+    end
     if ownCapacity(endpoint) <= 0 and not hasOurTank(endpoint) and not attachTank(endpoint, networkCapacity) then
         warnNoTank(endpoint)
         return false
