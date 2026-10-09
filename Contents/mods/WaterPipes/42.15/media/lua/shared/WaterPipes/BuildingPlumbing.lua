@@ -864,15 +864,19 @@ function BuildingPlumbing.plumbFixtures(plan, player, laid)
                         plumbed = plumbed + 1
                     end
                 elseif square then
+                    local landed = false
                     for _, endpointObject in ipairs(EndpointObjectsModule.collectOnSquare(square)) do
-                        if not EndpointPlumbing.isPlumbed(endpointObject) then
-                            EndpointPlumbing.plumb(endpointObject)
+                        if not EndpointPlumbing.isPlumbed(endpointObject)
+                            and EndpointPlumbing.plumb(endpointObject) == true then
                             plumbed = plumbed + 1
+                            landed = true
                         end
                     end
                     -- Single player books the fixture against the pass itself; in multiplayer the
-                    -- command handler does it, so a refused plumb is never booked as one that landed.
-                    BuildingPlumbing.notePaidFixture(player, fixture.x, fixture.y, fixture.z)
+                    -- command handler does. Either way only one that connected is booked.
+                    if landed then
+                        BuildingPlumbing.notePaidFixture(player, fixture.x, fixture.y, fixture.z)
+                    end
                 end
             end
         end

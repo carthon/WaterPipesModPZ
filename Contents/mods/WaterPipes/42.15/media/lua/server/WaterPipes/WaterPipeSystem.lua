@@ -2011,16 +2011,18 @@ local function onClientCommand(module, command, player, args)
             return
         end
         local wanted = command ~= "unplumbEndpoint"
+        local landed = false
         for _, endpoint in ipairs(endpoints) do
             if EndpointPlumbing.isPlumbed(endpoint) ~= wanted then
                 if wanted then
-                    EndpointPlumbing.plumb(endpoint)
+                    landed = EndpointPlumbing.plumb(endpoint) == true or landed
                 else
                     EndpointPlumbing.unplumb(endpoint)
                 end
             end
         end
-        if command == "plumbEndpointsOnSquare" then
+        -- Booked only when something connected: a refused fixture is refunded when the pass closes.
+        if command == "plumbEndpointsOnSquare" and landed then
             BuildingPlumbing.notePaidFixture(player, args.x, args.y, args.z)
         end
         return
