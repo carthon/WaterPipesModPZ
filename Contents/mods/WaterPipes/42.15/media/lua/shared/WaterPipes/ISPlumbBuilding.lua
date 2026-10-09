@@ -29,7 +29,7 @@ function ISPlumbBuilding:isValidStart()
 end
 
 function ISPlumbBuilding:isValid()
-    return self.plan ~= nil and #self.plan.placements > 0
+    return BuildingPlumbing.hasWork(self.plan)
 end
 
 function ISPlumbBuilding:update()

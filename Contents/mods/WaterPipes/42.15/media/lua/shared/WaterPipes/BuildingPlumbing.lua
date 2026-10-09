@@ -567,6 +567,11 @@ function BuildingPlumbing.plan(origin, probe, opts)
     return plan
 end
 
+-- Whether a pass has anything to do: pipe to lay, or a fixture already on pipe that is not connected.
+function BuildingPlumbing.hasWork(plan)
+    return plan ~= nil and (#(plan.placements or {}) > 0 or #(plan.connected or {}) > 0)
+end
+
 -- ===== The world-facing half =====
 -- Everything above is pure. This builds the probe it reads, and it is the only part that touches PZ.
 

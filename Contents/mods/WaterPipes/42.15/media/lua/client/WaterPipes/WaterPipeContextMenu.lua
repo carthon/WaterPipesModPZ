@@ -1279,10 +1279,11 @@ function ContextMenu.plumbBuilding(playerObj, square)
         halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingTruncated"), "bad")
     end
 
-    if #plan.placements == 0 then
+    -- A fixture on pipe already laid but not connected is work too, with nothing to lay.
+    if not BuildingPlumbing.hasWork(plan) then
         if #plan.skipped > 0 then
             reportPlumbing(playerObj, plan, nil)
-        elseif #plan.connected > 0 or #(plan.alreadyConnected or {}) > 0 then
+        elseif #(plan.alreadyConnected or {}) > 0 then
             halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingNothingToDo"))
         else
             halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingNoFixtures"), "bad")
