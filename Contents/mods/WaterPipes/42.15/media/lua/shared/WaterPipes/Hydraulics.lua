@@ -229,7 +229,8 @@ local function discover(seedSquare)
         adjacency[key] = adjacency[key] or {}
 
         local function consider(neighbourSquare)
-            if not neighbourSquare then
+            -- The pipe test first: it is memoised, and most neighbours fail it. A router is a pipe too.
+            if not neighbourSquare or not hasPipeOnSquare(neighbourSquare) then
                 return
             end
             -- A closed shut-off valve carries no head across: the neighbour is simply not reachable.
@@ -281,9 +282,6 @@ local function discover(seedSquare)
                     z = rz,
                     ceiling = Router.getPressureCeiling(router),
                 }
-                return
-            end
-            if not hasPipeOnSquare(neighbourSquare) then
                 return
             end
             link(key, push(neighbourSquare))

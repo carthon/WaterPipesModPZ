@@ -79,7 +79,13 @@ function Valve.hasValveOnSquare(square)
 end
 
 -- The one predicate every topology walk asks. A square with no valve, or with an open one, conducts.
+-- PipeObjectUtils' scan memo already knows the tiles with no valve, so those cost nothing. Read off the
+-- table: it is not required here. A valve it missed reads as open, which a new valve is.
 function Valve.isClosedOnSquare(square)
+    local Utils = WaterPipes.PipeObjectUtils
+    if Utils and Utils.squareHasNoValve and Utils.squareHasNoValve(square) then
+        return false
+    end
     local valve = Valve.findOnSquare(square)
     return valve ~= nil and not Valve.isOpen(valve)
 end

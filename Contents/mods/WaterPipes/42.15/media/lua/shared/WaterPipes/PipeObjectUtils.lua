@@ -106,6 +106,10 @@ end
 -- It used to be dropped once per frame as well, and that clear undid the invalidation above it: this
 -- scan is what classify() calls for every one of the 1 681 tiles the client registry sweeps.
 local scanMemo = {}
+-- Tiles the same scan found no valve on, for the closed-valve check every walk asks. Only the ABSENCE
+-- is kept: a removal event fires while the object is still on the tile, so a remembered valve could be
+-- a dead one. A valve the scan did not see reads as open, which is what a new one is.
+local valveFree = {}
 
 local function memoKey(square)
     return tostring(square:getX()) .. ":" .. tostring(square:getY()) .. ":" .. tostring(square:getZ())
@@ -113,6 +117,7 @@ end
 
 function PipeObjectUtils.invalidateScanCache()
     scanMemo = {}
+    valveFree = {}
 end
 
 -- Recompute ONE tile and compare it against what was remembered. True when they agree.
@@ -149,8 +154,21 @@ end
 
 function PipeObjectUtils.invalidateSquareScan(square)
     if square and square.getX then
-        scanMemo[memoKey(square)] = nil
+        local key = memoKey(square)
+        scanMemo[key] = nil
+        valveFree[key] = nil
     end
+end
+
+-- True only when the memoised scan saw no valve on the tile. `peek` answers from the memo alone.
+function PipeObjectUtils.squareHasNoValve(square, peek)
+    if not square or not square.getObjects then
+        return false
+    end
+    if not peek then
+        PipeObjectUtils.getPipeObjectsOnSquare(square)
+    end
+    return valveFree[memoKey(square)] == true
 end
 
 -- The returned table is SHARED between callers and must be treated as READ-ONLY. Not returning a
@@ -165,14 +183,23 @@ function PipeObjectUtils.getPipeObjectsOnSquare(square, excludeObject)
     local cached = scanMemo[key]
     if not cached then
         cached = {}
+        local sawValve = false
         local objects = square:getObjects()
         for index = 0, objects:size() - 1 do
             local worldObject = objects:get(index)
-            if PipeObjectUtils.isPipeObject(worldObject) then
-                cached[#cached + 1] = worldObject
+            -- isPipeObject inlined, so the valve test reuses its one modData read.
+            if instanceof and instanceof(worldObject, "IsoThumpable") then
+                local modData = getPipeModData(worldObject)
+                if (modData and modData[Constants.PIPE_MODDATA_KEY])
+                    or (worldObject.getName and worldObject:getName() == Constants.PIPE_OBJECT_NAME) then
+                    cached[#cached + 1] = worldObject
+                elseif modData and modData[Constants.VALVE_MODDATA_KEY] == true then
+                    sawValve = true
+                end
             end
         end
         scanMemo[key] = cached
+        valveFree[key] = not sawValve or nil
     end
 
     if not excludeObject then

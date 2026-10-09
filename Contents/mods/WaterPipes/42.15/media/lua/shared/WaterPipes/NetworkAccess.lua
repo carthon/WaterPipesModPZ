@@ -164,14 +164,17 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
     local outletSeen = {}
 
     local function tryAdd(square, distance)
-        -- A closed shut-off valve is a wall, not a boundary to be crossed: unlike a router there is
-        -- nothing on the far side a draw may reach through.
-        if not square or not hasPipeOnSquare(square) or Router.hasRouterOnSquare(square)
-            or Valve.isClosedOnSquare(square) then
+        if not square or not hasPipeOnSquare(square) or Router.hasRouterOnSquare(square) then
             return
         end
 
         if not addSquare(visited, square) then
+            return
+        end
+
+        -- A closed shut-off valve is a wall, not a boundary to be crossed: unlike a router there is
+        -- nothing on the far side a draw may reach through. Asked once per tile, after `visited`.
+        if Valve.isClosedOnSquare(square) then
             return
         end
 
@@ -293,9 +296,7 @@ local function collectPipeSquaresFromSquare(originSquare, verticalMode, conduct)
         if not square then
             return
         end
-        if Valve.isClosedOnSquare(square) then
-            return
-        end
+        -- No valve check here: a valve never sits on a router, and tryAdd asks it.
         if Router.hasRouterOnSquare(square) then
             tryCrossRouter(square, fromX, fromY, fromZ, distance)
             return

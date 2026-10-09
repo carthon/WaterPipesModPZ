@@ -65,7 +65,7 @@ def total_lua():
 class Obj:
     __slots__ = ("pipe", "router", "pump", "riser", "container", "endpoint",
                  "hydrant", "purifier", "drip", "sprinkler", "well", "plumbed",
-                 "mains_fixture")
+                 "mains_fixture", "valve")
 
     def __init__(self, **kw):
         for s in self.__slots__:
@@ -126,6 +126,9 @@ def isPipeObject(o):
 # LoadGridsquare, and explicitly whenever the layout changes. frame_reset() below is
 # the frame boundary, and what remains under it is only what genuinely holds fluid.
 PIPE_SCAN_MEMO = {}
+# Tiles the same scan found no valve on (PipeObjectUtils.squareHasNoValve). Only the
+# absence is kept, so a tile WITH a valve still pays a live scan per check.
+VALVE_FREE_MEMO = {}
 TRAVERSAL_CACHE = {}
 # ContainerAdapter's vessel memo: which objects on a square are network storage, and
 # their capacity. Same one-frame lifetime and the same invalidation events. Only the
@@ -175,11 +178,16 @@ def getPipeObjectsOnSquare(sq):
         return hit
     bc("getObjects", 1)
     out = []
+    saw_valve = False
     for o in sq.objects:
         bc("getObjects", 1)             # objects:get(i)
         if isPipeObject(o):
             out.append(o)
+        elif o.valve:
+            saw_valve = True            # the same modData read isPipeObject made
     PIPE_SCAN_MEMO[k] = out
+    if not saw_valve:
+        VALVE_FREE_MEMO[k] = True
     return out
 
 
@@ -349,6 +357,21 @@ def Router_hasRouterOnSquare(sq):
     return Router_findOnSquare(sq) is not None
 
 
+def Valve_isClosedOnSquare(sq):
+    """Every walk asks it of every tile it adds. Free on a tile the scan memo knows
+    holds no valve; a full object scan otherwise."""
+    CALLS["Valve.isClosedOnSquare"] += 1
+    if sq is None:
+        return False
+    getPipeObjectsOnSquare(sq)
+    if VALVE_FREE_MEMO.get((sq.x, sq.y, sq.z)):
+        return False
+    v = findOnSquare_generic(sq, "valve", 1)
+    if v is not None:
+        bc("getModData", 1)            # Valve.isOpen
+    return False
+
+
 def Pump_findOnSquare(sq):
     CALLS["Pump.findOnSquare"] += 1
     for o in getPipeObjectsOnSquare(sq):
@@ -465,6 +488,8 @@ def collectPipeSquaresFromSquare(origin, conduct=False):
         if k in visited:
             return
         visited.add(k)
+        if Valve_isClosedOnSquare(sq):           # after visited: once per tile
+            return
         queue.append(sq)
         hops[k] = dist
         pipe_squares.append(sq)
@@ -636,6 +661,8 @@ def hydraulics_discover(seed):
             return
         if getPipeOnSquare(sq) is None:          # hasPipeOnSquare -> full pipe scan
             return
+        if Valve_isClosedOnSquare(sq):
+            return
         k = (sq.x, sq.y, sq.z)
         if k not in seen:
             seen.add(k)
@@ -800,6 +827,7 @@ class Scenario:
         # hid this; once they legitimately started outliving a frame, a scenario
         # inherited the previous one's answers and the numbers became fiction.
         PIPE_SCAN_MEMO.clear()
+        VALVE_FREE_MEMO.clear()
         VESSEL_MEMO.clear()
         ZONE_VESSEL_MEMO.clear()
         TRAVERSAL_CACHE.clear()
@@ -1266,6 +1294,7 @@ def cold():
     before it; that invariant is asserted in test_model.py, and this is what makes it
     true."""
     PIPE_SCAN_MEMO.clear()
+    VALVE_FREE_MEMO.clear()
     VESSEL_MEMO.clear()
     ZONE_VESSEL_MEMO.clear()
     TRAVERSAL_CACHE.clear()
