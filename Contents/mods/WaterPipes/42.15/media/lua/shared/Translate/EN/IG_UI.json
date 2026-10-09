@@ -81,5 +81,9 @@
     "IGUI_WaterPipesPlumbBuildingReason_noRoute": "no route from here",
     "IGUI_WaterPipesPlumbBuildingReason_noClimb": "no wall to reach its floor",
     "IGUI_WaterPipesPlumbBuildingReason_wouldLoop": "connecting it would close a loop",
-    "IGUI_WaterPipesPlumbBuildingReason_overCap": "over the distance limit, build again from another spot"
+    "IGUI_WaterPipesPlumbBuildingReason_overCap": "over the distance limit, build again from another spot",
+    "IGUI_WaterPipesPlumbBuildingRefused": "The server stopped the work: %1.",
+    "IGUI_WaterPipesPlumbBuildingRefusal_noPipes": "not enough metal pipes",
+    "IGUI_WaterPipesPlumbBuildingRefusal_noFixtures": "no fixture here left to connect",
+    "IGUI_WaterPipesPlumbBuildingRefusal_badRequest": "the request was not valid"
 }

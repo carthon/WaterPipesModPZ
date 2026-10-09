@@ -81,5 +81,9 @@
     "IGUI_WaterPipesPlumbBuildingReason_noRoute": "no hay ruta desde aquí",
     "IGUI_WaterPipesPlumbBuildingReason_noClimb": "no hay pared para llegar a su planta",
     "IGUI_WaterPipesPlumbBuildingReason_wouldLoop": "conectarlo cerraría un anillo",
-    "IGUI_WaterPipesPlumbBuildingReason_overCap": "supera el límite de distancia, vuelve a construir en otro punto"
+    "IGUI_WaterPipesPlumbBuildingReason_overCap": "supera el límite de distancia, vuelve a construir en otro punto",
+    "IGUI_WaterPipesPlumbBuildingRefused": "El servidor ha detenido el trabajo: %1.",
+    "IGUI_WaterPipesPlumbBuildingRefusal_noPipes": "no hay tuberías de metal suficientes",
+    "IGUI_WaterPipesPlumbBuildingRefusal_noFixtures": "aquí no queda ningún aparato por conectar",
+    "IGUI_WaterPipesPlumbBuildingRefusal_badRequest": "la petición no era válida"
 }

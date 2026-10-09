@@ -81,5 +81,9 @@
     "IGUI_WaterPipesPlumbBuildingReason_noRoute": "从这里无法接通",
     "IGUI_WaterPipesPlumbBuildingReason_noClimb": "没有可通往该楼层的墙",
     "IGUI_WaterPipesPlumbBuildingReason_wouldLoop": "接通会形成环路",
-    "IGUI_WaterPipesPlumbBuildingReason_overCap": "超出距离上限，请在别处再次铺设"
+    "IGUI_WaterPipesPlumbBuildingReason_overCap": "超出距离上限，请在别处再次铺设",
+    "IGUI_WaterPipesPlumbBuildingRefused": "服务器已停止施工：%1。",
+    "IGUI_WaterPipesPlumbBuildingRefusal_noPipes": "金属管不足",
+    "IGUI_WaterPipesPlumbBuildingRefusal_noFixtures": "这里没有需要连接的设施了",
+    "IGUI_WaterPipesPlumbBuildingRefusal_badRequest": "请求无效"
 }

@@ -2106,6 +2106,8 @@ local function onClientCommand(module, command, player, args)
         local charged, reason = BuildingPlumbing.beginPaidPass(args, player)
         if not charged then
             Logger.warn("Begin building plumbing: refused (" .. tostring(reason) .. ")")
+            -- The client stops and connects nothing; until told, it reports a plumbed house.
+            sendServerCommand(player, "WaterPipes", "buildingPlumbingRefused", { reason = tostring(reason) })
         end
         return
     end
@@ -2116,6 +2118,11 @@ local function onClientCommand(module, command, player, args)
             Logger.warn("Place building pipe: refused at "
                 .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":"
                 .. tostring(args and args.z) .. " (" .. tostring(reason) .. ")")
+            -- A tile that already has its pipe still serves the fixture behind it.
+            if reason ~= "alreadyPiped" and type(args) == "table" then
+                sendServerCommand(player, "WaterPipes", "buildingPipeRefused",
+                    { x = args.x, y = args.y, z = args.z, reason = tostring(reason) })
+            end
         end
         return
     end

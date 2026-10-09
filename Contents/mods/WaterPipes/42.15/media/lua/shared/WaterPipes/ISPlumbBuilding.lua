@@ -92,6 +92,8 @@ function ISPlumbBuilding:start()
         fixtures[#fixtures + 1] = { x = fixture.x, y = fixture.y, z = fixture.z }
     end
     if isClient and isClient() then
+        -- The server answers a refusal with a command; this is the action it lands on.
+        ISPlumbBuilding.current = self
         sendClientCommand(self.character, "WaterPipes", "beginBuildingPlumbing", { fixtures = fixtures })
     else
         BuildingPlumbing.beginPaidPass({ fixtures = fixtures }, self.character)
@@ -111,8 +113,14 @@ function ISPlumbBuilding:settle()
         return
     end
     self.settled = true
+    if ISPlumbBuilding.current == self then
+        ISPlumbBuilding.current = nil
+    end
     BuildingPlumbing.finish(self.laid, self.character)
-    self.plumbed = BuildingPlumbing.plumbFixtures(self.plan, self.character, self.laid)
+    -- A refused pass laid nothing and paid for nothing, so there is nothing to connect.
+    if not self.refused then
+        self.plumbed = BuildingPlumbing.plumbFixtures(self.plan, self.character, self.laid)
+    end
     if isClient and isClient() then
         sendClientCommand(self.character, "WaterPipes", "endBuildingPlumbing", {})
     else
@@ -135,6 +143,38 @@ function ISPlumbBuilding:perform()
         self.onFinished(self)
     end
     ISBaseTimedAction.perform(self)
+end
+
+-- The server refused the pass, or one tile of it. Multiplayer only: the client sent requests and
+-- counted them as laid, and this is how it learns otherwise.
+function ISPlumbBuilding.onServerRefusal(command, args)
+    local action = ISPlumbBuilding.current
+    args = type(args) == "table" and args or {}
+    if command == "buildingPlumbingRefused" then
+        if action and not action.settled then
+            action.refused = args.reason or "?"
+            if HaloTextHelper and HaloTextHelper.addBadText then
+                local reason = getTextOrNull
+                    and getTextOrNull("IGUI_WaterPipesPlumbBuildingRefusal_" .. tostring(args.reason))
+                    or tostring(args.reason)
+                HaloTextHelper.addBadText(action.character,
+                    getText("IGUI_WaterPipesPlumbBuildingRefused", reason))
+            end
+            Logger.warn("Building plumbing: the server refused the pass (" .. tostring(args.reason) .. ")")
+            if action.forceStop then
+                action:forceStop()
+            else
+                action:stop()
+            end
+        end
+    elseif command == "buildingPipeRefused" and action and not action.settled then
+        for index = #action.laid, 1, -1 do
+            local p = action.laid[index]
+            if p.x == args.x and p.y == args.y and p.z == args.z then
+                table.remove(action.laid, index)
+            end
+        end
+    end
 end
 
 function ISPlumbBuilding:new(character, plan, onFinished)

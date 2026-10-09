@@ -1005,6 +1005,13 @@ local function onServerCommand(module, command, args)
         return
     end
 
+    if command == "buildingPlumbingRefused" or command == "buildingPipeRefused" then
+        if ISPlumbBuilding and ISPlumbBuilding.onServerRefusal then
+            ISPlumbBuilding.onServerRefusal(command, args)
+        end
+        return
+    end
+
     local playerObj = getPlayer()
     if not playerObj or not HaloTextHelper then
         return
