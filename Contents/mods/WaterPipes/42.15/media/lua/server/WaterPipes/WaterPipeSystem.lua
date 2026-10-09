@@ -1136,6 +1136,11 @@ local function fittingReturnsFor(object)
 end
 
 local function takeDownFittingsOn(square, returnsMaterial)
+    -- The server removes and tells the clients. A client removing too makes the server's packet,
+    -- which names the object by index, take whatever slid into that index.
+    if isClient and isClient() then
+        return
+    end
     if not square or not square.getObjects then
         return
     end
@@ -1154,18 +1159,13 @@ local function takeDownFittingsOn(square, returnsMaterial)
 
     for _, entry in ipairs(doomed) do
         fittingsComingDown[entry.object] = true
-        -- Mirrors what vanilla's own scrap does, so a dedicated server and its clients agree.
-        if isClient and isClient() then
-            pcall(square.transmitRemoveItemFromSquare, square, entry.object)
-        end
         if isServer and isServer() then
             pcall(square.transmitRemoveItemFromSquareOnClients, square, entry.object)
         end
         pcall(square.RemoveTileObject, square, entry.object)
         fittingsComingDown[entry.object] = nil
 
-        -- ONE side pays, on the same rule as the pipe drops above.
-        if returnsMaterial and not (isClient and isClient()) then
+        if returnsMaterial then
             for _, itemType in ipairs(entry.returns) do
                 if ZombRand and ZombRand(100) < DISMANTLE_RETURN_CHANCE then
                     pcall(square.AddWorldInventoryItem, square, itemType, 0.5, 0.5, 0.0)
@@ -1192,10 +1192,8 @@ local function processPendingPipeRemovals()
     -- Material returns first, one per dismantled OBJECT: a cancelled removal drops nothing, and a
     -- multi-pipe square pays for exactly the pipe that was taken down.
     --
-    -- ONE side pays. A co-op host runs a client Lua state and a server Lua state over the SAME world, so
-    -- this file is loaded twice, both states saw the removal and both spawned a pipe -- two items for one
-    -- dismantle. A dedicated server's clients never load lua/server, which is why only the host saw it.
-    -- The server side pays; SP is neither client nor server and pays as before.
+    -- ONE side pays. lua/server is loaded on multiplayer clients too, so every client saw the removal and
+    -- would spawn its own pipe. The server side pays; SP is neither client nor server and pays as before.
     if isClient and isClient() then
         drops = {}
     end
@@ -1311,6 +1309,10 @@ end
 
 -- Take every tank quadrant off a square. Returns how many went.
 local function removeTankPartsOn(square)
+    -- Server-side only, for the same reason as takeDownFittingsOn.
+    if isClient and isClient() then
+        return 0
+    end
     if not square or not square.getObjects then
         return 0
     end
@@ -1323,10 +1325,6 @@ local function removeTankPartsOn(square)
         end
     end
     for _, object in ipairs(doomed) do
-        -- Mirrors what vanilla's own scrap does, so a dedicated server and its clients agree.
-        if isClient and isClient() then
-            pcall(square.transmitRemoveItemFromSquare, square, object)
-        end
         if isServer and isServer() then
             pcall(square.transmitRemoveItemFromSquareOnClients, square, object)
         end
