@@ -1002,12 +1002,14 @@ end
 
 local passes = {}   -- player key -> { unit, owed = {squareKey -> true}, plumbed = {squareKey -> true} }
 
+-- By username: the online ID changes between sessions, and a pass outlives the session it opened in.
 local function playerKey(player)
-    local ok, id = pcall(player.getOnlineID, player)
-    if ok and id ~= nil then
-        return id
+    local okName, name = pcall(player.getUsername, player)
+    if okName and name ~= nil and name ~= "" then
+        return name
     end
-    return player.getUsername and player:getUsername() or "?"
+    local ok, id = pcall(player.getOnlineID, player)
+    return ok and id ~= nil and id or "?"
 end
 
 local function isWholeNumber(v)
@@ -1132,6 +1134,11 @@ end
 function BuildingPlumbing.beginPaidPass(args, player)
     if not player then
         return nil, "badRequest"
+    end
+    -- The server never hears a client disconnect: a pass still open is one it left behind. Settle it
+    -- first, so the fixtures it never reached are paid back.
+    if passes[playerKey(player)] then
+        BuildingPlumbing.endPaidPass(player)
     end
     local unit = BuildingPlumbing.costPerFixture()
     local owed, count = {}, 0
