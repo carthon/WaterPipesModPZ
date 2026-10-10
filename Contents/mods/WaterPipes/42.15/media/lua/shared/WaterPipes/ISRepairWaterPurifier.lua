@@ -1,6 +1,7 @@
 require "TimedActions/ISBaseTimedAction"
 require "WaterPipes/Constants"
 require "WaterPipes/Purifier"
+require "WaterPipes/SoundOptions"
 
 -- Repairs a purifier's worn filter: consumes the repair kit (charcoal + RippedSheets) from the
 -- character's inventory and restores the filter condition to full. World state (the condition modData)
@@ -66,16 +67,16 @@ end
 
 function ISRepairWaterPurifier:start()
     self:setActionAnim("VehicleWorkOnMid")
-    self.sound = self.character:playSound("RepairWithWrench")
+    self.sound = WaterPipes.SoundOptions.playOnCharacter(self.character, "RepairWithWrench")
 end
 
 function ISRepairWaterPurifier:stop()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
     ISBaseTimedAction.stop(self)
 end
 
 function ISRepairWaterPurifier:perform()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
 
     local inventory = self.character:getInventory()
     if consumeRepairKit(inventory) then

@@ -78,6 +78,16 @@ option WaterPipes.PressureFrictionScale
     translation = WaterPipes_PressureFrictionScale,
 }
 
+option WaterPipes.PurifierHeadTransfer
+{
+    type = integer,
+    min = 0,
+    max = 100,
+    default = 60,
+    page = WaterPipes,
+    translation = WaterPipes_PurifierHeadTransfer,
+}
+
 option WaterPipes.HydraulicDemandScale
 {
     type = integer,
@@ -226,4 +236,14 @@ option WaterPipes.HydrantHead
     default = 400,
     page = WaterPipes,
     translation = WaterPipes_HydrantHead,
+}
+
+option WaterPipes.BuildingPlumbCostPerFixture
+{
+    type = integer,
+    min = 0,
+    max = 10,
+    default = 1,
+    page = WaterPipes,
+    translation = WaterPipes_BuildingPlumbCostPerFixture,
 }

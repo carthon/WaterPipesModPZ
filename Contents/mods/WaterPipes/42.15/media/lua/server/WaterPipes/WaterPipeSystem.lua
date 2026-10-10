@@ -15,6 +15,8 @@ require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Purifier"
 require "WaterPipes/GravityFlow"
 require "WaterPipes/Router"
+require "WaterPipes/Valve"
+require "WaterPipes/BuildingPlumbing"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/Mains"
 require "WaterPipes/Pressure"
@@ -27,6 +29,7 @@ require "WaterPipes/Profiler"
 require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
 require "WaterPipes/World"
+require "WaterPipes/ActionWatch"
 
 local Invalidate = WaterPipes.Invalidate
 local Adapter = WaterPipes.ContainerAdapter
@@ -43,6 +46,8 @@ local PipeAutotile = WaterPipes.PipeAutotile
 local Purifier = WaterPipes.Purifier
 local GravityFlow = WaterPipes.GravityFlow
 local Router = WaterPipes.Router
+local Valve = WaterPipes.Valve
+local BuildingPlumbing = WaterPipes.BuildingPlumbing
 local NetworkAccess = WaterPipes.NetworkAccess
 local Mains = WaterPipes.Mains
 local Pressure = WaterPipes.Pressure
@@ -69,8 +74,11 @@ end
 
 local getSquare = WaterPipes.World.squareAt
 
+-- Returns how many plumbed fixtures it refreshed, which is what says whether a targeted refresh
+-- reached anything at all.
 local function refreshPlumbedEndpointsNearCoordinates(coordinates)
     local visited = {}
+    local refreshed = 0
 
     for _, position in ipairs(coordinates or {}) do
         local square = getSquare(position.x, position.y, position.z)
@@ -83,10 +91,13 @@ local function refreshPlumbedEndpointsNearCoordinates(coordinates)
                     -- gets picked up the first time anything is built near one of its sinks.
                     State.registerEndpoint(position.x, position.y, position.z)
                     EndpointPlumbing.refreshEndpointSource(endpointObject)
+                    refreshed = refreshed + 1
                 end
             end
         end
     end
+
+    return refreshed
 end
 
 local function refreshPlumbedGeneratorsNearCoordinates(coordinates)
@@ -182,6 +193,12 @@ function System.scanContainersAroundPipes()
                 end
             end
 
+            -- The valve is not a pipe object, but a pipe carrying our key proves this square's modData has arrived.
+            -- A valve whose modData has not landed reads as absent, so the tile conducts.
+            if derived then
+                derived.valveClosed = Valve.isClosedOnSquare(square) or nil
+            end
+
             if derived then
                 if metadata.kinds and (metadata.router or false) ~= (derived.router or false) then
                     Logger.warn(string.format(
@@ -195,6 +212,7 @@ function System.scanContainersAroundPipes()
                 metadata.pump = derived.pump
                 metadata.drip = derived.drip
                 metadata.sprinkler = derived.sprinkler
+                metadata.valveClosed = derived.valveClosed
                 metadata.kinds = true
             end
             pipeData.metadata = metadata
@@ -314,8 +332,52 @@ end
 -- the settle refuses. Reported on change rather than every pass, so a working base stays quiet.
 local lastShapeReport = nil
 
+-- Same rule for the mixed-fluid refusal below. A group holding two fluids stays that way until the
+-- player empties a vessel, and saying so on every pass -- eight times a real minute -- buries
+-- everything else in the log.
+local lastMixedReport = nil
+
+-- What each vessel held when this pass last looked, by OBJECT: a vessel set down where another stood is
+-- a new one. Transfer Fluids, rain and other mods fill a vessel with no event; this pass reads every
+-- vessel anyway, so a change it did not make is noticed here, whatever the size of the save.
+local censusSeen = {}
+
+local function censusKey(descriptor)
+    return descriptor.object and tostring(descriptor.object) or descriptor.key
+end
+
+local function noticeUnannounced(descriptor, square)
+    -- Never seen before counts as empty: a vessel hung and filled before this pass first looked has
+    -- to be noticed too, and its zone may well have been priced without it.
+    local key = censusKey(descriptor)
+    local firstLook = censusSeen[key] == nil
+    local seen = censusSeen[key] or 0
+    local now = math.max(descriptor.waterAmount or 0, 0)
+    if math.abs(now - seen) <= Constants.FLUID_WRITE_EPSILON then
+        return
+    end
+    -- Still where this mod last left it: its own write has already told the network.
+    local left = descriptor.object and Adapter.lastLeftAt(descriptor.object)
+    if left and math.abs(now - left) <= Constants.FLUID_WRITE_EPSILON then
+        return
+    end
+    -- Crossing empty is what the zone's pressure is priced on; any change is due to the taps.
+    if (seen > 0) ~= (now > 0) then
+        pcall(Invalidate.supplyChangedAt, square)
+        -- Not said on the first look: after a restart every vessel holding water is one.
+        if not firstLook then
+            Logger.log(string.format("Vessel at %d:%d:%d went from %.0f to %.0f L with no event -- its "
+                .. "network was told", square:getX(), square:getY(), square:getZ(), seen, now))
+        end
+    end
+    pcall(Invalidate.vesselWaterChanged, square)
+end
+
 function System.redistributeWater()
     local components = State.getComponents()
+    local mixed = {}
+    -- Rebuilt every pass, so a vessel that is gone is forgotten with it.
+    local seenThisPass = {}
 
     local shape = {}
     for _, component in ipairs(components) do
@@ -365,6 +427,10 @@ function System.redistributeWater()
                         totalWater = totalWater + math.max(descriptor.waterAmount or 0, 0)
                     end
 
+                    if descriptor then
+                        noticeUnannounced(descriptor, square)
+                    end
+
                     if descriptor and descriptor.fluidType and (descriptor.waterAmount or 0) > 0 then
                         totalByFluidType[descriptor.fluidType] = (totalByFluidType[descriptor.fluidType] or 0) + descriptor.waterAmount
                     end
@@ -389,14 +455,41 @@ function System.redistributeWater()
                 names[#names + 1] = tostring(fluidTypeName)
             end
             table.sort(names)
-            local where = containers[1]
-            Logger.warn(string.format(
+            -- The lowest tile key in the group, not whichever `pairs` handed over first: it has to name
+            -- the same tile every pass or "unchanged" could never be told from "changed".
+            local anchor = nil
+            for _, descriptor in ipairs(containers) do
+                local key = string.format("%d:%d:%d",
+                    descriptor.x or 0, descriptor.y or 0, descriptor.z or 0)
+                if not anchor or key < anchor then
+                    anchor = key
+                end
+            end
+            mixed[#mixed + 1] = string.format(
                 "NOT LEVELLING a group of %d vessel(s) near %s: it holds %d fluids (%s). A group has to be "
                 .. "of one mind about what it contains before water will move inside it.",
-                #containers,
-                where and string.format("%d:%d:%d", where.x or 0, where.y or 0, where.z or 0) or "?",
-                fluidTypeCount, table.concat(names, ", ")))
+                #containers, anchor or "?", fluidTypeCount, table.concat(names, ", "))
         end
+
+        -- After the settle, so this pass's own levelling is not taken for somebody else's.
+        for _, descriptor in ipairs(containers) do
+            seenThisPass[censusKey(descriptor)] = math.max(descriptor.waterAmount or 0, 0)
+        end
+    end
+    censusSeen = seenThisPass
+
+    table.sort(mixed)
+    local mixedSignature = table.concat(mixed, " | ")
+    if mixedSignature ~= lastMixedReport then
+        for _, message in ipairs(mixed) do
+            Logger.warn(message)
+        end
+        -- Said once when it clears, or the player who emptied the odd vessel never learns that it worked.
+        if mixedSignature == "" and lastMixedReport then
+            Logger.log("Every group holding vessels is of one mind about its fluid again -- levelling "
+                .. "resumed.")
+        end
+        lastMixedReport = mixedSignature
     end
 end
 
@@ -746,6 +839,53 @@ function System.reclassifyExternalFixtures()
     return changed
 end
 
+-- One fixture tile, refreshed. Returns (found, fixtures): `found` counts everything plumbed on the
+-- tile and decides whether the index entry still earns its place, `fixtures` counts only the fixtures
+-- and is what the profile reads. A square that is not loaded returns nil, which says neither.
+local function refreshEndpointsAt(position)
+    local square = getSquare(position.x, position.y, position.z)
+    if not square then
+        return nil
+    end
+
+    local found, fixtures = 0, 0
+    for _, endpointObject in ipairs(EndpointObjects.collectOnSquare(square)) do
+        if EndpointPlumbing.isPlumbed(endpointObject) then
+            found = found + 1
+            fixtures = fixtures + 1
+            EndpointPlumbing.refreshEndpointSource(endpointObject)
+        end
+    end
+
+    if square.getObjects then
+        local objects = square:getObjects()
+        for i = 0, objects:size() - 1 do
+            local worldObject = objects:get(i)
+            if GeneratorFuel.isGenerator(worldObject) and GeneratorFuel.isPlumbed(worldObject) then
+                found = found + 1
+                GeneratorFuel.refresh(worldObject)
+            end
+        end
+    end
+
+    return found, fixtures
+end
+
+-- A fixture sits beside the line as often as on it, so its own tile and its four cardinal neighbours
+-- all count -- the same rule the plumbing itself uses to decide a fixture is connected.
+local function withinReach(reach, position)
+    if reach[State.squareKey(position.x, position.y, position.z)] then
+        return true
+    end
+    for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
+        if reach[State.squareKey(position.x + offset.x, position.y + offset.y,
+            position.z + offset.z)] then
+            return true
+        end
+    end
+    return false
+end
+
 function System.refreshPlumbedEndpoints()
     -- A save made before the index existed has plumbed fixtures and no record of them. Find them once, on
     -- the first pass after loading, and never again.
@@ -760,31 +900,12 @@ function System.refreshPlumbedEndpoints()
     end
 
     local stale = nil
+    local visited = 0
 
     for key, position in pairs(State.getEndpoints()) do
-        local square = getSquare(position.x, position.y, position.z)
-        if square then
-            local found = 0
-
-            for _, endpointObject in ipairs(EndpointObjects.collectOnSquare(square)) do
-                if EndpointPlumbing.isPlumbed(endpointObject) then
-                    found = found + 1
-                    EndpointPlumbing.refreshEndpointSource(endpointObject)
-                end
-            end
-
-            if square.getObjects then
-                local objects = square:getObjects()
-                for i = 0, objects:size() - 1 do
-                    local worldObject = objects:get(i)
-                    if GeneratorFuel.isGenerator(worldObject)
-                        and GeneratorFuel.isPlumbed(worldObject) then
-                        found = found + 1
-                        GeneratorFuel.refresh(worldObject)
-                    end
-                end
-            end
-
+        local found, fixtures = refreshEndpointsAt(position)
+        if found then
+            visited = visited + fixtures
             if found == 0 then
                 stale = stale or {}
                 stale[#stale + 1] = key
@@ -795,6 +916,66 @@ function System.refreshPlumbedEndpoints()
     for _, key in ipairs(stale or {}) do
         State.getEndpoints()[key] = nil
     end
+
+    -- Visited here against written in EndpointFluidSource: the gap is what this pass costs for nothing.
+    Profiler.count("endpoints: fixtures visited", visited)
+end
+
+-- The same refresh, narrowed to the networks something actually moved on. The marks are raised in
+-- ContainerAdapter.writeDescriptorWaterAmount, the one place every litre of this mod passes through.
+--
+-- Expanded by HYDRAULIC ZONE and deliberately NOT by NetworkAccess.getNetworkSquares: that one keeps
+-- routers solid, while a draw crosses a bare one (Hydraulics.drawReachableFrom follows viaRouter
+-- transitively). Expanding with it would leave every fixture downstream of a router reading a stale
+-- number after the tile upstream filled. A zone covers bare routers, so it is a SUPERSET of the real
+-- reach: it refreshes too much, which is the failure worth having.
+-- Returns true when the marks had gone global and this WAS the full sweep.
+function System.refreshDirtyEndpoints()
+    local marks, wholeMap = Invalidate.takeDirtyTiles()
+    if wholeMap then
+        Profiler.count("endpoints: dirty passes gone global", 1)
+        System.refreshPlumbedEndpoints()
+        return true
+    end
+
+    local reach, seenZone, marked = {}, {}, 0
+
+    for key, position in pairs(marks) do
+        marked = marked + 1
+        -- The marked tile is always in reach, even when its network has gone: refreshEndpointSource is
+        -- what disconnects a fixture whose pipe was removed, and it has to be reached to do it.
+        reach[key] = true
+
+        local square = getSquare(position.x, position.y, position.z)
+        local solution = square and Hydraulics.solveAt(square) or nil
+        local zoneId = solution and Hydraulics.zoneIdOf(solution) or nil
+        -- Memoised for THIS pass and no longer. A zone id lives as long as one solve and does not
+        -- survive an invalidation, so it is a memo here and worthless as anything kept.
+        if solution and not (zoneId and seenZone[zoneId]) then
+            if zoneId then
+                seenZone[zoneId] = true
+            end
+            for _, pipeSquare in ipairs(Hydraulics.pipeSquares(solution)) do
+                reach[State.squareKey(pipeSquare:getX(), pipeSquare:getY(), pipeSquare:getZ())] = true
+            end
+        end
+    end
+
+    Profiler.count("endpoints: dirty tiles taken", marked)
+    if marked == 0 then
+        return
+    end
+
+    local visited = 0
+    for _, position in pairs(State.getEndpoints()) do
+        if withinReach(reach, position) then
+            local _, fixtures = refreshEndpointsAt(position)
+            visited = visited + (fixtures or 0)
+        end
+    end
+    -- No index pruning here. This pass looks at a subset, and a tile it did not visit is not evidence
+    -- of anything; the sweep is what decides an entry has stopped earning its place.
+    Profiler.count("endpoints: dirty fixtures visited", visited)
 end
 
 -- `afterLayoutChange` defaults to true: a build or a removal really has changed the shape.
@@ -890,6 +1071,8 @@ function System.forceGlobalWaterShutoff()
 end
 
 local function onInitGlobalModData()
+    -- Nothing was ever marked for a world that has only just been read: the first pass covers all of it.
+    Invalidate.everythingChanged()
     State.ensure()
     System.rebuild()
     System.refreshPlumbedEndpoints()
@@ -901,6 +1084,8 @@ end
 -- still see the pipe. The next-tick guard also covers multi-pipe squares and cancelled removals.
 local pendingPipeRemovals = {}
 local pendingMaterialDrops = {}
+-- Valves taken off their pipe: the registry's closed flag on that tile is cleared once they are gone.
+local pendingValveRemovals = {}
 local pendingRemovalScheduled = false
 
 -- Chance a dismantled pipe hands its build material back. The scrap table cannot know what the pipe was
@@ -908,7 +1093,7 @@ local pendingRemovalScheduled = false
 local DISMANTLE_RETURN_CHANCE = 90
 
 -- Diagnostics for the build-material stamp, logged once per outcome (see schedulePipeRemoval).
-local loggedDismantleMaterial = { [true] = false, [false] = false }
+local loggedDismantleMaterial = {}
 
 -- Every key a pipe's modData carries, sorted: a pipe that lost all its modData is a different bug from
 -- one that only lost the material stamp.
@@ -929,6 +1114,86 @@ local function describeModDataKeys(modData)
     return "{" .. table.concat(keys, ",") .. "}"
 end
 
+-- Fittings a pipe carries (valve, gauge) come down with it: neither is valid without a pipe, and a valve
+-- left behind would keep its state. Called only once the pipe is confirmed gone.
+local FITTING_RETURNS = {
+    [Constants.VALVE_MODDATA_KEY] = { "Base.MetalPipe", "Base.IronBarHalf" },
+    [Constants.GAUGE_MODDATA_KEY] = { "Base.MetalPipe", "Base.ElectronicsScrap" },
+}
+
+-- Fittings being taken down right now. RemoveTileObject raises the event that pays for a dismantled
+-- fitting, so this stops a valve removed with its pipe from being paid twice.
+local fittingsComingDown = {}
+
+local function fittingReturnsFor(object)
+    local ok, modData = pcall(object.getModData, object)
+    if not ok or not modData then
+        return nil
+    end
+    for key, returns in pairs(FITTING_RETURNS) do
+        if modData[key] == true then
+            return returns
+        end
+    end
+    return nil
+end
+
+local function takeDownFittingsOn(square, returnsMaterial)
+    -- The server removes and tells the clients. A client removing too makes the server's packet,
+    -- which names the object by index, take whatever slid into that index.
+    if isClient and isClient() then
+        return
+    end
+    if not square or not square.getObjects then
+        return
+    end
+    local objects = square:getObjects()
+    local doomed = {}
+    for index = 0, objects:size() - 1 do
+        local object = objects:get(index)
+        local returns = fittingReturnsFor(object)
+        if returns then
+            doomed[#doomed + 1] = { object = object, returns = returns }
+        end
+    end
+    if #doomed == 0 then
+        return
+    end
+
+    for _, entry in ipairs(doomed) do
+        fittingsComingDown[entry.object] = true
+        if isServer and isServer() then
+            pcall(square.transmitRemoveItemFromSquareOnClients, square, entry.object)
+        end
+        pcall(square.RemoveTileObject, square, entry.object)
+        fittingsComingDown[entry.object] = nil
+
+        if returnsMaterial then
+            for _, itemType in ipairs(entry.returns) do
+                if ZombRand and ZombRand(100) < DISMANTLE_RETURN_CHANCE then
+                    pcall(square.AddWorldInventoryItem, square, itemType, 0.5, 0.5, 0.0)
+                end
+            end
+        end
+    end
+
+    pcall(square.RecalcProperties, square)
+    pcall(square.RecalcAllWithNeighbours, square, true)
+end
+
+local function squareHoldsObject(square, object)
+    local objects = square and square.getObjects and square:getObjects() or nil
+    if not objects then
+        return false
+    end
+    for index = 0, objects:size() - 1 do
+        if objects:get(index) == object then
+            return true
+        end
+    end
+    return false
+end
+
 local function processPendingPipeRemovals()
     pendingRemovalScheduled = false
     if Events and Events.OnTick then
@@ -943,12 +1208,32 @@ local function processPendingPipeRemovals()
     -- Material returns first, one per dismantled OBJECT: a cancelled removal drops nothing, and a
     -- multi-pipe square pays for exactly the pipe that was taken down.
     --
-    -- ONE side pays. A co-op host runs a client Lua state and a server Lua state over the SAME world, so
-    -- this file is loaded twice, both states saw the removal and both spawned a pipe -- two items for one
-    -- dismantle. A dedicated server's clients never load lua/server, which is why only the host saw it.
-    -- The server side pays; SP is neither client nor server and pays as before.
+    -- ONE side pays. lua/server is loaded on multiplayer clients too, so every client saw the removal and
+    -- would spawn its own pipe. The server side pays; SP is neither client nor server and pays as before.
     if isClient and isClient() then
         drops = {}
+    end
+
+    -- A valve that really left stops splitting the network now, not at the ten-minute scan.
+    local valves = pendingValveRemovals
+    pendingValveRemovals = {}
+    local reopened = false
+    for _, entry in ipairs(valves) do
+        local square = getSquare(entry.x, entry.y, entry.z)
+        if square and not squareHoldsObject(square, entry.object) then
+            Invalidate.squareChanged(square)
+            -- Only a valve the registry held closed splits anything; an open one has nothing to rejoin.
+            local pipe = State.ensure().pipes[State.squareKey(entry.x, entry.y, entry.z)]
+            local wasClosed = pipe and pipe.metadata and pipe.metadata.valveClosed == true
+            if wasClosed and not (isClient and isClient()) then
+                reopened = State.setPipeValveClosed(entry.x, entry.y, entry.z, false) or reopened
+            end
+        end
+    end
+    if reopened then
+        Invalidate.layoutChanged()
+        System.rebuild()
+        System.refreshPlumbedEndpoints()
     end
 
     for _, drop in ipairs(drops) do
@@ -973,6 +1258,7 @@ local function processPendingPipeRemovals()
         -- Only unregister once the square is loaded and no pipe remains there.
         if square and PipeObjectUtils.getPipeOnSquare(square) == nil then
             System.unregisterPipeAt(position.x, position.y, position.z)
+            takeDownFittingsOn(square, position.returnsMaterial)
         end
     end
 end
@@ -988,28 +1274,36 @@ local function schedulePipeRemoval(object, returnsMaterial)
     end
 
     local x, y, z = square:getX(), square:getY(), square:getZ()
-    pendingPipeRemovals[tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)] = { x = x, y = y, z = z }
+    local key = tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)
+    local queued = pendingPipeRemovals[key]
+    -- OR-ed: a square whose pipe was DISMANTLED pays for its fittings even if a second event for the
+    -- same tile (a destroyed neighbour object) arrives claiming nothing comes back.
+    pendingPipeRemovals[key] = { x = x, y = y, z = z,
+        returnsMaterial = (queued and queued.returnsMaterial) or (returnsMaterial and true or false) }
 
     -- The material has to be read NOW: by the time the removal is confirmed next tick the object and its
     -- modData are gone.
     -- CLAY GIVES NOTHING BACK. A fired clay segment cannot be unfired, so it is spent the moment it is
     -- laid. That is the trade against metal: clay is cheap and needs no forge, but it is one-way, while a
     -- metal pipe is salvage. Without this, clay would be strictly better and nobody would forge one.
+    -- Pipe a building pass laid gives nothing back either: the pass is priced per fixture, not per tile.
     if returnsMaterial then
-        local clay, source = PipeObjectUtils.isClayBuilt(object)
+        local material, source = PipeObjectUtils.getBuildMaterial(object)
+        material = material or "metal"
+        local spent = material == Constants.PIPE_MATERIAL_CLAY or material == Constants.PIPE_MATERIAL_GENERATED
 
         -- Once per outcome per session. The build side logs what it stamped; this logs what the other end
         -- concluded, which is the only way to tell "never stamped" from "stamped and lost".
-        if not loggedDismantleMaterial[clay] then
-            loggedDismantleMaterial[clay] = true
+        if not loggedDismantleMaterial[material] then
+            loggedDismantleMaterial[material] = true
             local okMod, modData = pcall(object.getModData, object)
             Logger.log(string.format(
                 "dismantle at %d:%d:%d -> %s (via %s, modData keys=%s)",
-                x, y, z, clay and "CLAY, returns nothing" or "metal, returns a pipe",
+                x, y, z, spent and (material:upper() .. ", returns nothing") or "metal, returns a pipe",
                 source, describeModDataKeys(okMod and modData or nil)))
         end
 
-        if not clay then
+        if not spent then
             pendingMaterialDrops[#pendingMaterialDrops + 1] = {
                 x = x, y = y, z = z, object = object,
                 itemType = "Base.MetalPipe",
@@ -1041,21 +1335,12 @@ local pendingPurifierScheduled = false
 -- very events that brought us here; without this the tank would re-queue itself and pay out again.
 local purifiersComingDown = {}
 
-local function squareHoldsObject(square, object)
-    local objects = square and square.getObjects and square:getObjects() or nil
-    if not objects then
-        return false
-    end
-    for index = 0, objects:size() - 1 do
-        if objects:get(index) == object then
-            return true
-        end
-    end
-    return false
-end
-
 -- Take every tank quadrant off a square. Returns how many went.
 local function removeTankPartsOn(square)
+    -- Server-side only, for the same reason as takeDownFittingsOn.
+    if isClient and isClient() then
+        return 0
+    end
     if not square or not square.getObjects then
         return 0
     end
@@ -1068,10 +1353,6 @@ local function removeTankPartsOn(square)
         end
     end
     for _, object in ipairs(doomed) do
-        -- Mirrors what vanilla's own scrap does, so a dedicated server and its clients agree.
-        if isClient and isClient() then
-            pcall(square.transmitRemoveItemFromSquare, square, object)
-        end
         if isServer and isServer() then
             pcall(square.transmitRemoveItemFromSquareOnClients, square, object)
         end
@@ -1204,10 +1485,182 @@ end
 System.schedulePurifierRemoval = schedulePurifierRemoval
 System.processPurifierRemovals = processPendingPurifierRemovals
 
+-- A fitting dismantled by itself pays its materials back (vanilla's scrap pays nothing for it). Confirmed
+-- on the next tick, as for pipes, so a cancelled removal pays nothing.
+local function scheduleFittingRemoval(object)
+    if not object or fittingsComingDown[object] then
+        return
+    end
+    if Valve.isValve(object) and object.getSquare then
+        local square = object:getSquare()
+        if square then
+            pendingValveRemovals[#pendingValveRemovals + 1] = {
+                x = square:getX(), y = square:getY(), z = square:getZ(), object = object,
+            }
+        end
+    end
+    local returns = fittingReturnsFor(object)
+    if not returns then
+        return
+    end
+    local square = object.getSquare and object:getSquare() or nil
+    if not square then
+        return
+    end
+
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    for _, itemType in ipairs(returns) do
+        pendingMaterialDrops[#pendingMaterialDrops + 1] = {
+            x = x, y = y, z = z, object = object, itemType = itemType,
+        }
+    end
+
+    if not pendingRemovalScheduled and Events and Events.OnTick then
+        pendingRemovalScheduled = true
+        Events.OnTick.Add(processPendingPipeRemovals)
+    elseif not (Events and Events.OnTick) then
+        processPendingPipeRemovals()
+    end
+end
+
 local function onDestroyIsoThumpable(thump, player)
     -- Sledgehammer: destruction, not dismantling -- nothing comes back, as before.
     schedulePipeRemoval(thump, false)
     schedulePurifierRemoval(thump, false)
+end
+
+-- A vessel joining or leaving the line changes what every fixture on it can serve, and until now that
+-- only reached them on the next minute's pass -- two of them, in fact: one to notice the vessel and one
+-- to refresh the fixtures. A barrel hung on a freshly plumbed house left its taps reading empty for
+-- over a minute and a half. So the network is told at once.
+--
+-- Bounded by the network itself, and only for a vessel landing on a tile that carries pipe: the walk
+-- and one refresh per fixture, on an event the player raises by hand.
+local function refreshEndpointsOnNetworkAt(square)
+    if not square then
+        return
+    end
+    local squares = NetworkAccess.getNetworkSquares(square)
+    if not squares or #squares == 0 then
+        Logger.warn(("Vessel refresh at %d:%d:%d reached no network squares -- nothing refreshed")
+            :format(square:getX(), square:getY(), square:getZ()))
+        return 0
+    end
+    local coordinates = {}
+    for _, pipeSquare in ipairs(squares) do
+        coordinates[#coordinates + 1] =
+            { x = pipeSquare:getX(), y = pipeSquare:getY(), z = pipeSquare:getZ() }
+    end
+    return refreshPlumbedEndpointsNearCoordinates(coordinates), #squares
+end
+
+-- Runs a tick after the event, once the object has really arrived or left: re-reading the tile inside
+-- OnObjectAboutToBeRemoved put the leaving vessel straight back into the classification.
+local function refreshAfterVesselChange(square)
+    local refreshed, reach = refreshEndpointsOnNetworkAt(square)
+    Logger.log(("Vessel on a piped tile at %d:%d:%d -- refreshed %d fixture(s) over %d network tile(s)")
+        :format(square:getX(), square:getY(), square:getZ(), refreshed or 0, reach or 0))
+end
+
+local pendingVesselSquares = {}
+local vesselChangeScheduled = false
+
+local function processPendingVesselChanges()
+    vesselChangeScheduled = false
+    if Events and Events.OnTick then
+        Events.OnTick.Remove(processPendingVesselChanges)
+    end
+    local squares = pendingVesselSquares
+    pendingVesselSquares = {}
+
+    local changed = {}
+    for _, position in pairs(squares) do
+        local square = getSquare(position.x, position.y, position.z)
+        if square and PipeObjectUtils.getPipeOnSquare(square) then
+            Invalidate.squareChanged(square)
+            changed[#changed + 1] = square
+        end
+    end
+    -- lua/server runs on clients too: there, only the local caches. The registry and the fixtures are
+    -- the server's.
+    if #changed == 0 or (isClient and isClient()) then
+        return
+    end
+
+    -- The levelling reads the registry of containers: rebuilt once for the batch, the vessels join the
+    -- next pass.
+    local okRebuild, errRebuild = pcall(System.rebuild, false)
+    if not okRebuild then
+        Logger.error("Vessel change failed: " .. tostring(errRebuild))
+        return
+    end
+    for _, square in ipairs(changed) do
+        local ok, err = pcall(refreshAfterVesselChange, square)
+        if not ok then
+            Logger.error("Vessel change failed: " .. tostring(err))
+        end
+    end
+end
+
+-- By tile, because the client's notice names a tile and the object may be gone when it is handled.
+local function scheduleVesselChange(square)
+    if not square then
+        return
+    end
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    pendingVesselSquares[State.squareKey(x, y, z)] = { x = x, y = y, z = z }
+    if vesselChangeScheduled then
+        return
+    end
+    if Events and Events.OnTick then
+        vesselChangeScheduled = true
+        Events.OnTick.Add(processPendingVesselChanges)
+    else
+        processPendingVesselChanges()
+    end
+end
+
+-- A timed action finished on this tile. If it changed which objects there hold fluid -- an object made
+-- a vessel in place raises no event at all -- the network hears it as it would a vessel set down.
+function System.recheckVesselsAt(square)
+    if not (square and PipeObjectUtils.getPipeOnSquare(square) and Adapter.reclassifySquare(square)) then
+        return
+    end
+    -- An action finished on a client changes the server's world without any event the server hears.
+    if isClient and isClient() then
+        Invalidate.squareChanged(square)
+        local player = getPlayer and getPlayer() or nil
+        if player and sendClientCommand then
+            sendClientCommand(player, "WaterPipes", "vesselChanged",
+                { x = square:getX(), y = square:getY(), z = square:getZ() })
+        end
+        return
+    end
+    scheduleVesselChange(square)
+end
+
+-- Asked while the object still exists: on a removal there is nothing left to ask a tick later.
+-- A pipe is never a vessel, and is turned away before the tile's pipe scan is read: reading it while
+-- a leaving pipe is still there caches it, and its removal is then taken for a cancelled one.
+local function noteVesselEvent(object)
+    if not object or not object.getSquare or PipeObjectUtils.isPipeObject(object) then
+        return
+    end
+    local ok, square = pcall(object.getSquare, object)
+    if not ok or not square then
+        return
+    end
+    if not PipeObjectUtils.getPipeOnSquare(square) or not Adapter.getWorldFluidKind(object) then
+        return
+    end
+    scheduleVesselChange(square)
+end
+
+local function onObjectAdded(object)
+    local ok, err = pcall(noteVesselEvent, object)
+    if not ok then
+        Logger.error("Vessel added handler failed: " .. tostring(err))
+    end
 end
 
 -- Fires for moveable "Pick Up" and other lua-driven removals; without it a removed pipe would stay
@@ -1216,6 +1669,11 @@ end
 local function onObjectAboutToBeRemoved(object)
     schedulePipeRemoval(object, true)
     schedulePurifierRemoval(object, true)
+    scheduleFittingRemoval(object)
+    local ok, err = pcall(noteVesselEvent, object)
+    if not ok then
+        Logger.error("Vessel removed handler failed: " .. tostring(err))
+    end
 end
 
 -- Rotates through state.pipes a few tiles at a time, so every tile is checked eventually and no
@@ -1244,8 +1702,8 @@ local function verifyCachesAgainstTheWorld()
                 disagreed = disagreed + 1
                 Logger.warn(string.format(
                     "CACHE DRIFT: vessel classification at %d:%d:%d disagreed with the world. An "
-                        .. "object left that tile without OnObjectAboutToBeRemoved firing. This is the "
-                        .. "case docs/removal-events.md is waiting for -- please report what was there.",
+                        .. "object arrived on or left that tile without either object event reaching "
+                        .. "this side. See docs/removal-events.md -- please report what was there.",
                     pipeData.x, pipeData.y, pipeData.z))
             end
             if PipeObjectUtils.verifySquareScan and not PipeObjectUtils.verifySquareScan(square) then
@@ -1253,6 +1711,14 @@ local function verifyCachesAgainstTheWorld()
                 Logger.warn(string.format(
                     "CACHE DRIFT: pipe scan at %d:%d:%d disagreed with the world. See "
                         .. "docs/removal-events.md.",
+                    pipeData.x, pipeData.y, pipeData.z))
+            end
+            -- Not drift and not a reason for the wholesale drop: a re-pricing repairs it, without a walk.
+            if Hydraulics.verifySupplyAt and not Hydraulics.verifySupplyAt(square) then
+                Logger.warn(string.format(
+                    "SUPPLY DRIFT: the zone at %d:%d:%d was priced with no supply and its storage now "
+                        .. "holds water -- filled without an event (rain, Transfer Fluids, another mod). "
+                        .. "Re-priced.",
                     pipeData.x, pipeData.y, pipeData.z))
             end
         end
@@ -1432,9 +1898,22 @@ local function onEveryOneMinute()
         Logger.error("Hydrant processing failed: " .. tostring(errHydrants))
     end
 
-    local ok, err = pcall(Profiler.time, "1min/endpoints", System.refreshPlumbedEndpoints)
-    if not ok then
-        Logger.error("Endpoint plumbing refresh failed: " .. tostring(err))
+    -- First, so the sweep behind it finds the marked networks already settled -- which is the reading
+    -- needed before the sweep can go. The sweep is still here on purpose: it carries the consumption
+    -- reconciliation and the disconnection check for every fixture, marked or not, and delaying the
+    -- charge lets two fixtures draw the same litres. Splitting those off is its own step.
+    local okDirty, sweptAll = pcall(Profiler.time, "1min/dirty-endpoints", System.refreshDirtyEndpoints)
+    if not okDirty then
+        Logger.error("Marked endpoint refresh failed: " .. tostring(sweptAll))
+        sweptAll = false
+    end
+
+    -- Marks gone global already ran the full sweep this minute.
+    if sweptAll ~= true then
+        local ok, err = pcall(Profiler.time, "1min/endpoints", System.refreshPlumbedEndpoints)
+        if not ok then
+            Logger.error("Endpoint plumbing refresh failed: " .. tostring(err))
+        end
     end
 
     -- Levelling between vessels used to ride the ten-minute tick, which is why a barrel took ten in-game
@@ -1491,6 +1970,25 @@ local function onWaterAmountChange(object, prevAmount)
 
     if not object then
         return
+    end
+
+    -- A vessel made in place raised no add event, so it joins the network the way one set down does.
+    -- Not asked off the pipes, nor for a fixture, which drinking raises this for constantly. The pipe
+    -- test first: it is memoised, and the fixture test reads the object several times.
+    if Adapter.isUnclassifiedVessel and object.getSquare and PipeObjectUtils.getPipeOnSquare(object:getSquare())
+        and not EndpointObjects.isEndpointCandidate(object) then
+        local okVessel, unclassified = pcall(Adapter.isUnclassifiedVessel, object)
+        if okVessel and unclassified then
+            pcall(noteVesselEvent, object)
+        end
+    end
+
+    -- Its network's taps are due a refresh: this change did not go through the adapter's marks.
+    if object.getSquare then
+        local okSquare, square = pcall(object.getSquare, object)
+        if okSquare and square then
+            pcall(Invalidate.vesselWaterChanged, square)
+        end
     end
 
     -- Somebody else moved this vessel's water. The head field cares only WHETHER a vessel holds water, so
@@ -1557,24 +2055,42 @@ local function resolveCommandSquare(args)
     return getSquare(args.x, args.y, args.z)
 end
 
+-- When each tile last answered a client's syncFixture.
+local fixtureSyncAt = {}
+
 local function onClientCommand(module, command, player, args)
     if module ~= "WaterPipes" then
         return
     end
 
     -- Endpoint plumb/unplumb runs authoritatively on the server (clients only request it).
-    if command == "plumbEndpoint" or command == "unplumbEndpoint" then
+    -- Plumbing is per SQUARE, never per object. The client sends coordinates, so the server would
+    -- otherwise pick the first endpoint it finds there while the player worked on another: a tile
+    -- carrying a sink and a washer ended up half connected, and the menu then offered both a plumb and
+    -- an unplumb for what looks like one fixture. Every endpoint on the tile moves together.
+    if command == "plumbEndpoint" or command == "unplumbEndpoint"
+        or command == "plumbEndpointsOnSquare" then
         local square = resolveCommandSquare(args)
-        local endpoint = square and EndpointObjects.findOnSquare(square)
-        if not endpoint then
+        local endpoints = square and EndpointObjects.collectOnSquare(square) or {}
+        if #endpoints == 0 then
             Logger.warn("Endpoint plumb command: no endpoint at "
                 .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
             return
         end
-        if command == "plumbEndpoint" then
-            EndpointPlumbing.plumb(endpoint)
-        else
-            EndpointPlumbing.unplumb(endpoint)
+        local wanted = command ~= "unplumbEndpoint"
+        local landed = false
+        for _, endpoint in ipairs(endpoints) do
+            if EndpointPlumbing.isPlumbed(endpoint) ~= wanted then
+                if wanted then
+                    landed = EndpointPlumbing.plumb(endpoint) == true or landed
+                else
+                    EndpointPlumbing.unplumb(endpoint)
+                end
+            end
+        end
+        -- Booked only when something connected: a refused fixture is refunded when the pass closes.
+        if command == "plumbEndpointsOnSquare" and landed then
+            BuildingPlumbing.notePaidFixture(player, args.x, args.y, args.z)
         end
         return
     end
@@ -1649,6 +2165,66 @@ local function onClientCommand(module, command, player, args)
         return
     end
 
+    -- Building plumbing lays world objects, and creating those belongs to the server -- vanilla's own
+    -- map-object scripts bail on isClient() for the same reason. One command per tile, spread over the
+    -- pass by its millisecond budget and bounded by BUILDING_PLUMB_MAX_TILES.
+    -- The whole price of a pass, taken against a fixture list this side counts for itself.
+    if command == "beginBuildingPlumbing" then
+        local charged, reason = BuildingPlumbing.beginPaidPass(args, player)
+        -- Answered either way: the client connects nothing until it hears which.
+        if not charged then
+            Logger.warn("Begin building plumbing: refused (" .. tostring(reason) .. ")")
+            sendServerCommand(player, "WaterPipes", "buildingPlumbingRefused",
+                { reason = tostring(reason), who = BuildingPlumbing.playerKey(player) })
+        else
+            sendServerCommand(player, "WaterPipes", "buildingPlumbingAccepted",
+                { charged = charged, who = BuildingPlumbing.playerKey(player) })
+        end
+        return
+    end
+
+    if command == "placeBuildingPipe" then
+        local placed, reason = BuildingPlumbing.placePaid(args, player)
+        if not placed then
+            Logger.warn("Place building pipe: refused at "
+                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":"
+                .. tostring(args and args.z) .. " (" .. tostring(reason) .. ")")
+            -- A tile that already has its pipe still serves the fixture behind it.
+            if reason ~= "alreadyPiped" and type(args) == "table" then
+                sendServerCommand(player, "WaterPipes", "buildingPipeRefused",
+                    { x = args.x, y = args.y, z = args.z, kind = args.kind, edge = args.edge,
+                      reason = tostring(reason), who = BuildingPlumbing.playerKey(player) })
+            end
+        end
+        return
+    end
+
+    if command == "endBuildingPlumbing" then
+        BuildingPlumbing.endPaidPass(player)
+        return
+    end
+
+    -- ...and the single settle the whole pass owes, once it is done. The pass itself is closed later,
+    -- by endBuildingPlumbing: the fixtures are connected after this, and it is those that were paid for.
+    if command == "finishBuildingPlumbing" then
+        BuildingPlumbing.finish({})
+        return
+    end
+
+    -- Valve open/close: server-authoritative because it changes the SHAPE of the network. A client
+    -- deciding this for itself would leave two clients disagreeing about where the base is split.
+    if command == "setValveOpen" then
+        local square = resolveCommandSquare(args)
+        local valve = square and Valve.findOnSquare(square)
+        if not valve then
+            Logger.warn("Set valve command: no valve at "
+                .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
+            return
+        end
+        Valve.setOpen(valve, args and args.open)
+        return
+    end
+
     -- Pump switch: server-authoritative so every client agrees on which pumps are running. A switched-off
     -- pump reads as unpowered everywhere, so it stops both boosting pressure and drawing from its source.
     if command == "setPumpEnabled" then
@@ -1689,6 +2265,68 @@ local function onClientCommand(module, command, player, args)
         return
     end
 
+    -- A client gave a fixture its own copy of the tank; the litres travel with sync(). Near the sender
+    -- only, and at most once every two seconds per tile.
+    if command == "syncFixture" then
+        local reach = Constants.VESSEL_NOTICE_REACH
+        if not player or type(args) ~= "table" or type(args.x) ~= "number" or type(args.y) ~= "number"
+            or math.abs(args.x - player:getX()) > reach or math.abs(args.y - player:getY()) > reach then
+            return
+        end
+        local square = resolveCommandSquare(args)
+        if not square then
+            return
+        end
+        local key = State.squareKey(square:getX(), square:getY(), square:getZ())
+        local now = getTimestampMs and getTimestampMs() or 0
+        if fixtureSyncAt[key] and now - fixtureSyncAt[key] < 2000 then
+            return
+        end
+        fixtureSyncAt[key] = now
+        for _, endpoint in ipairs(EndpointObjects.collectOnSquare(square)) do
+            if EndpointPlumbing.isPlumbed(endpoint) and endpoint.sync then
+                pcall(endpoint.sync, endpoint)
+            end
+        end
+        return
+    end
+
+    if command == "vesselChanged" then
+        -- A client only sees vessels near it; a notice for a tile far from the sender is not one it saw.
+        local reach = Constants.VESSEL_NOTICE_REACH
+        if not player or type(args) ~= "table" or type(args.x) ~= "number" or type(args.y) ~= "number"
+            or math.abs(args.x - player:getX()) > reach or math.abs(args.y - player:getY()) > reach then
+            return
+        end
+        local ok, err = pcall(scheduleVesselChange, resolveCommandSquare(args))
+        if not ok then
+            Logger.error("Vessel notice failed: " .. tostring(err))
+        end
+        return
+    end
+
+    -- The profiler measures the SERVER's periodic work, which is the only place it happens on a
+    -- dedicated server. Admin only: it is a debug tool that costs time in every pass it measures.
+    if command == "toggleProfiler" or command == "dumpProfile" then
+        local level = player and player.getAccessLevel and player:getAccessLevel() or "None"
+        if level == "None" or level == "" then
+            Logger.warn("Profiler command refused: " .. tostring(command) .. " needs an admin.")
+            return
+        end
+        if command == "dumpProfile" then
+            Profiler.dump()
+            return
+        end
+        local on = args and args.on
+        if on == nil then
+            Profiler.toggle()
+        else
+            Profiler.setEnabled(on)
+        end
+        Logger.log("Profiler on the server is now " .. (Profiler.isEnabled() and "ON" or "OFF"))
+        return
+    end
+
     if command == "forceGlobalWaterShutoff" then
         System.forceGlobalWaterShutoff()
         System.tick()
@@ -1697,6 +2335,9 @@ local function onClientCommand(module, command, player, args)
     end
 
     if command == "forceNetworkTick" then
+        -- Force means force. The tick's own rebuild passes afterLayoutChange=false and so keeps the
+        -- vessel memo, which made this debug tool unable to see a vessel the player had just hung.
+        Invalidate.layoutChanged()
         System.tick()
         sendServerCommand(player, "WaterPipes", "debugNetworkTickApplied", {})
     end
@@ -1738,6 +2379,10 @@ if Events then
 
     if Events.OnObjectAboutToBeRemoved then
         Events.OnObjectAboutToBeRemoved.Add(onObjectAboutToBeRemoved)
+    end
+
+    if Events.OnObjectAdded then
+        Events.OnObjectAdded.Add(onObjectAdded)
     end
 
     if Events.OnWaterAmountChange then

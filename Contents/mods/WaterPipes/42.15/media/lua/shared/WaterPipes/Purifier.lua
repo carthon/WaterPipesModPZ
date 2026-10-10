@@ -2,13 +2,17 @@ WaterPipes = WaterPipes or {}
 WaterPipes.Purifier = WaterPipes.Purifier or {}
 
 require "WaterPipes/Constants"
+require "WaterPipes/Invalidate"
 require "WaterPipes/Logger"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/Pressure"
 require "WaterPipes/World"
 
 local Constants = WaterPipes.Constants
+local Invalidate = WaterPipes.Invalidate
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local Pressure = WaterPipes.Pressure
 local Purifier = WaterPipes.Purifier
 local World = WaterPipes.World
 
@@ -124,7 +128,20 @@ function Purifier.wearFilter(worldObject, volume)
         return   -- wear disabled via sandbox: the filter never degrades
     end
     local worn = Purifier.getFilterCondition(worldObject) - volume * perUnit
+    -- Snapped, so a filter worn down to its last float is spent rather than trickling forever.
+    if worn < 1e-6 then
+        worn = 0
+    end
     Purifier.setFilterCondition(worldObject, worn)
+end
+
+-- Litres of tainted water the filter can still clean before it is spent.
+function Purifier.filterLitresLeft(worldObject)
+    local perUnit = filterWearPerUnit()
+    if perUnit <= 0 then
+        return math.huge
+    end
+    return Purifier.getFilterCondition(worldObject) / perUnit
 end
 
 -- Restore the filter to full (the "Repair Filter" action, after consuming the repair kit).
@@ -168,6 +185,46 @@ function Purifier.getOutAmount(worldObject)
     local modData = getModData(worldObject)
     local value = modData and modData[Constants.PURIFIER_OUT_AMOUNT_KEY]
     return type(value) == "number" and math.max(value, 0) or 0
+end
+
+-- ===== Inlet head =====
+-- Head (m.c.a.) the dirty side delivers to the IN tile, recorded by Purifier.step. Stored rather than
+-- solved, because the clean zone cannot solve the dirty one without cross-zone recursion.
+function Purifier.getInletHead(worldObject)
+    local modData = getModData(worldObject)
+    local value = modData and modData[Constants.PURIFIER_INLET_HEAD_KEY]
+    if type(value) == "number" and value > 0 then
+        return value
+    end
+    return 0
+end
+
+-- Returns true when the head moved more than PURIFIER_INLET_HEAD_EPSILON (clean zone needs re-pricing).
+function Purifier.setInletHead(worldObject, head)
+    local modData = getModData(worldObject)
+    if not modData then
+        return false
+    end
+
+    local value = math.max(head or 0, 0)
+    local previous = Purifier.getInletHead(worldObject)
+    if math.abs(value - previous) <= Constants.PURIFIER_INLET_HEAD_EPSILON then
+        return false
+    end
+
+    modData[Constants.PURIFIER_INLET_HEAD_KEY] = value > 0 and value or nil
+    if worldObject.transmitModData then
+        pcall(worldObject.transmitModData, worldObject)
+    end
+    return true
+end
+
+-- Head passed through to the clean side (m.c.a.). Hydraulics uses it as a floor, never as a base to pump.
+function Purifier.passedHead(worldObject)
+    if not Pressure.isEnabled() then
+        return 0
+    end
+    return Purifier.getInletHead(worldObject) * Pressure.purifierHeadTransfer()
 end
 
 -- Was fluid actually moving on the last server tick? Distinct from isWorking, which only says the
@@ -347,20 +404,18 @@ function Purifier.step(purifier, inSquare, outSquare, dt)
     -- busy, and the readout used to call that "Stopped" purely because the levels looked static.
     local processed = false
 
-    -- 1. Output: even the OUT buffer out with the rest of the clean network.
-    -- It used to PUSH -- read the buffer, ask the network for headroom, fill it, subtract what was taken --
-    -- which is exactly wrong now that the buffer IS one of that network's containers: the fill rebalances
-    -- water back into the buffer and the subtraction removes it a second time. Settling moves nothing in or
-    -- out, it only lets the level equalise; with no barrels it is a no-op and a tap can still reach it.
-    local outAmount = Purifier.getOutAmount(purifier)
-    if outAmount > 0 then
-        local settled = NetworkAccess.settleAtSquare(outSquare)
-        if settled > 0 and Purifier.getOutAmount(purifier) ~= outAmount then
+    -- 1. Output: push the OUT buffer into the clean network. The buffer stands aside from the share-out
+    -- it feeds, the way a tank behind a router does, so it empties whenever anything downstream has room
+    -- rather than keeping its proportional share for ever. With no vessels to take it the water stays
+    -- put and a tap can still reach it.
+    if Purifier.getOutAmount(purifier) > 0 then
+        if NetworkAccess.drainPurifierOutletsAt(outSquare) > 0 then
             processed = true
         end
     end
 
     -- 2. Convert: move IN -> OUT. Tainted needs power AND filter life; clean water always passes.
+    local outBefore = Purifier.getOutAmount(purifier)
     local inAmount = Purifier.getInAmount(purifier)
     if inAmount > 0 then
         local outHeadroom = Constants.PURIFIER_BUFFER_CAPACITY - Purifier.getOutAmount(purifier)
@@ -371,6 +426,8 @@ function Purifier.step(purifier, inSquare, outSquare, dt)
                 -- filter; at 0 condition it stops and the water waits in IN until the player repairs it.
                 if Purifier.canFilter(purifier) then
                     local before = Purifier.getInAmount(purifier)
+                    -- No more than the filter has life left for.
+                    move = math.min(move, Purifier.filterLitresLeft(purifier))
                     Purifier.moveInToOut(purifier, move)   -- lands in the OUT buffer as clean Water
                     local converted = before - Purifier.getInAmount(purifier)
                     Purifier.wearFilter(purifier, converted)
@@ -384,11 +441,21 @@ function Purifier.step(purifier, inSquare, outSquare, dt)
             end
         end
     end
+    -- An empty clean buffer just became a supply for the clean side.
+    if outBefore <= 0 and Purifier.getOutAmount(purifier) > 0 then
+        pcall(Invalidate.supplyChangedAt, outSquare)
+    end
 
     -- 3. Intake: pull ONLY TAINTED water, and ONLY from the router's IN side. The purifier never draws
     -- clean water and never pulls anything back off the OUT side. Runs with or without power; only
     -- converting it later needs power and filter life.
-    local avail, fluidType = NetworkAccess.availableToPull(inSquare)
+    local avail, fluidType, inletHead = NetworkAccess.availableToPull(inSquare)
+
+    -- The clean side is priced from this head; re-price it when the head moves.
+    if Purifier.setInletHead(purifier, inletHead) then
+        pcall(Invalidate.supplyChangedAt, outSquare)
+    end
+
     if fluidType == "TaintedWater" and avail > 0 then
         local curIn = Purifier.getInAmount(purifier)
         -- Pull into an empty buffer or one already holding tainted water (it is always tainted now).

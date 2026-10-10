@@ -10,5 +10,6 @@
     "Tooltip_craft_WaterPumpDesc": "Electric pump. On a pipe run it raises pressure while powered, and chained pumps add up. Beside a well or open water it also draws water into the network. It sucks up from about two floors below but pushes far higher, so place it low. Needs a Pipe Wrench and welding gear.",
     "Tooltip_craft_WaterPipeDripDesc": "Drip emitter. A pipe that waters the crop on its own tile and passes water on. No pressure needed, only water. Too much pressure bursts it, so keep pumps off its line or cap it with a router. Needs a Pipe Wrench.",
     "Tooltip_craft_WaterPipeSprinklerDesc": "Sprinkler. A pipe that waters the whole 3x3 around it, but needs real pressure, which means a pump. It sprays every tile whether or not it is growing, wastes water, and is loud enough to draw zombies. Needs a Pipe Wrench.",
+    "Tooltip_craft_WaterPipeValveDesc": "A shut-off valve. Fits onto a pipe that is already there, concealed building plumbing included, so nothing has to come down first. Open it does nothing; closed it splits the network in two, and the sides stop sharing water, pressure and contamination. Right-click to turn it, Pipe Wrench in hand.",
     "Tooltip_craft_WaterPressureGaugeDesc": "Pressure dial. Sits on a pipe; right-click to read the pressure at that point and whether a sprinkler would run there. Needs a Pipe Wrench."
 }

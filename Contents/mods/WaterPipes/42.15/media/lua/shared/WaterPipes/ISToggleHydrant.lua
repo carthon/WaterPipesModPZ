@@ -1,6 +1,7 @@
 require "TimedActions/ISBaseTimedAction"
 require "WaterPipes/Constants"
 require "WaterPipes/Hydrant"
+require "WaterPipes/SoundOptions"
 
 -- Opening or closing a fire hydrant: the character walks to it, works the wrench, and only then does
 -- the valve turn. Same shape as ISRepairWaterDrip -- the world state is flipped authoritatively on the
@@ -31,16 +32,16 @@ end
 
 function ISToggleHydrant:start()
     self:setActionAnim("VehicleWorkOnMid")
-    self.sound = self.character:playSound("RepairWithWrench")
+    self.sound = WaterPipes.SoundOptions.playOnCharacter(self.character, "RepairWithWrench")
 end
 
 function ISToggleHydrant:stop()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
     ISBaseTimedAction.stop(self)
 end
 
 function ISToggleHydrant:perform()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
 
     local square = self.hydrant:getSquare()
     if isClient() and square then

@@ -8,9 +8,12 @@
     "ContextMenu_WaterPipesCheckEmitter": "检查灌溉头",
     "ContextMenu_WaterPipesRepairDrip": "修复滴灌头",
     "ContextMenu_WaterPipesRouterPressureOpen": "设置压力上限...",
+    "ContextMenu_WaterPipesOpenValve": "打开阀门",
+    "ContextMenu_WaterPipesCloseValve": "关闭阀门",
     "ContextMenu_WaterPipesOpenHydrant": "打开消防栓",
     "ContextMenu_WaterPipesCloseHydrant": "关闭消防栓",
     "ContextMenu_WaterPipesPumpTurnOn": "开启",
     "ContextMenu_WaterPipesPumpTurnOff": "关闭",
-    "ContextMenu_WaterPipesPumpStatus": "查看水泵状态"
+    "ContextMenu_WaterPipesPumpStatus": "查看水泵状态",
+    "ContextMenu_WaterPipesPlumbBuilding": "为这栋建筑布管"
 }

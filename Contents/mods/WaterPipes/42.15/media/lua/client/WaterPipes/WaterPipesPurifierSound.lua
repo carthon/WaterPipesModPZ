@@ -6,47 +6,31 @@
 require "WaterPipes/Constants"
 require "WaterPipes/Purifier"
 require "WaterPipes/WaterPipesTileRegistry"
+require "WaterPipes/SoundOptions"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.PurifierSound = WaterPipes.PurifierSound or {}
 
 local Purifier = WaterPipes.Purifier
+local SoundOptions = WaterPipes.SoundOptions
 local Registry = WaterPipes.TileRegistry
 local Sound = WaterPipes.PurifierSound
 
 -- Tunables. Switch SOUND_NAME to "OldGeneratorLoop" for a rougher, older-motor hum.
 local SOUND_NAME = "GeneratorLoop"
-local DEFAULT_VOLUME = 55     -- 0..100; slider default and fallback
 local SCAN_RADIUS = 14        -- tiles around the player we manage emitters within
 local INTERVAL_TICKS = 60     -- ~1s at 60fps between rescans (cheap; the hum is local)
 
--- THE single entry point for all of the mod's audio: client-side, per-player, runtime mod options
--- (in-game Options -> Mods), persisted in ModOptions.ini. No sandbox / no restart needed. Every future
--- sound must gate on soundEnabled() and use soundVolume() (see the sound-entry-point project memory).
+-- Registers the mod's options group; every sound reads it through WaterPipes.SoundOptions.
 if PZAPI and PZAPI.ModOptions and not PZAPI.ModOptions:getOptions("WaterPipes") then
     local opts = PZAPI.ModOptions:create("WaterPipes", "IGUI_WaterPipes_Options")
     opts:addTickBox("SoundEnabled", "IGUI_WaterPipes_SoundEnabled", true, "IGUI_WaterPipes_SoundEnabled_tooltip")
-    opts:addSlider("SoundVolume", "IGUI_WaterPipes_SoundVolume", 0, 100, 5, DEFAULT_VOLUME, "IGUI_WaterPipes_SoundVolume_tooltip")
+    opts:addSlider("SoundVolume", "IGUI_WaterPipes_SoundVolume", 0, 100, 5, SoundOptions.DEFAULT_VOLUME, "IGUI_WaterPipes_SoundVolume_tooltip")
     opts:addTickBox("EffectsEnabled", "IGUI_WaterPipes_EffectsEnabled", true, "IGUI_WaterPipes_EffectsEnabled_tooltip")
 end
 
-local function modOption(id)
-    local group = PZAPI and PZAPI.ModOptions and PZAPI.ModOptions:getOptions("WaterPipes")
-    return group and group:getOption(id) or nil
-end
-
--- Read live so a change in the options menu takes effect on the next rescan. Safe defaults if the
--- options are not registered yet (enabled, 55%).
-local function soundEnabled()
-    local o = modOption("SoundEnabled")
-    return not o or o:getValue() ~= false
-end
-
-local function soundVolume()
-    local o = modOption("SoundVolume")
-    local v = o and o:getValue() or DEFAULT_VOLUME
-    return math.min(math.max(v, 0), 100) / 100
-end
+local soundEnabled = SoundOptions.enabled
+local soundVolume = SoundOptions.volume
 
 Sound.active = Sound.active or {}   -- key "x:y:z" -> { emitter = , channel = }
 

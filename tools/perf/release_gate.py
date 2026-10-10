@@ -29,6 +29,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, os.pardir, os.pardir))
 SHARED = "Contents/mods/WaterPipes/42.15/media/lua/shared/WaterPipes"
+SERVER = "Contents/mods/WaterPipes/42.15/media/lua/server/WaterPipes"
 COMMON = "Contents/mods/WaterPipes/common/media/lua/shared/WaterPipes"
 SCRIPTS = "Contents/mods/WaterPipes/42.15/media/scripts"
 TESTS_DIR = os.path.join(REPO, "tools", "conservation")
@@ -42,6 +43,10 @@ TESTS_DIR = os.path.join(REPO, "tools", "conservation")
 # reported a clean sweep of "carried forward" for a release with four fixes in it. A gate that can
 # select the wrong baseline reports the reassuring answer, never the alarming one.
 BASELINE_GREP = "^chore: bump modversion"
+
+# A test that documents a known, unfixed problem carries this line in its header. It is red on
+# purpose: it runs and is reported, but does not block. One that turns green is flagged.
+OPEN_MARKER = re.compile(r"^--\s*OPEN:\s*(.*)$", re.MULTILINE)
 
 
 def git(*args):
@@ -96,7 +101,19 @@ def extract(rev, path, into, suffix=".lua", flatten=True):
     return count
 
 
-def run_test(name, env_root=None, env_common=None, env_scripts=None):
+def open_reason(name):
+    """The `-- OPEN:` reason in the test's header comment, or None."""
+    header = []
+    with open(os.path.join(TESTS_DIR, name), encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            if not line.startswith("--"):
+                break
+            header.append(line.rstrip("\r\n"))
+    found = OPEN_MARKER.search("\n".join(header))
+    return found.group(1).strip() if found else None
+
+
+def run_test(name, env_root=None, env_common=None, env_scripts=None, env_server=None):
     env = dict(os.environ)
     if env_root:
         env["WP_LUA_ROOT"] = env_root
@@ -107,10 +124,14 @@ def run_test(name, env_root=None, env_common=None, env_scripts=None):
         # modules, and a fix that edits only a recipe is invisible to a baseline that keeps
         # serving today's copy -- it would report itself as carried-forward coverage.
         env["WP_SCRIPTS_ROOT"] = env_scripts or ""
+        # And the server tree: WaterPipeSystem lives there, and a fix to it is invisible to a
+        # baseline that keeps loading today's copy.
+        env["WP_LUA_SERVER"] = env_server or ""
     else:
         env.pop("WP_LUA_ROOT", None)
         env.pop("WP_LUA_COMMON", None)
         env.pop("WP_SCRIPTS_ROOT", None)
+        env.pop("WP_LUA_SERVER", None)
     try:
         done = subprocess.run(["lua", name], cwd=TESTS_DIR, capture_output=True,
                               text=True, encoding="utf-8", errors="replace",
@@ -120,13 +141,17 @@ def run_test(name, env_root=None, env_common=None, env_scripts=None):
     except subprocess.TimeoutExpired:
         return False, "timed out"
     failed = len(re.findall(r"\bFAIL\b", done.stdout))
+    # A non-zero exit with no failing check: the test died before judging anything. A missing
+    # function is not a failed assertion, so it proves nothing about a fix.
+    crashed = done.returncode != 0 and not failed
     if failed:
         detail = str(failed) + " failing check(s)"
     elif done.returncode:
-        detail = "exit " + str(done.returncode)
+        lines = [l.strip() for l in done.stderr.split("\n") if l.strip()]
+        detail = "exit " + str(done.returncode) + (": " + lines[0][:90] if lines else "")
     else:
         detail = ""
-    return done.returncode == 0, detail
+    return done.returncode == 0, detail, crashed
 
 
 def main():
@@ -163,9 +188,18 @@ def main():
 
     # ---- 1. the tree must be green -------------------------------------------------------
     print("-- the working tree must be green --")
-    broken = []
+    broken, still_open, now_green = [], [], []
+    opens = {name: open_reason(name) for name in tests}
     for name in tests:
-        ok, detail = run_test(name)
+        ok, detail, _ = run_test(name)
+        if opens[name] is not None:
+            if ok:
+                now_green.append(name)
+                print("  %-28s pass  OPEN test is green -- close it" % name)
+            else:
+                still_open.append(name)
+                print("  %-28s open  %s (red on purpose)" % (name, detail))
+            continue
         print("  %-28s %-5s %s" % (name, "pass" if ok else "FAIL", detail))
         if not ok:
             broken.append(name)
@@ -179,7 +213,9 @@ def main():
         root = os.path.join(workdir, "shared")
         common = os.path.join(workdir, "common")
         scripts = os.path.join(workdir, "scripts")
+        server = os.path.join(workdir, "server")
         n = extract(baseline, SHARED, root)
+        extract(baseline, SERVER, server)
         extract(baseline, COMMON, common)
         extract(baseline, SCRIPTS, scripts, suffix=".txt", flatten=False)
         if n == 0:
@@ -187,12 +223,17 @@ def main():
 
         print("")
         print("-- and it must FAIL against the previous release --")
-        proves, carried = [], []
+        proves, carried, unprovable = [], [], []
         for name in tests:
-            ok, detail = run_test(name, root + os.sep, common + os.sep, scripts + os.sep)
+            if opens[name] is not None:
+                continue
+            ok, detail, crashed = run_test(name, root + os.sep, common + os.sep, scripts + os.sep, server + os.sep)
             if ok:
                 carried.append(name)
                 print("  %-28s passes there too   (carried forward)" % name)
+            elif crashed:
+                unprovable.append(name)
+                print("  %-28s breaks on load     (not provable)    %s" % (name, detail))
             else:
                 proves.append(name)
                 print("  %-28s FAILS there        <- proves a fix   %s" % (name, detail))
@@ -212,6 +253,21 @@ def main():
             print("")
             print(str(len(carried)) + " file(s) pass against both. Carried-forward coverage: real, but")
             print("  unproven this cycle -- a test only earns trust on a build where it fails.")
+        if unprovable:
+            print("")
+            print(str(len(unprovable)) + " file(s) break on load against the baseline, before any check ran.")
+            print("  Not a demonstration: what they test may simply not exist there.")
+        if still_open:
+            print("")
+            print(str(len(still_open)) + " OPEN test(s), red on purpose, not blocking:")
+            for name in still_open:
+                print("    " + name + " -- " + opens[name])
+        if now_green:
+            print("")
+            print("WARNING: " + str(len(now_green)) + " OPEN test(s) now PASS -- the problem looks fixed.")
+            print("  Drop the `-- OPEN:` line and add a ledger entry.")
+            for name in now_green:
+                print("    " + name)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 

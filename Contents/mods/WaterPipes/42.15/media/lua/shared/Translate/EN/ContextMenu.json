@@ -8,9 +8,12 @@
     "ContextMenu_WaterPipesCheckEmitter": "Check irrigation emitter",
     "ContextMenu_WaterPipesRepairDrip": "Repair drip emitter",
     "ContextMenu_WaterPipesRouterPressureOpen": "Set pressure limit...",
+    "ContextMenu_WaterPipesOpenValve": "Open valve",
+    "ContextMenu_WaterPipesCloseValve": "Close valve",
     "ContextMenu_WaterPipesOpenHydrant": "Open hydrant",
     "ContextMenu_WaterPipesCloseHydrant": "Close hydrant",
     "ContextMenu_WaterPipesPumpTurnOn": "Turn on",
     "ContextMenu_WaterPipesPumpTurnOff": "Turn off",
-    "ContextMenu_WaterPipesPumpStatus": "Check pump"
+    "ContextMenu_WaterPipesPumpStatus": "Check pump",
+    "ContextMenu_WaterPipesPlumbBuilding": "Plumb this building"
 }

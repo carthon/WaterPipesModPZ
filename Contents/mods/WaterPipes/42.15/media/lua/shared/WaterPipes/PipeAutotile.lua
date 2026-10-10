@@ -150,6 +150,7 @@ local function invalidateMoveableCursorCache()
         end
     end
 end
+PipeAutotile.invalidateMoveableCursorCache = invalidateMoveableCursorCache
 
 -- Apply a sprite to a pipe only if it changed (client-cosmetic: never transmitted).
 local function setSpriteIfChanged(worldObject, sprite)
@@ -260,6 +261,20 @@ local function floorConnectionSprite(pipe, x, y, z)
     return MASK_SPRITE[mask]
 end
 
+-- The connecting shape of the floor pipe at (x,y,z), concealed or not; the valve matches its body to it.
+function PipeAutotile.floorShapeAt(x, y, z)
+    local pipe = getFloorPipeOnSquare(getSquare(x, y, z))
+    return pipe and floorConnectionSprite(pipe, x, y, z) or nil
+end
+
+-- Read off the WaterPipes table, not required: Valve's requires lead back here.
+local function refreshValveOn(square)
+    local Valve = WaterPipes.Valve
+    if Valve and Valve.reconcileOnSquare then
+        pcall(Valve.reconcileOnSquare, square)
+    end
+end
+
 -- A wall riser is never autotiled: paint it transparent when concealed, else its fixed edge sprite.
 local function refreshRiserVisibility(pipe)
     if not isRiser(pipe) then
@@ -279,6 +294,9 @@ function PipeAutotile.refreshFloorPipeAt(x, y, z)
     if not pipe then
         return
     end
+
+    -- A neighbour change reshapes the pipe, and the valve on it with it.
+    refreshValveOn(square)
 
     -- Concealed floor pipes render transparent, but still count as a floor connection for
     -- neighbours (getFloorPipeOnSquare finds them by modData, not by sprite).

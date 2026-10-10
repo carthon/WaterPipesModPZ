@@ -10,6 +10,7 @@ require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Purifier"
 require "WaterPipes/Router"
+require "WaterPipes/Valve"
 require "WaterPipes/World"
 
 local Adapter = WaterPipes.ContainerAdapter
@@ -22,6 +23,7 @@ local Pressure = WaterPipes.Pressure
 local Pump = WaterPipes.Pump
 local Purifier = WaterPipes.Purifier
 local Router = WaterPipes.Router
+local Valve = WaterPipes.Valve
 
 -- The demand-aware pressure solver: one head field per NETWORK, propagated in the water's direction
 -- from the sources outward, instead of one arithmetic answer per (source, consumer) pair. That is what
@@ -227,7 +229,12 @@ local function discover(seedSquare)
         adjacency[key] = adjacency[key] or {}
 
         local function consider(neighbourSquare)
-            if not neighbourSquare then
+            -- The pipe test first: it is memoised, and most neighbours fail it. A router is a pipe too.
+            if not neighbourSquare or not hasPipeOnSquare(neighbourSquare) then
+                return
+            end
+            -- A closed shut-off valve carries no head across: the neighbour is simply not reachable.
+            if Valve.isClosedOnSquare(neighbourSquare) then
                 return
             end
             if Router.hasRouterOnSquare(neighbourSquare) then
@@ -275,9 +282,6 @@ local function discover(seedSquare)
                     z = rz,
                     ceiling = Router.getPressureCeiling(router),
                 }
-                return
-            end
-            if not hasPipeOnSquare(neighbourSquare) then
                 return
             end
             link(key, push(neighbourSquare))
@@ -342,8 +346,11 @@ local function classifySites(nodes, order)
     return sites
 end
 
-local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets)
+local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets, regions)
     local supply = {}        -- key -> head at that node (m.c.a., absolute)
+    -- Pump head per regulator region; a zone with no regulator is a single region.
+    local function regionOf(key) return (regions and regions[key]) or 1 end
+    local pumpHeadInRegion = {}
     local boostable = {}     -- key -> true when a pump may lift this supply (see the end of the pass)
     local demand = {}        -- key -> litres/hour drawn there
     local kinds = {}         -- key -> the consumer kind occupying it
@@ -387,11 +394,18 @@ local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets)
     -- take dirty water in and let nobody draw the clean water out. The comment on the settle even
     -- promised the opposite: "with no barrels it is a no-op and a tap can still reach it".
     -- Same base head as a vessel, and boostable for the same reason: a pump lifts stored water.
+    -- The share passed through from the dirty side is a separate floor, applied after the pumps.
+    local passedFloor = {}
     for _, outlet in pairs(purifierOutlets or {}) do
         local node = outlet.nodeKey and nodes[outlet.nodeKey]
         if node and Purifier and Purifier.getOutAmount
             and (Purifier.getOutAmount(outlet.purifier) or 0) > 0 then
             raise(outlet.nodeKey, elevation(node.z) + containerBase, true)
+            local passed = Purifier.passedHead and Purifier.passedHead(outlet.purifier) or 0
+            if passed > 0 then
+                passedFloor[outlet.nodeKey] = math.max(passedFloor[outlet.nodeKey] or 0,
+                    elevation(node.z) + passed)
+            end
         end
     end
 
@@ -431,7 +445,11 @@ local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets)
                 stats.poweredPumps = stats.poweredPumps + 1
                 pumps[key] = pumps[key] or {}
                 pumps[key][#pumps[key] + 1] = pump
-                stats.pumpHead = stats.pumpHead + Pump.headForPumps({ pump })
+                -- Zone total for the readout; vessels are lifted by the per-region figure.
+                local head = Pump.headForPumps({ pump })
+                stats.pumpHead = stats.pumpHead + head
+                local side = regionOf(key)
+                pumpHeadInRegion[side] = (pumpHeadInRegion[side] or 0) + head
                 if Pump.findSource and Pump.findSource(pump) then
                     raise(key, elevation(node.z) + containerBase, true)
                 end
@@ -457,7 +475,18 @@ local function collectSupplyAndDemand(nodes, order, sites, purifierOutlets)
     -- stacks onto.
     if stats.pumpHead > 0 then
         for key in pairs(boostable) do
-            supply[key] = supply[key] + stats.pumpHead
+            local boost = pumpHeadInRegion[regionOf(key)]
+            if boost and boost > 0 then
+                supply[key] = supply[key] + boost
+            end
+        end
+    end
+
+    -- Never lifted by a pump: head that came through a purifier is a floor, like the mains. Lifting it
+    -- lets a bypass around the purifier feed its own output back in and climb without bound.
+    for key, floor in pairs(passedFloor) do
+        if floor > supply[key] then
+            supply[key] = floor
         end
     end
 
@@ -476,6 +505,8 @@ local function orderBySupply(nodes, adjacency, routers, supply, adjacencyOrder)
     local sequence = {}
 
     -- Router crossings are directed edges: water leaves by the OUT side. Indexed by the downstream node.
+    -- Strictly directional: drawReachableFrom reads it as reachability. propagate looks it up from both
+    -- ends for the head cap instead of adding reverse entries here.
     local viaRouter = {}
     -- ...and the same edges from the UPSTREAM side, for the walk below. Built here rather than scanned
     -- per node: the walk used to look at every router in the zone for each of its nodes. Sorted for the
@@ -628,6 +659,60 @@ local function buildFeeders(nodes, adjacency, routers)
     return feeders
 end
 
+-- Region of each node, split on routers that have a ceiling. Pumps only lift supplies in their own
+-- region, because a supply term is never capped. A router without a ceiling joins its two ends.
+local function partitionByRegulators(nodes, order, adjacency, routers, adjacencyOrder)
+    local region = {}
+
+    -- Transparent router edges, as extra adjacency. Sorted for the reason the walk in orderBySupply is:
+    -- nothing here may depend on Lua's per-process string hashing.
+    local joins = {}
+    local function join(a, b)
+        joins[a] = joins[a] or {}
+        joins[a][#joins[a] + 1] = b
+    end
+    for _, router in pairs(routers or {}) do
+        if not router.ceiling then
+            join(router.inKey, router.outKey)
+            join(router.outKey, router.inKey)
+        end
+    end
+    for _, list in pairs(joins) do
+        table.sort(list)
+    end
+
+    local count = 0
+    for _, seed in ipairs(order) do
+        if not region[seed] then
+            count = count + 1
+            region[seed] = count
+            local queue = { seed }
+            local index = 1
+            while index <= #queue do
+                local key = queue[index]
+                index = index + 1
+
+                local function step(neighbourKey)
+                    if nodes[neighbourKey] and not region[neighbourKey] then
+                        region[neighbourKey] = count
+                        queue[#queue + 1] = neighbourKey
+                    end
+                end
+
+                local neighbours = adjacencyOrder and adjacencyOrder[key]
+                if neighbours then
+                    for _, neighbourKey in ipairs(neighbours) do step(neighbourKey) end
+                else
+                    for neighbourKey in pairs(adjacency[key] or {}) do step(neighbourKey) end
+                end
+                for _, neighbourKey in ipairs(joins[key] or {}) do step(neighbourKey) end
+            end
+        end
+    end
+
+    return region
+end
+
 -- ===== Phase 5: propagate head away from the supply =====
 -- RELAXATION, not a topological sweep. The BFS seeds EVERY supplied node at depth 0, so a barrel on the
 -- line has no parents -- and a sweep that only takes head from a node's parents pinned each barrel to
@@ -689,7 +774,11 @@ local function propagate(nodes, sequence, parents, feeders, supply, flow, peak, 
                     -- A regulator on this edge fixes the head at ITS OUTLET; past it the water keeps paying friction and
                     -- height like any other run. The cap is a constant of the edge, so the elevation() behind it -- which
                     -- reads a sandbox value -- is computed once, not per pass.
-                    local router = routersHere and routersHere[list[order]]
+                    -- A regulator caps head crossing it in either direction; viaRouter is keyed by the downstream
+                    -- node, so look the edge up from both ends.
+                    local feederKey = list[order]
+                    local router = (routersHere and routersHere[feederKey])
+                        or ((viaRouter[feederKey] or {})[key])
                     if router and router.ceiling then
                         caps = caps or {}
                         caps[#mapped] = elevation(router.z) + router.ceiling
@@ -833,6 +922,9 @@ local function discoverTopology(seedSquare)
         return nil
     end
 
+    -- Each node's neighbours in a fixed order; the table below uses it twice.
+    local adjacencyOrder = sortedAdjacency(nodes, adjacency)
+
     -- Every node that can hand head to another. Derived from the adjacency and the routers, so it belongs
     -- to the topology rather than to the solve that reads it.
     return {
@@ -846,7 +938,9 @@ local function discoverTopology(seedSquare)
         -- reason: a re-pricing must not pay to rediscover the shape. Built here, the walk's determinism
         -- costs the discovery once instead of every solve -- measured at +17 % on a re-price when it was
         -- sorted per solve, which is the common path.
-        adjacencyOrder = sortedAdjacency(nodes, adjacency),
+        adjacencyOrder = adjacencyOrder,
+        -- Regulator region of each node, built from adjacencyOrder so it is deterministic.
+        regions = partitionByRegulators(nodes, order, adjacency, routers, adjacencyOrder),
         -- Where the vessels, inlets, pumps and emitters stand. Structural, so it belongs here rather than being
         -- rediscovered by every re-pricing.
         sites = classifySites(nodes, order),
@@ -911,7 +1005,7 @@ local function solveWithTopology(topology, zoneKey)
 
     local mark = markPhase()
     local supply, demand, kinds, pumps, sources, supplyFloor, stats =
-        collectSupplyAndDemand(nodes, order, topology.sites, purifierOutlets)
+        collectSupplyAndDemand(nodes, order, topology.sites, purifierOutlets, topology.regions)
     sincePhase("solve/supply", mark)
 
     mark = markPhase()
@@ -1255,6 +1349,42 @@ function Hydraulics.invalidateAroundSquare(square)
     end
 end
 
+-- A zone priced with no supply refuses every consumer, and a vessel filled with no event (rain, Transfer
+-- Fluids, another mod) never re-prices it: the refusal stops the writes that would notice. This looks
+-- without being told. Returns false when it found the zone mispriced and marked it for re-pricing.
+function Hydraulics.verifySupplyAt(square)
+    if not square then
+        return true
+    end
+
+    local zoneId = zoneOfNode[squareKey(square)]
+    local solution = zoneId and solutionCache[zoneId] or nil
+    if not solution or not solution.topology then
+        return true
+    end
+
+    -- Counted, not asked with next(): PZ's Lua does not expose it.
+    for _ in pairs(solution.supply or {}) do
+        return true
+    end
+
+    local vessels = Hydraulics.vesselSquares(solution)
+    if #vessels == 0 then
+        return true
+    end
+
+    for _, vessel in ipairs(vessels) do
+        for _, descriptor in pairs(Adapter.collectSquareContainers(vessel.square) or {}) do
+            if (descriptor.waterAmount or 0) > 0 then
+                staleSupplyInZone(zoneId)
+                return false
+            end
+        end
+    end
+
+    return true
+end
+
 -- The same tile scoping, but for a change that cannot have moved a pipe: a vessel crossing between
 -- empty and not. Callers must be sure of that premise -- it holds for OnWaterAmountChange and for
 -- nothing else here, since an object appearing or leaving CAN be a pipe and goes to the drop above.
@@ -1340,6 +1470,13 @@ function Hydraulics.solveAt(square)
 
     -- The seed must be a pipe tile: a fixture has no pipe of its own, so the zone it belongs to is
     -- whichever one its neighbours are on.
+    --
+    -- ...but not when the square is a closed valve: seeding from a neighbour would pick one side of it.
+    -- A shut valve has no zone.
+    if Valve.isClosedOnSquare(square) then
+        return nil
+    end
+
     local seed = nil
     if hasPipeOnSquare(square) and not Router.hasRouterOnSquare(square) then
         seed = square
@@ -1350,7 +1487,8 @@ function Hydraulics.solveAt(square)
                 return
             end
             if neighbour and hasPipeOnSquare(neighbour)
-                and not Router.hasRouterOnSquare(neighbour) then
+                and not Router.hasRouterOnSquare(neighbour)
+                and not Valve.isClosedOnSquare(neighbour) then
                 seed = neighbour
             end
         end
@@ -1511,6 +1649,106 @@ function Hydraulics.supplyHead(solution)
     return solution and solution.stats and solution.stats.supplyHead or 0
 end
 
+-- Regulator region of a tile, or of the first pipe beside it for a fixture off the line.
+local function regionAt(solution, x, y, z)
+    local regions = solution.topology and solution.topology.regions
+    if not regions then
+        return nil
+    end
+    local key = keyOf(x, y, z)
+    if solution.nodes[key] then
+        return regions[key]
+    end
+    for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
+        local neighbour = keyOf(x + offset.x, y + offset.y, z)
+        if solution.nodes[neighbour] then
+            return regions[neighbour]
+        end
+    end
+    return nil
+end
+
+-- Each region's own lift: its powered pumps, or a live utility supply standing in it.
+local function regionOwnLift(solution)
+    if solution._regionOwnLift then
+        return solution._regionOwnLift
+    end
+    local regions = solution.topology.regions
+    local sites = solution.topology.sites
+    local pumpHead, own = {}, {}
+    for key, pumps in pairs(solution.pumps or {}) do
+        local r = regions[key]
+        pumpHead[r] = (pumpHead[r] or 0) + Pump.headForPumps(pumps)
+    end
+    for r, head in pairs(pumpHead) do
+        own[r] = head
+    end
+    solution._regionPumpHead = pumpHead
+    local function supply(key, head)
+        local r = regions[key]
+        if head > (own[r] or 0) then
+            own[r] = head
+        end
+    end
+    for _, key in ipairs(sites.mains or {}) do
+        if Mains.findOnSquare(solution.nodes[key].square) then
+            supply(key, Mains.head())
+        end
+    end
+    for _, key in ipairs(sites.hydrants or {}) do
+        local hydrant = Hydrant.findOnSquare(solution.nodes[key].square)
+        if hydrant and Hydrant.pressureActive(hydrant) then
+            supply(key, Hydrant.head())
+        end
+    end
+    solution._regionOwnLift = own
+    return own
+end
+
+-- Lift (m.c.a.) that can move water from one tile to another in this zone. Each region lifts with its
+-- own pumps or supply; lift carried IN -> OUT across a regulator is capped at its ceiling.
+function Hydraulics.liftBetween(solution, fromX, fromY, fromZ, toX, toY, toZ)
+    if not solution or not solution.topology then
+        return 0
+    end
+    local fromRegion = regionAt(solution, fromX, fromY, fromZ)
+    local toRegion = regionAt(solution, toX, toY, toZ)
+    local own = regionOwnLift(solution)
+    if not fromRegion or not toRegion then
+        return 0
+    end
+    if fromRegion == toRegion then
+        return own[fromRegion] or 0
+    end
+
+    local regions = solution.topology.regions
+    local edges = {}
+    for _, router in pairs(solution.topology.routers or {}) do
+        if router.ceiling and regions[router.inKey] and regions[router.outKey] then
+            edges[#edges + 1] = { from = regions[router.inKey], to = regions[router.outKey], cap = router.ceiling }
+        end
+    end
+
+    local arriving = { [fromRegion] = own[fromRegion] or 0 }
+    for _ = 1, #edges + 1 do
+        local changed = false
+        for _, e in ipairs(edges) do
+            local upstream = arriving[e.from]
+            if upstream then
+                local candidate = math.max(own[e.to] or 0, math.min(upstream, e.cap))
+                if not arriving[e.to] or candidate > arriving[e.to] then
+                    arriving[e.to] = candidate
+                    changed = true
+                end
+            end
+        end
+        if not changed then
+            break
+        end
+    end
+    return arriving[toRegion] or own[toRegion] or 0
+end
+
 -- The purifier OUT buffers on this zone, as the solve recorded them during the walk.
 function Hydraulics.purifierOutlets(solution)
     return solution and solution.purifierOutlets or {}
@@ -1546,7 +1784,14 @@ function Hydraulics.zoneReport(solution, square)
     report.poweredPumps = stats.poweredPumps or 0
     report.mainsCount = stats.mainsCount or 0
     report.hydrantCount = stats.hydrantCount or 0
-    report.pumpHead = stats.pumpHead or 0
+    -- The pumps lifting THIS tile's regulator region; a pump past a regulator lifts nothing here.
+    local region = square and regionAt(solution, square:getX(), square:getY(), square:getZ())
+    if region and solution.topology and solution.topology.regions then
+        regionOwnLift(solution)
+        report.pumpHead = solution._regionPumpHead[region] or 0
+    else
+        report.pumpHead = stats.pumpHead or 0
+    end
     report.mainsHead = (stats.mainsCount or 0) > 0 and Mains.head() or 0
     report.supplyHead = stats.supplyHead or 0
 

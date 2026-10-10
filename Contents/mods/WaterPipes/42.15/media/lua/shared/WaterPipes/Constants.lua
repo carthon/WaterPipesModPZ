@@ -14,7 +14,8 @@ Constants.REDISTRIBUTION_INTERVAL_MINUTES = 10
 Constants.PIPE_OBJECT_NAME = "Water Pipe"
 Constants.PIPE_BUILD_ENTITY_NAME = "WaterPipe"
 Constants.PIPE_BUILD_ENTITY_FULL_NAME = "WaterPipes.WaterPipe"
-Constants.PIPE_ITEM_TYPE = "Base.Pipe"
+-- The item a pipe is built from; every recipe in this mod consumes Base.MetalPipe (or Base.ClayPipeSegment).
+Constants.PIPE_ITEM_TYPE = "Base.MetalPipe"
 Constants.PIPE_TOOL_TYPE = "Base.PipeWrench"
 Constants.PIPE_MODDATA_KEY = "waterpipesPipe"
 Constants.PIPE_SURFACE_MODDATA_KEY = "waterpipesSurface"
@@ -24,6 +25,8 @@ Constants.PIPE_AXIS_MODDATA_KEY = "waterpipesAxis"
 -- salvage, clay is spent the moment it is laid.
 Constants.PIPE_MATERIAL_MODDATA_KEY = "waterpipesMaterial"
 Constants.PIPE_MATERIAL_CLAY = "clay"
+-- Laid by a building-plumbing pass, which is paid per fixture: gives nothing back, like clay.
+Constants.PIPE_MATERIAL_GENERATED = "generated"
 Constants.PIPE_CLAY_ITEM_TYPE = "Base.ClayPipeSegment"
 Constants.PLUMBED_ENDPOINT_MODDATA_KEY = "waterpipesEndpointPlumbed"
 Constants.PLUMBED_ENDPOINT_SOURCE_MODDATA_KEY = "waterpipesEndpointSource"
@@ -85,6 +88,11 @@ Constants.PIPE_RISER_EDGE_MODDATA_KEY = "waterpipesRiserEdge"
 -- Baked in at build time and never toggled at runtime, so no extra network sync is needed.
 Constants.PIPE_HIDDEN_MODDATA_KEY = "waterpipesHidden"
 Constants.PIPE_HIDDEN_SPRITE = "waterpipes_01_20"   -- fully transparent tile in the tileset
+-- The concealed entities' own face sprites. The generator resolves an entity script from the face, and
+-- every entity face must be unique across the mod or the world throws WorldDictionaryException.
+Constants.PIPE_HIDDEN_FACE_SPRITE = "waterpipes_01_44"        -- WaterPipeHidden, face S
+Constants.PIPE_HIDDEN_RISER_FACE_N = "waterpipes_01_45"       -- WaterPipeRiserHidden, face N
+Constants.PIPE_HIDDEN_RISER_FACE_W = "waterpipes_01_46"       -- ...and face W
 -- Purifier: a NON-pipe tank on a router tile that cleans the connected network's tainted water while
 -- powered. The tier is baked in at build time. The legacy filter/fire tiers are still recognised by
 -- getTier so old saves keep working, but only the electric tier is buildable.
@@ -272,6 +280,8 @@ Constants.PURIFIER_OUT_AMOUNT_KEY = "waterpipesPurOut"
 -- Did the purifier move any fluid on the last server tick? The readout used to infer this from the
 -- buffer levels, which reported a tank sitting full while busy pushing clean water out as "Stopped".
 Constants.PURIFIER_PROCESSING_KEY = "waterpipesPurBusy"
+-- Head (m.c.a.) last measured on the router's IN side, recorded by Purifier.step.
+Constants.PURIFIER_INLET_HEAD_KEY = "waterpipesPurInHead"
 Constants.PURIFIER_BUFFER_CAPACITY = 50
 -- Rates are per IN-GAME MINUTE (the server sub-steps them by elapsed game time, so throughput does not
 -- depend on framerate). Intake is FASTER than convert on purpose, so the IN buffer visibly holds a level
@@ -280,6 +290,10 @@ Constants.PURIFIER_BUFFER_CAPACITY = 50
 -- simply evens out with whatever else is on that side. The convert rate still limits throughput.
 Constants.PURIFIER_INTAKE_RATE = 20
 Constants.PURIFIER_CONVERT_RATE = 10
+-- Share of the inlet head a purifier passes to its clean side, as a floor that pumps never lift.
+Constants.PURIFIER_HEAD_TRANSFER = 0.6
+-- Minimum change in the recorded inlet head (m.c.a.) before the clean zone is re-priced.
+Constants.PURIFIER_INLET_HEAD_EPSILON = 0.25
 -- Electric purifier tank: a 2x2 multi-tile object. The vanilla industry_02 cylinder is split into
 -- four perspective quadrants (industry 72/73/74/75), tinted electric-blue and packed into atlas
 -- cells 36-39. The entity script (WaterPurifierElectric, face S) lays them on the footprint:
@@ -333,25 +347,14 @@ Constants.MAX_FINITE_FLUID_CAPACITY = 9999
 -- Municipal mains run 20-40, a garden sprinkler needs ~20, gravity drip works at 1-2. Keeping the unit
 -- real means every constant below can be sanity-checked against a plumbing table.
 --
---     P = CONTAINER_BASE_PRESSURE
---       + PRESSURE_PER_LEVEL * (z_source - z_consumer)     -- falling gains, climbing costs
---       - friction(consumer) * hops                        -- distance always costs
---
--- The elevation term telescopes, so the only path-dependent term is friction and minimising loss is
--- just minimising hops. This stops holding once pumps add head at a node; see the block below.
+-- Solved by the demand-aware head field in Hydraulics; see the block below.
 Constants.PRESSURE_PER_LEVEL = 3.0          -- a PZ floor is ~2.4-3 m tall; 1 m of water = 0.098 bar
 Constants.CONTAINER_BASE_PRESSURE = 1.0     -- a full ~1 m tall barrel pushes 1 m.c.a. at its base
--- Friction scales with flow squared (Darcy-Weisbach), so a barely-open tap loses far less head per
--- tile than a sprinkler running wide open. Modelling that is what keeps existing bases alive: a tap
--- reaches 20 tiles on the flat (1.0 / 0.05), where one flat rate would have cut it to 5.
-Constants.PRESSURE_FRICTION_DRIP = 0.02     -- trickle flow
-Constants.PRESSURE_FRICTION_TAP = 0.05      -- taps, generators: low flow
-Constants.PRESSURE_FRICTION_SPRINKLER = 0.2 -- wide-open flow through scavenged pipe
 -- Minimum pressure a consumer needs to draw at all.
 Constants.PRESSURE_MIN_TAP = 0.0
 Constants.PRESSURE_MIN_DRIP = 0.0
 Constants.PRESSURE_MIN_SPRINKLER = 20.0     -- a real sprinkler head needs ~2 bar
--- Consumer kinds, used to pick a friction coefficient.
+-- Consumer kinds: what a tile DRAWS, which sets its demand and the head it needs.
 Constants.PRESSURE_KIND_TAP = "tap"
 Constants.PRESSURE_KIND_DRIP = "drip"
 Constants.PRESSURE_KIND_SPRINKLER = "sprinkler"
@@ -361,10 +364,8 @@ Constants.PRESSURE_MODEL_SIMPLE = 2         -- height only: no distance loss
 Constants.PRESSURE_MODEL_OFF = 3            -- pre-pressure behaviour: pure gravity reachability
 
 -- ===== Hydraulic solver (demand-aware head field) =====
--- The block above prices a run as friction(kind) * hops, where `kind` is the CONSUMER'S OWN flow rate.
--- That is right for one consumer and wrong for a field: thirty sprinklers each computed their loss as
--- if they were alone on the line. The pipe cares how many litres an hour go through it, not who is
--- asking, so the loss belongs to the EDGE.
+-- Loss belongs to the EDGE: it is priced from the litres per hour crossing it, so consumers sharing a
+-- line share its loss.
 --
 --     H[node]                              -- total head at a node, m.c.a. above the z=0 datum
 --     H[source] = PRESSURE_PER_LEVEL * z + CONTAINER_BASE_PRESSURE
@@ -374,19 +375,14 @@ Constants.PRESSURE_MODEL_OFF = 3            -- pre-pressure behaviour: pure grav
 -- Elevation drops out of the loss term entirely (it lives in the datum), which is what lets one forward
 -- sweep price height, distance, pumps and regulators in a single pass.
 --
--- CALIBRATION. Q is litres per in-game hour, and K is read back out of the friction constants above
--- rather than invented: a sprinkler draws 1.8 L/h and was priced at 0.2/tile, a drip draws 0.2 L/h at
--- 0.02/tile -- 0.111 and 0.100, so the old table was already almost exactly LINEAR in flow. K = 0.111
--- with exponent 1 reproduces both to within 11%, and the promise that buys is worth stating: A NETWORK
--- WITH ONE EMITTER BEHAVES EXACTLY AS IT DID BEFORE. What changed is that the thirty-first sprinkler
--- now costs the thirty before it something.
+-- CALIBRATION. Q is litres per in-game hour. Per-tile loss targets: sprinkler 1.8 L/h -> 0.2, drip
+-- 0.2 L/h -> 0.02, tap 0.45 L/h -> 0.05. K = 0.111 with exponent 1 matches all three within 11 %.
 Constants.HYDRAULIC_FRICTION_K = 0.111      -- m.c.a. lost per tile, per litre/hour through it
--- Real pipe loss is superlinear (Hazen-Williams uses 1.85, Darcy-Weisbach 2). Left at 1 because that
--- is what the constants it replaces actually encode, and because raising it makes a shared line
--- collapse far faster than it makes it realistic. Exposed so a save can ask for the harsher curve.
+-- Real pipe loss is superlinear (Hazen-Williams 1.85, Darcy-Weisbach 2). Left at 1 to match the
+-- calibration above; raising it collapses a shared line far faster than it adds realism.
 Constants.HYDRAULIC_FRICTION_EXPONENT = 1.0
 -- Nominal flow for a consumer with no rate of its own (taps, generators, the router's own transfers).
--- Back-derived the same way: PRESSURE_FRICTION_TAP / HYDRAULIC_FRICTION_K = 0.05 / 0.111.
+-- Chosen so a tap loses the calibrated 0.05 per tile: 0.05 / HYDRAULIC_FRICTION_K.
 Constants.HYDRAULIC_TAP_FLOW = 0.45         -- litres per in-game hour
 
 -- Head at which a pressure-throttled transfer runs at its FULL rate; below it the rate falls off as
@@ -545,8 +541,8 @@ Constants.IRRIGATION_MAX_WATER_LEVEL = 100
 
 -- ===== Fluid writes =====
 -- Litres below which writing a vessel is not worth doing. A write resolves the sprite-grid target,
--- empties the FluidContainer, refills it, sync()s the object, transmitModData()s it and fires
--- OnWaterAmountChange for external mods -- all to move a hundredth of a litre, multiplied by vessels x
+-- changes the FluidContainer, sync()s the object and raises OnWaterAmountChange for external mods --
+-- all to move a hundredth of a litre, multiplied by vessels x
 -- emitters on a farm network.
 -- Anything the guard skips is carried to the next vessel by the caller (see rebalanceSummary), so
 -- conservation is exact whatever this is set to.
@@ -571,6 +567,56 @@ Constants.GAUGE_MODDATA_KEY = "waterpipesGauge"
 Constants.GAUGE_SPRITE_N = "waterpipes_01_30"   -- vented wall box, North wall (see PUMP_SPRITE_EW)
 Constants.GAUGE_SPRITE_W = "waterpipes_01_31"   -- ...and the West wall mirror
 Constants.GAUGE_READ_DISTANCE = 2             -- matches ISFluidUtil.isoMaxPanelDist
+
+-- ===== Building plumbing =====
+-- New pipe tiles one pass may lay: a ceiling on save size and pass length. Over it the pass takes the
+-- nearest fixtures and a re-run extends.
+Constants.BUILDING_PLUMB_MAX_TILES = 200
+-- Most building tiles one survey reads, nearest the clicked tile first. Covers ordinary buildings whole;
+-- past it the survey stops and the player is told the building was only partly planned.
+Constants.BUILDING_PLUMB_MAX_SCAN_TILES = 8000
+-- Server fallback when a requested tile has no building to check against: how far from the player it
+-- may be.
+Constants.BUILDING_PLUMB_REACH = 34
+-- How far from a player a vesselChanged notice may name a tile: about what a client has loaded.
+Constants.VESSEL_NOTICE_REACH = 120
+-- How long a multiplayer building pass waits for the server to accept it before it connects anything.
+Constants.BUILDING_PLUMB_VERDICT_TIMEOUT_MS = 10000
+-- How long one frame may spend laying pipe, in milliseconds. At least one tile is always laid.
+Constants.BUILDING_PLUMB_MS_PER_TICK = 8
+-- In multiplayer a client only sends each tile to the server, which costs it nothing, so the budget above
+-- cannot pace it. One request per this many milliseconds keeps a pass from reaching the server at once.
+Constants.BUILDING_PLUMB_REMOTE_INTERVAL_MS = 20
+
+-- ===== Shut-off valve =====
+-- A non-pipe device fitted onto an existing floor pipe. Closed, its tile stops conducting and the network
+-- splits; pipe nodes hold no fluid, so nothing is stranded.
+Constants.VALVE_MODDATA_KEY = "waterpipesValve"
+-- ABSENT MEANS OPEN, the same idiom as PUMP_ENABLED_KEY: building a valve must never change how the
+-- network behaves until the player deliberately closes it.
+Constants.VALVE_CLOSED_KEY = "waterpipesValveClosed"
+-- One body per pipe shape, keyed by the floor sprite the pipe under it shows. Green light open, red
+-- closed. End caps borrow the body that closes their open side. Cell 47 is only the build ghost.
+Constants.VALVE_SPRITES = {
+    [Constants.PIPE_FLOOR_WEST_SPRITE]      = { open = "waterpipes_01_48", closed = "waterpipes_01_64" },
+    [Constants.PIPE_FLOOR_NORTH_SPRITE]     = { open = "waterpipes_01_49", closed = "waterpipes_01_65" },
+    [Constants.PIPE_FLOOR_CORNER_NE_SPRITE] = { open = "waterpipes_01_50", closed = "waterpipes_01_66" },
+    [Constants.PIPE_FLOOR_CORNER_ES_SPRITE] = { open = "waterpipes_01_51", closed = "waterpipes_01_67" },
+    [Constants.PIPE_FLOOR_CORNER_SW_SPRITE] = { open = "waterpipes_01_52", closed = "waterpipes_01_68" },
+    [Constants.PIPE_FLOOR_CORNER_WN_SPRITE] = { open = "waterpipes_01_53", closed = "waterpipes_01_69" },
+    [Constants.PIPE_FLOOR_T_NOW_SPRITE]     = { open = "waterpipes_01_54", closed = "waterpipes_01_70" },
+    [Constants.PIPE_FLOOR_T_NOE_SPRITE]     = { open = "waterpipes_01_55", closed = "waterpipes_01_71" },
+    [Constants.PIPE_FLOOR_T_NOS_SPRITE]     = { open = "waterpipes_01_56", closed = "waterpipes_01_72" },
+    [Constants.PIPE_FLOOR_T_NON_SPRITE]     = { open = "waterpipes_01_57", closed = "waterpipes_01_73" },
+    [Constants.PIPE_FLOOR_CROSS_SPRITE]     = { open = "waterpipes_01_58", closed = "waterpipes_01_74" },
+    [Constants.PIPE_FLOOR_END_W_SPRITE]     = { open = "waterpipes_01_53", closed = "waterpipes_01_69" },
+    [Constants.PIPE_FLOOR_END_N_SPRITE]     = { open = "waterpipes_01_53", closed = "waterpipes_01_69" },
+    [Constants.PIPE_FLOOR_END_E_SPRITE]     = { open = "waterpipes_01_48", closed = "waterpipes_01_64" },
+    [Constants.PIPE_FLOOR_END_S_SPRITE]     = { open = "waterpipes_01_49", closed = "waterpipes_01_65" },
+}
+-- No pipe shape to match: the straight E/W body.
+Constants.VALVE_SPRITE_OPEN = "waterpipes_01_48"
+Constants.VALVE_SPRITE_CLOSED = "waterpipes_01_64"
 
 -- Appliances that use water to run but manage it themselves (a washing machine only needs its own
 -- FluidContainer non-empty to start a cycle, and its cycle logic never touches fluid). They carry the

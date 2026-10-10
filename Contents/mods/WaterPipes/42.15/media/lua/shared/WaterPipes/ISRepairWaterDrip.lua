@@ -1,6 +1,7 @@
 require "TimedActions/ISBaseTimedAction"
 require "WaterPipes/Constants"
 require "WaterPipes/Irrigation"
+require "WaterPipes/SoundOptions"
 
 -- Repairs a drip emitter that overpressure blew out: consumes the repair kit from the character's
 -- inventory and restores it to full. Same shape as ISRepairWaterPurifier -- world state is mutated
@@ -57,16 +58,16 @@ end
 
 function ISRepairWaterDrip:start()
     self:setActionAnim("VehicleWorkOnMid")
-    self.sound = self.character:playSound("RepairWithWrench")
+    self.sound = WaterPipes.SoundOptions.playOnCharacter(self.character, "RepairWithWrench")
 end
 
 function ISRepairWaterDrip:stop()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
     ISBaseTimedAction.stop(self)
 end
 
 function ISRepairWaterDrip:perform()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
 
     local inventory = self.character:getInventory()
     if consumeRepairKit(inventory) then

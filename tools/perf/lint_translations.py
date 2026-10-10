@@ -29,8 +29,10 @@ DEFAULT_ROOT = os.path.join(
 REFERENCE = "EN"
 
 # getText("KEY") / getTextOrNull("KEY"), literal first argument only. A key built by
-# concatenation cannot be checked this way and is counted rather than guessed at.
-GETTEXT = re.compile(r'\bgetText(?:OrNull)?\s*\(\s*"([^"]+)"')
+# concatenation cannot be checked this way and is counted rather than guessed at -- except
+# "PREFIX" .. x, where at least one defined key must start with the prefix.
+GETTEXT = re.compile(r'\bgetText(?:OrNull)?\s*\(\s*"([^"]+)"(?!\s*\.\.)')
+GETTEXT_PREFIX = re.compile(r'\bgetText(?:OrNull)?\s*\(\s*"([^"]+)"\s*\.\.')
 GETTEXT_DYNAMIC = re.compile(r'\bgetText(?:OrNull)?\s*\(\s*(?!")')
 PLACEHOLDER = re.compile(r"%(\d)")
 
@@ -89,8 +91,9 @@ def placeholders(text):
 
 
 def lua_keys(root):
-    """Keys the code asks for, and how many asks could not be read literally."""
-    used, dynamic = {}, 0
+    """Keys the code asks for, key prefixes it completes at run time, and how many asks could
+    not be read at all."""
+    used, prefixes, dynamic = {}, {}, 0
     for base, _dirs, names in os.walk(root):
         for name in names:
             if not name.endswith(".lua"):
@@ -101,9 +104,11 @@ def lua_keys(root):
                 line = re.sub(r"--.*$", "", line)
                 for key in GETTEXT.findall(line):
                     used.setdefault(key, []).append("%s:%d" % (path, index + 1))
+                for prefix in GETTEXT_PREFIX.findall(line):
+                    prefixes.setdefault(prefix, []).append("%s:%d" % (path, index + 1))
                 for _ in GETTEXT_DYNAMIC.finditer(line):
                     dynamic += 1
-    return used, dynamic
+    return used, prefixes, dynamic
 
 
 def main(argv):
@@ -125,7 +130,7 @@ def main(argv):
     problems, notes = [], []
 
     # 1. Keys the code asks for.
-    used, dynamic = lua_keys(root)
+    used, prefixes, dynamic = lua_keys(root)
     vanilla, vanilla_where = vanilla_keys()
     borrowed = []
     for key in sorted(used):
@@ -136,6 +141,11 @@ def main(argv):
             continue
         problems.append("%s is asked for by the code and defined by neither the mod nor the "
                         "base game\n      %s" % (key, used[key][0]))
+    for prefix in sorted(prefixes):
+        if not any(key.startswith(prefix) for key in reference) \
+                and not any(key.startswith(prefix) for key in vanilla):
+            problems.append("%s... is completed at run time but no key starts with it\n      %s"
+                            % (prefix, prefixes[prefix][0]))
 
     # 2. Empty values anywhere.
     for lang in languages:
@@ -179,6 +189,7 @@ def main(argv):
     #    looked up by the engine, never through getText.
     unused = sorted(key for key in reference
                     if key not in used
+                    and not any(key.startswith(prefix) for prefix in prefixes)
                     and not key.startswith(("Sandbox_", "Recipe_", "ItemName_",
                                             "DisplayName_", "Tooltip_craft_",
                                             "ContextMenu_", "UI_")))
@@ -197,8 +208,8 @@ def main(argv):
     print("languages: %s" % ", ".join("%s (%d keys)" % (l, len(table[l])) for l in languages))
     if vanilla_where:
         print("base game: %d key(s) available to borrow" % len(vanilla))
-    print("code asks for %d distinct key(s); %d ask(s) built a key dynamically and were skipped"
-          % (len(used), dynamic))
+    print("code asks for %d distinct key(s) and %d key prefix(es); %d ask(s) built a key "
+          "dynamically and were skipped" % (len(used), len(prefixes), dynamic))
     print("")
 
     for note in notes:

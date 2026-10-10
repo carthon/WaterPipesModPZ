@@ -33,6 +33,7 @@ local World = WaterPipes.World
 -- verifier stays. This gives its findings somewhere to be reported from, not a reason to delete it.
 
 local function adapter() return WaterPipes.ContainerAdapter end
+local function pipes() return WaterPipes.State end
 local function scans() return WaterPipes.PipeObjectUtils end
 local function field() return WaterPipes.Hydraulics end
 local function walks() return WaterPipes.NetworkAccess end
@@ -50,6 +51,28 @@ end
 --
 -- The order below is load order, and it does not matter: the four caches are independent and none of
 -- them reads another. It is fixed only so that a future reader is not left wondering.
+
+-- Counters, resolved off the global table like everything else here: a whole-map mark arriving often
+-- on a quiet base means a watcher is chattering, and the marks would then be worth less than a sweep.
+local function countPhase(name, amount)
+    local Profiler = WaterPipes.Profiler
+    if Profiler and Profiler.count then
+        Profiler.count(name, amount or 1)
+    end
+end
+
+-- Only a tile the mod has a pipe on can change what a fixture is served. Without this filter the set
+-- would fill with furniture: the object events fire hundreds of times a second while the world streams.
+local function markIfPiped(square)
+    local State = pipes()
+    if not State or not State.ensure or not square or not square.getX then
+        return
+    end
+    local key = State.squareKey(square:getX(), square:getY(), square:getZ())
+    if State.ensure().pipes[key] then
+        Invalidate.waterMovedAt(key, square:getX(), square:getY(), square:getZ())
+    end
+end
 
 -- An object was added to the world, or is about to leave it.
 function Invalidate.objectChanged(worldObject)
@@ -69,11 +92,11 @@ function Invalidate.squareChanged(square)
     call(scans(), "invalidateSquareScan", square)
     call(field(), "invalidateAroundSquare", square)
     call(walks(), "invalidateAroundSquare", square)
+    markIfPiped(square)
 end
 
--- A square the engine rebuilt while streaming: its objects were never announced one by one.
--- Note what is NOT here: the head field. Hydraulics never listened to LoadGridsquare, on the grounds
--- that a streamed-in square cannot change a zone that was solved without it. Kept as it was.
+-- A square the engine rebuilt while streaming: its objects were never announced one by one, and every
+-- cache holding the OLD square object -- the head field included -- would go on reading the dead one.
 function Invalidate.squareStreamedIn(square)
     if not square then
         return
@@ -81,6 +104,7 @@ function Invalidate.squareStreamedIn(square)
     call(adapter(), "invalidateSquareVessels", square)
     call(scans(), "invalidateSquareScan", square)
     call(walks(), "invalidateAroundSquare", square)
+    call(field(), "invalidateAroundSquare", square)
 end
 
 -- ===== What changed, in the mod's own words =====
@@ -112,6 +136,7 @@ end
 
 -- Pipe was built or dismantled, or the world was read cold: everything goes.
 function Invalidate.layoutChanged()
+    Invalidate.everythingChanged()
     call(adapter(), "invalidateVesselCache")
     call(scans(), "invalidateScanCache")
     -- The walks drop the head field with them, which is why Hydraulics is not called separately here.
@@ -125,6 +150,7 @@ end
 -- re-reads the containers itself, and the memo remembers which objects are containers rather than
 -- what they hold.
 function Invalidate.registryRebuilt()
+    Invalidate.everythingChanged()
     call(scans(), "invalidateScanCache")
     call(walks(), "invalidateTraversalCache")
 end
@@ -134,6 +160,7 @@ end
 -- The walks are DELIBERATELY not dropped: re-walking every network costs a visible stutter once a
 -- minute, and the verifier's own finding is about tile contents rather than about shape.
 function Invalidate.worldVerified()
+    Invalidate.everythingChanged()
     call(adapter(), "invalidateVesselCache")
     call(scans(), "invalidateScanCache")
     call(field(), "invalidate")
@@ -141,12 +168,109 @@ end
 
 -- A valve or a hydrant moved: the walks are priced on it, and they take the field with them.
 function Invalidate.flowPathChanged()
+    Invalidate.everythingChanged()
     call(walks(), "invalidateTraversalCache")
 end
 
 -- A pump was switched, or lost power. Only the field is priced on that.
 function Invalidate.pumpStateChanged()
+    Invalidate.everythingChanged()
     call(field(), "invalidate")
+end
+
+-- ===== What moved since the last pass =====
+-- Which tiles had water, shape or contents change. What reads them refreshes the fixtures of those
+-- networks instead of every plumbed fixture on the map; the ten-minute sweep stays underneath as the
+-- net that catches whatever raised no event at all.
+--
+-- Square keys, never zone ids: a zone id lives as long as one solve and does not survive an
+-- invalidation, so it is a memo within a pass and useless as a stored mark. The set is a module local
+-- and never State, which is persisted to ModData.
+
+local dirtyTiles = {}
+local dirtyCount = 0
+local everythingDirty = false
+
+-- Past this many tiles, walking them one at a time costs more than the sweep they stand in for.
+local DIRTY_TILE_LIMIT = 64
+
+local function coordinatesFromKey(key)
+    local x, y, z = tostring(key):match("^(-?%d+):(-?%d+):(-?%d+)$")
+    if not x then
+        return nil
+    end
+    return tonumber(x), tonumber(y), tonumber(z)
+end
+
+-- Water moved on a tile. `squareKey` is the prebuilt one where the caller has it, so the hottest path
+-- in the mod pays no concatenation; the coordinates are read back off the key when it does not.
+function Invalidate.waterMovedAt(squareKey, x, y, z)
+    if everythingDirty then
+        return
+    end
+
+    local key = squareKey
+    if key == nil and x and y and z then
+        key = tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)
+    end
+    if key == nil then
+        -- Something moved and there is no saying where: the whole map is the honest answer.
+        Invalidate.everythingChanged()
+        return
+    end
+    if dirtyTiles[key] then
+        return
+    end
+    if not (x and y and z) then
+        x, y, z = coordinatesFromKey(key)
+        if not x then
+            Invalidate.everythingChanged()
+            return
+        end
+    end
+
+    if dirtyCount >= DIRTY_TILE_LIMIT then
+        Invalidate.everythingChanged()
+        return
+    end
+    dirtyTiles[key] = { x = x, y = y, z = z }
+    dirtyCount = dirtyCount + 1
+    countPhase("dirty: tiles marked")
+end
+
+-- A vessel's water moved without the mod moving it: a player drinking from it or pouring into it.
+-- Only the marks care -- the caches remember which objects are containers, never what they hold.
+function Invalidate.vesselWaterChanged(square)
+    markIfPiped(square)
+end
+
+-- Too much changed to name tiles, or something changed that has no tile. Overrides the marks already
+-- held: they are a subset of what the full sweep will cover anyway.
+function Invalidate.everythingChanged()
+    if not everythingDirty then
+        countPhase("dirty: whole map marked")
+    end
+    everythingDirty = true
+    dirtyTiles = {}
+    dirtyCount = 0
+end
+
+function Invalidate.isEverythingDirty()
+    return everythingDirty
+end
+
+function Invalidate.dirtyTileCount()
+    return dirtyCount
+end
+
+-- Handed over and cleared in one step. The pass that consumes these moves water itself, so marks its
+-- own writes raise belong to the next pass rather than to the one in progress.
+function Invalidate.takeDirtyTiles()
+    local taken, global = dirtyTiles, everythingDirty
+    dirtyTiles = {}
+    dirtyCount = 0
+    everythingDirty = false
+    return taken, global
 end
 
 -- ===== The supply hold =====

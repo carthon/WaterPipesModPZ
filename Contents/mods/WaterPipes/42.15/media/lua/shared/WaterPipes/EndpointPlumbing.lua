@@ -148,6 +148,23 @@ local function describeSquare(square)
         .. "}"
 end
 
+-- The network an endpoint on this tile actually resolves to. Two fixtures a player reads as one can
+-- sit on two networks, and a fixture whose network holds no vessel shows the 1 L floor a mirror needs
+-- -- which looks like a broken tank rather than an empty line. Naming the network tells them apart.
+local function describeEndpointNetwork(object)
+    if not EndpointObjects.isEndpointCandidate(object) then
+        return nil
+    end
+    local summary = NetworkAccess.getSummary(object)
+    if not summary then
+        return "net{none}"
+    end
+    return "net{amount=" .. tostring(summary.totalAmount)
+        .. ",capacity=" .. tostring(summary.totalCapacity)
+        .. ",vessels=" .. tostring(summary.descriptors and #summary.descriptors or 0)
+        .. ",fluid=" .. tostring(summary.fluidTypeName) .. "}"
+end
+
 local function logSquareObjects(label, square)
     Logger.log(label .. ": " .. describeSquare(square))
     if not square or not square.getObjects then
@@ -157,7 +174,9 @@ local function logSquareObjects(label, square)
     local objects = square:getObjects()
     for index = 0, objects:size() - 1 do
         local object = objects:get(index)
-        Logger.log(label .. " object[" .. tostring(index) .. "]: " .. describeObject(object) .. " " .. describePlumbingDiagnostics(object))
+        local network = describeEndpointNetwork(object)
+        Logger.log(label .. " object[" .. tostring(index) .. "]: " .. describeObject(object) .. " "
+            .. describePlumbingDiagnostics(object) .. (network and (" " .. network) or ""))
     end
 end
 

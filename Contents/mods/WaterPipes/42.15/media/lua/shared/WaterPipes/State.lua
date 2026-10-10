@@ -75,6 +75,19 @@ function State.registerPipe(x, y, z, metadata)
     return state.pipes[key]
 end
 
+-- Targeted metadata write for the shut-off valve. NOT State.registerPipe, which replaces the whole
+-- metadata table and would drop the router/pump/emitter kinds recorded with it.
+function State.setPipeValveClosed(x, y, z, closed)
+    local state = State.ensure()
+    local pipeData = state.pipes[State.squareKey(x, y, z)]
+    if not pipeData then
+        return false
+    end
+    pipeData.metadata = pipeData.metadata or {}
+    pipeData.metadata.valveClosed = closed and true or nil
+    return true
+end
+
 function State.setHydrantOpen(x, y, z, open)
     local state = State.ensure()
     local key = State.squareKey(x, y, z)
@@ -176,6 +189,18 @@ function State.replaceContainers(containerMap)
     end
 end
 
+-- How many containers the registry holds on one tile.
+function State.containerCountAt(x, y, z)
+    local squareKey = State.squareKey(x, y, z)
+    local count = 0
+    for _, containerData in pairs(State.ensure().containers) do
+        if containerData.squareKey == squareKey then
+            count = count + 1
+        end
+    end
+    return count
+end
+
 function State.rebuildGraph()
     local state = State.ensure()
     Graph.clear(state.graph)
@@ -213,6 +238,17 @@ function State.rebuildGraph()
         return data and data.metadata and data.metadata.router == true or false
     end
 
+    -- A closed shut-off valve makes its tile a wall: no edge in or out. Re-derived every pass, so a stale
+    -- flag cannot keep a base split.
+    local function isClosedValveAt(x, y, z)
+        local data = state.pipes[State.squareKey(x, y, z)]
+        return data and data.metadata and data.metadata.valveClosed == true or false
+    end
+
+    local function blocksFlowAt(x, y, z)
+        return isRouterAt(x, y, z) or isClosedValveAt(x, y, z)
+    end
+
     for _, pipeData in pairs(state.pipes) do
         local pipeNodeId = State.pipeNodeId(pipeData.x, pipeData.y, pipeData.z)
 
@@ -222,18 +258,18 @@ function State.rebuildGraph()
         -- NetworkAccess both ask Router.hasRouterOnSquare. So `metadata.router` is load-bearing here, not a
         -- hint: a flag left on a tile whose router is gone cuts the base in two. It is kept honest by the
         -- derivation in System.scanContainersAroundPipes, which clears it as well as sets it.
-        if not (pipeData.metadata and pipeData.metadata.router == true) then
+        if not blocksFlowAt(pipeData.x, pipeData.y, pipeData.z) then
             -- Same-floor neighbours.
             for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
                 local nx, ny, nz = pipeData.x + offset.x, pipeData.y + offset.y, pipeData.z
-                if not isRouterAt(nx, ny, nz) then
+                if not blocksFlowAt(nx, ny, nz) then
                     Graph.connect(state.graph, pipeNodeId, State.pipeNodeId(nx, ny, nz))
                 end
             end
 
             -- Cross-floor neighbours through wall risers.
             for _, coord in ipairs(PipeObjectUtils.getRiserVerticalNeighborCoords(pipeData.x, pipeData.y, pipeData.z)) do
-                if not isRouterAt(coord.x, coord.y, coord.z) then
+                if not blocksFlowAt(coord.x, coord.y, coord.z) then
                     Graph.connect(state.graph, pipeNodeId, State.pipeNodeId(coord.x, coord.y, coord.z))
                 end
             end

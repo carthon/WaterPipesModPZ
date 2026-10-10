@@ -13,6 +13,7 @@ require "WaterPipes/Constants"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Logger"
 require "WaterPipes/World"
+require "WaterPipes/Valve"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.Build = WaterPipes.Build or {}
@@ -21,6 +22,7 @@ local Constants = WaterPipes.Constants
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Logger = WaterPipes.Logger
 local Build = WaterPipes.Build
+local Valve = WaterPipes.Valve
 local World = WaterPipes.World
 
 -- The vertical pipe is a single rotatable entity: facing "w" -> West wall, anything else -> North.
@@ -84,6 +86,9 @@ local function squareHasRiserEdge(square, edge)
     return false
 end
 
+Build.squareHasFloorPipe = squareHasFloorPipe
+Build.squareHasRiserEdge = squareHasRiserEdge
+
 -- The gauge is not a pipe, so it is not in getPipeObjectsOnSquare; scan the square's objects instead.
 local function squareHasGauge(square)
     if not square or not square.getObjects then
@@ -96,6 +101,30 @@ local function squareHasGauge(square)
     for i = 0, objects:size() - 1 do
         local modData = getModData(objects:get(i))
         if modData and modData[Constants.GAUGE_MODDATA_KEY] then
+            return true
+        end
+    end
+    return false
+end
+
+-- Floor devices the valve has no body for.
+local VALVE_EXCLUDED_KEYS = {
+    Constants.ROUTER_MODDATA_KEY, Constants.PUMP_MODDATA_KEY,
+    Constants.DRIP_MODDATA_KEY, Constants.SPRINKLER_MODDATA_KEY,
+}
+
+local function squareHasPlainFloorPipe(square)
+    if not square then
+        return false
+    end
+    for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+        if PipeObjectUtils.getPipePlacement(worldObject).surface == Constants.PIPE_SURFACE_FLOOR then
+            local modData = getModData(worldObject)
+            for _, key in ipairs(VALVE_EXCLUDED_KEYS) do
+                if modData and modData[key] == true then
+                    return false
+                end
+            end
             return true
         end
     end
@@ -240,10 +269,12 @@ end
 
 -- ===== OnCreate (server / single-player) =====
 
--- opts: surface, riser, edge, hidden, router, routerDirection, pump, drip, sprinkler, axis.
--- Every pipe variant goes through here so they all land on the network the same way; what makes a
--- router / pump / drip / sprinkler special is one extra modData flag, never a separate object type.
-local function markAndRegister(thumpable, opts)
+-- What a pipe's modData IS.
+-- opts: surface, riser, edge, hidden, router, routerDirection, pump, drip, sprinkler, axis, clay, generated,
+-- transmit (false for an object not on a tile yet: its modData goes with the whole object instead).
+-- Every pipe variant is stamped here, so a router / pump / drip / sprinkler is one extra modData flag.
+-- Shared with the building generator, which registers once per pass instead of once per pipe.
+function Build.stampPipeModData(thumpable, opts)
     if not thumpable then
         return
     end
@@ -255,7 +286,8 @@ local function markAndRegister(thumpable, opts)
         modData[Constants.PIPE_SURFACE_MODDATA_KEY] = opts.surface
         modData[Constants.PIPE_AXIS_MODDATA_KEY] = opts.axis or Constants.PIPE_AXIS_EW
         -- Build material: only stamped when it is not the metal default, so old pipes stay metal.
-        modData[Constants.PIPE_MATERIAL_MODDATA_KEY] = opts.clay and Constants.PIPE_MATERIAL_CLAY or nil
+        modData[Constants.PIPE_MATERIAL_MODDATA_KEY] = opts.clay and Constants.PIPE_MATERIAL_CLAY
+            or opts.generated and Constants.PIPE_MATERIAL_GENERATED or nil
         modData[Constants.PIPE_RISER_MODDATA_KEY] = opts.riser and true or nil
         modData[Constants.PIPE_RISER_EDGE_MODDATA_KEY] = opts.edge or nil
         -- Concealed variant: baked in at build; clients render it with a transparent tile.
@@ -275,9 +307,18 @@ local function markAndRegister(thumpable, opts)
         end
         modData[Constants.SPRINKLER_MODDATA_KEY] = opts.sprinkler and true or nil
     end
-    if thumpable.transmitModData then
+    if opts.transmit ~= false and thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)
     end
+end
+
+-- Stamp one pipe and put it on the network, the path every hand-built pipe takes.
+local function markAndRegister(thumpable, opts)
+    if not thumpable then
+        return
+    end
+    opts = opts or {}
+    Build.stampPipeModData(thumpable, opts)
 
     local square = thumpable.getSquare and thumpable:getSquare() or nil
     if square and WaterPipes.System and WaterPipes.System.registerPipeAt then
@@ -440,10 +481,11 @@ Build.sprinklerOnIsValid = Build.floorOnIsValid
 Build.dripOnIsValid = Build.floorOnIsValid
 
 -- The gauge is a dial that sits on a pipe at floor level: it reads the network but never carries fluid,
--- so it never registers and never affects the graph. One per tile, and it needs a pipe under it.
+-- so it never registers and never affects the graph. One per tile, it needs a pipe under it, and it
+-- never shares the tile with a valve: both are drawn on the same spot.
 function Build.gaugeOnIsValid(params)
     local square = params and params.square
-    return squareHasFloorPipe(square) and not squareHasGauge(square)
+    return squareHasFloorPipe(square) and not squareHasGauge(square) and not Valve.hasValveOnSquare(square)
 end
 
 function Build.gaugeOnCreate(params)
@@ -458,6 +500,34 @@ function Build.gaugeOnCreate(params)
     if thumpable.transmitModData then
         pcall(thumpable.transmitModData, thumpable)
     end
+end
+
+-- The shut-off valve follows the gauge: a device fitted onto an existing floor pipe. It never registers
+-- as a pipe; State.rebuildGraph reads whether its tile conducts. Never on a router, pump or emitter,
+-- and never sharing a tile with a gauge.
+function Build.valveOnIsValid(params)
+    local square = params and params.square
+    return squareHasPlainFloorPipe(square) and not Valve.hasValveOnSquare(square)
+        and not squareHasGauge(square)
+end
+
+-- Built OPEN, always: no closed key. Placing a valve must never change how the network behaves until
+-- the player deliberately closes it.
+function Build.valveOnCreate(params)
+    local thumpable = params and params.thumpable
+    if not thumpable then
+        return
+    end
+    local modData = getModData(thumpable)
+    if modData then
+        modData[Constants.VALVE_MODDATA_KEY] = true
+    end
+    if thumpable.transmitModData then
+        pcall(thumpable.transmitModData, thumpable)
+    end
+    -- Shaped to its pipe at once, as a pipe is autotiled on build: OnObjectAdded fires before the
+    -- valve key above is set, so nothing else would paint it until the next sweep.
+    Valve.applySprite(thumpable, true)
 end
 
 -- Global alias used by the entity SpriteConfig OnCreate/OnIsValid dotted paths.

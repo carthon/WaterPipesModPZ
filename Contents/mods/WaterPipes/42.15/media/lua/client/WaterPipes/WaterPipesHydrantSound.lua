@@ -1,10 +1,11 @@
 -- Open-hydrant water sound (client-only). While a hydrant is open and flowing it emits a looping
 -- water-on-the-ground sound from its tile. FMOD handles distance attenuation; the loop starts when a
 -- flowing hydrant is near the player and stops when it closes, runs dry, is removed or leaves range.
--- Same shape and audio budget as WaterPipesPurifierSound, which owns the ModOptions group this reads.
+-- Same shape and audio budget as WaterPipesPurifierSound; sound options come from SoundOptions.
 
 require "WaterPipes/Hydrant"
 require "WaterPipes/WaterPipesTileRegistry"
+require "WaterPipes/SoundOptions"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.HydrantSound = WaterPipes.HydrantSound or {}
@@ -16,25 +17,11 @@ local Sound = WaterPipes.HydrantSound
 -- Placeholder like the sprite: the vanilla "liquid on the ground" pour, looped, reads as a hydrant
 -- gushing onto the street. Swap for a dedicated loop later.
 local SOUND_NAME = "PourLiquidOnGround"
-local DEFAULT_VOLUME = 55     -- fallback only; the real value is the shared SoundVolume slider
 local SCAN_RADIUS = 14        -- tiles around the player we manage emitters within
 local INTERVAL_TICKS = 60     -- ~1s between rescans
 
-local function modOption(id)
-    local group = PZAPI and PZAPI.ModOptions and PZAPI.ModOptions:getOptions("WaterPipes")
-    return group and group:getOption(id) or nil
-end
-
-local function soundEnabled()
-    local o = modOption("SoundEnabled")
-    return not o or o:getValue() ~= false
-end
-
-local function soundVolume()
-    local o = modOption("SoundVolume")
-    local v = o and o:getValue() or DEFAULT_VOLUME
-    return math.min(math.max(v, 0), 100) / 100
-end
+local soundEnabled = WaterPipes.SoundOptions.enabled
+local soundVolume = WaterPipes.SoundOptions.volume
 
 Sound.active = Sound.active or {}   -- key "x:y:z" -> { emitter = , channel = }
 

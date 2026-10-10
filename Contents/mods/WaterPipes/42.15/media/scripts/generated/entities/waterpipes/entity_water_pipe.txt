@@ -379,4 +379,37 @@ module WaterPipes
             }
         }
     }
+
+    /* Inline shut-off valve, fitted onto an existing floor pipe. One face: cell 47, the build ghost
+       (a copy of the straight E/W body). Once placed, Valve swaps in the body that matches the pipe's
+       shape and state (Constants.VALVE_SPRITES); those cells are not faces, as faces must be unique. */
+    entity WaterPipeValve
+    {
+        component SpriteConfig
+        {
+            isThumpable = false,
+            OnCreate = WaterPipesBuild.valveOnCreate,
+            OnIsValid = WaterPipesBuild.valveOnIsValid,
+            face S
+            {
+                layer
+                {
+                    row = waterpipes_01_47,
+                }
+            }
+        }
+        component CraftRecipe
+        {
+            timedAction = BuildLowNoTool,
+            time = 80,
+            category = Piping,
+            Tooltip = Tooltip_craft_WaterPipeValveDesc,
+            inputs
+            {
+                item 1 [Base.PipeWrench] mode:keep flags[Prop1],
+                item 1 [Base.MetalPipe],
+                item 1 tags[base:barstockhalf],
+            }
+        }
+    }
 }

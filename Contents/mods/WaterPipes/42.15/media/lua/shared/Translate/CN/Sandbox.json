@@ -19,6 +19,8 @@
     "Sandbox_WaterPipes_PressureContainerBase_tooltip": "水桶或收集器在自身楼层凭借自身水的重量提供的压力，单位为十分之一米水柱。10 = 1.0，可让水龙头在平地上从约 20 格外取水。如果基地里的水龙头离水桶很远，就调高此值。",
     "Sandbox_WaterPipes_PressureFrictionScale": "管道摩擦（%%）",
     "Sandbox_WaterPipes_PressureFrictionScale_tooltip": "每格水管消耗多少压力，以默认值的百分比表示。100 = 默认。200 = 管道损失压力的速度翻倍，水能到达的距离减半。设为 0 则距离永不消耗压力，只有高度和水泵起作用。",
+    "Sandbox_WaterPipes_PurifierHeadTransfer": "净水器传递的压力（%%）",
+    "Sandbox_WaterPipes_PurifierHeadTransfer_tooltip": "到达净水器脏水侧的压力有多少能传到净水侧，以百分比表示。净水器是两个水箱中间夹一个滤芯，无法像水管那样传导压力。60 = 默认：自来水干管的 25 在净水器之后剩下 15，足够水龙头和滴灌全速运作，但不足以在没有水泵的情况下带动喷头。100 表示净水器对压力完全透明。0 则净水侧只有容器自身的基础压力。",
     "Sandbox_WaterPipes_HydraulicDemandScale": "共享管道需求（%%）",
     "Sandbox_WaterPipes_HydraulicDemandScale_tooltip": "一根管道要为其相邻用水设备抽走的水付出多少代价。100 = 完全真实：同一条管线上的三十个洒水器会互相抢水，只有最靠近水泵的那些能运行。0 = 4.x 之前的行为，每个用水设备都按自己独占整个管网来计算，因此一个水泵可以带动任意数量的洒水器。如果你原有的农场因此停摆而又不想改建成分区供水，就把它调低。",
     "Sandbox_WaterPipes_PumpHead": "单台水泵增加的压力（十分之一）",
@@ -50,5 +52,7 @@
     "Sandbox_WaterPipes_HydrantReserve": "消防栓储水量（升）",
     "Sandbox_WaterPipes_HydrantReserve_tooltip": "城市供水中断后，消防栓在其本地干管中仍保有多少水。默认 1000。只要供水未断，消防栓由市政供水供给，几乎取之不尽；此数值仅为断水之后剩余的水量，会随使用逐渐耗尽。设为 0 则一旦停水消防栓立即干涸。",
     "Sandbox_WaterPipes_HydrantHead": "消防栓压力（十分之一）",
-    "Sandbox_WaterPipes_HydrantHead_tooltip": "打开且由市政供水供给的消防栓使其网络保持的压力，单位为十分之一米水柱。400 = 40.0，远高于家用市政供水（25.0）和喷洒器所需的 20.0，因为消防栓是城市干管上的大流量接口。打开一个即可在远离任何水桶且无需水泵的情况下驱动喷洒器，直到停水那天；此后消防栓仍能放出其储水，但没有压力。调低此值可让消防栓不再像一台免费水泵。"
+    "Sandbox_WaterPipes_HydrantHead_tooltip": "打开且由市政供水供给的消防栓使其网络保持的压力，单位为十分之一米水柱。400 = 40.0，远高于家用市政供水（25.0）和喷洒器所需的 20.0，因为消防栓是城市干管上的大流量接口。打开一个即可在远离任何水桶且无需水泵的情况下驱动喷洒器，直到停水那天；此后消防栓仍能放出其储水，但没有压力。调低此值可让消防栓不再像一台免费水泵。",
+    "Sandbox_WaterPipes_BuildingPlumbCostPerFixture": "每个洁具的金属管消耗",
+    "Sandbox_WaterPipes_BuildingPlumbCostPerFixture_tooltip": "为整栋建筑布管时，每个洁具所需的金属管数量。1 = 每连接一个水槽、马桶或洗衣机耗费一根管，无论管路要铺多远。0 = 免费。以此方式铺设的管道拆除时不返还任何材料。"
 }

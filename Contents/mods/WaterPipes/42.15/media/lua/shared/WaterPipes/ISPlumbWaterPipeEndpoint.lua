@@ -1,5 +1,7 @@
 require "TimedActions/ISBaseTimedAction"
 require "WaterPipes/EndpointPlumbing"
+require "WaterPipes/EndpointObjects"
+require "WaterPipes/SoundOptions"
 
 ISPlumbWaterPipeEndpoint = ISBaseTimedAction:derive("ISPlumbWaterPipeEndpoint")
 
@@ -16,16 +18,16 @@ end
 
 function ISPlumbWaterPipeEndpoint:start()
     self:setActionAnim("VehicleWorkOnMid")
-    self.sound = self.character:playSound("RepairWithWrench")
+    self.sound = WaterPipes.SoundOptions.playOnCharacter(self.character, "RepairWithWrench")
 end
 
 function ISPlumbWaterPipeEndpoint:stop()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
     ISBaseTimedAction.stop(self)
 end
 
 function ISPlumbWaterPipeEndpoint:perform()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
 
     local square = self.endpointObject and self.endpointObject.getSquare and self.endpointObject:getSquare()
     if isClient() and square then
@@ -34,10 +36,21 @@ function ISPlumbWaterPipeEndpoint:perform()
         sendClientCommand(self.character, "WaterPipes",
             self.shouldPlumb and "plumbEndpoint" or "unplumbEndpoint",
             { x = square:getX(), y = square:getY(), z = square:getZ() })
-    elseif self.shouldPlumb then
-        WaterPipes.EndpointPlumbing.plumb(self.endpointObject)
     else
-        WaterPipes.EndpointPlumbing.unplumb(self.endpointObject)
+        -- Per SQUARE, the same unit the server works in: a tile carrying a sink and a washer connects
+        -- as one fixture, so single player cannot end up in a state multiplayer will not reproduce.
+        local EndpointPlumbing = WaterPipes.EndpointPlumbing
+        local endpoints = square and WaterPipes.EndpointObjects.collectOnSquare(square)
+            or { self.endpointObject }
+        for _, endpoint in ipairs(endpoints) do
+            if EndpointPlumbing.isPlumbed(endpoint) ~= self.shouldPlumb then
+                if self.shouldPlumb then
+                    EndpointPlumbing.plumb(endpoint)
+                else
+                    EndpointPlumbing.unplumb(endpoint)
+                end
+            end
+        end
     end
 
     ISBaseTimedAction.perform(self)

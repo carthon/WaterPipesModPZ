@@ -419,8 +419,23 @@ function Adapter.noteEmptinessCrossing(worldObject, prevAmount, newAmount)
     end
 end
 
+-- OnWaterAmountChange events the engine raised during the write in progress (nil outside a write). The
+-- write adds its own event only when the engine raised none: a listener that redraws and syncs on each
+-- one was told three times per write.
+local engineEventsDuringWrite = nil
+if Events and Events.OnWaterAmountChange then
+    Events.OnWaterAmountChange.Add(function()
+        if engineEventsDuringWrite then
+            engineEventsDuringWrite = engineEventsDuringWrite + 1
+        end
+    end)
+end
+
 local function fireExternalWaterChange(worldObject, prevAmount)
     if not worldObject or not worldObject.getModData then
+        return
+    end
+    if engineEventsDuringWrite and engineEventsDuringWrite > 0 then
         return
     end
     if not LuaEventManager or not LuaEventManager.triggerEvent then
@@ -529,6 +544,108 @@ local function verifyWorldFluidWrite(worldObject, prevAmount, requestedAmount)
     return false
 end
 
+-- What this mod last left the vessel holding, or nil if it never wrote it. A vessel still at that
+-- amount has not been touched by anyone else since.
+function Adapter.lastLeftAt(worldObject)
+    if not worldObject then
+        return nil
+    end
+    return leftVesselAt[tostring(resolveFluidTarget(worldObject))]
+end
+
+local function resolveFluidType(fluidTypeName)
+    if fluidTypeName == "Water" then
+        return (FluidType and FluidType.Water) or (Fluid and Fluid.Water)
+    elseif fluidTypeName == "TaintedWater" then
+        return (FluidType and FluidType.TaintedWater) or (Fluid and Fluid.TaintedWater)
+    elseif FluidType and FluidType.FromNameLower then
+        return FluidType.FromNameLower(string.lower(fluidTypeName))
+    elseif Fluid and Fluid.FromNameLower then
+        return Fluid.FromNameLower(string.lower(fluidTypeName))
+    end
+    return nil
+end
+
+local function isMixture(fluidContainer)
+    if not fluidContainer or not fluidContainer.isMixture then
+        return nil
+    end
+    local ok, mixed = pcall(fluidContainer.isMixture, fluidContainer)
+    if not ok then
+        return nil
+    end
+    return mixed == true
+end
+
+-- Move only the difference when the vessel already holds the one fluid asked for: one engine event, and
+-- listeners never see it pass through empty. Adding is limited to clean water, so a top-up never mixes
+-- fluids; removing never changes what is in there. False when it does not apply or did not land where
+-- asked -- the caller then rewrites the vessel in full, which ends at the target either way.
+local function writeDifference(worldObject, fluidContainer, prevAmount, fluidAmount, fluidTypeName)
+    if not fluidContainer or not fluidTypeName or not fluidContainer.removeFluid then
+        return false
+    end
+    local epsilon = Constants.FLUID_WRITE_EPSILON
+    if prevAmount <= epsilon or (fluidAmount or 0) <= epsilon or fluidAmount == prevAmount then
+        return false
+    end
+    if isMixture(fluidContainer) ~= false or readRawWorldFluidType(worldObject) ~= fluidTypeName then
+        return false
+    end
+
+    local delta = fluidAmount - prevAmount
+    local ok = false
+    if delta > 0 then
+        local fluidType = fluidTypeName == "Water" and resolveFluidType(fluidTypeName) or nil
+        if not fluidType then
+            return false
+        end
+        if worldObject.addFluid then
+            ok = pcall(worldObject.addFluid, worldObject, fluidType, delta)
+        elseif fluidContainer.addFluid then
+            ok = pcall(fluidContainer.addFluid, fluidContainer, fluidType, delta)
+        end
+    else
+        ok = pcall(fluidContainer.removeFluid, fluidContainer, -delta, false)
+    end
+    if not ok then
+        return false
+    end
+
+    local capacity = getRawWorldFluidCapacity(worldObject) or 0
+    local target = capacity > 0 and math.min(fluidAmount, capacity) or fluidAmount
+    return math.abs((getRawWorldFluidAmount(worldObject) or 0) - target) <= epsilon
+        and isMixture(fluidContainer) == false
+        and readRawWorldFluidType(worldObject) == fluidTypeName
+end
+
+-- The common end of every world-vessel write. Verified before sync/transmit: a refused write must not be
+-- broadcast as if it had landed. The crossing is reported from the TRUE before and after, since a full
+-- rewrite goes through empty and the engine's own events describe a trip to 0 that never happened.
+--
+-- The modData is sent only for a vessel that keeps its water IN the modData. A FluidContainer travels with
+-- sync(), and sending its modData starts a multiplayer loop: a client receiving a vessel's modData raises
+-- OnWaterAmountChange whenever the amount is not a whole number (the engine compares it truncated); a
+-- listener that sync()s on that event reaches the server, whose SyncIsoObject handler sends the modData
+-- straight back -- to every client, the sender included -- and round it goes for good.
+local function finishWorldFluidWrite(worldObject, prevAmount, attempted, waterInModData)
+    if not verifyWorldFluidWrite(worldObject, prevAmount, attempted) then
+        return false
+    end
+
+    if worldObject.sync then
+        pcall(worldObject.sync, worldObject)
+    end
+
+    if waterInModData and worldObject.transmitModData then
+        pcall(worldObject.transmitModData, worldObject)
+    end
+
+    noteEmptinessCrossing(worldObject, prevAmount, attempted)
+    fireExternalWaterChange(worldObject, prevAmount)
+    return true
+end
+
 local function writeWorldFluidUnmuted(worldObject, fluidAmount, fluidTypeName)
     if not worldObject then
         return false
@@ -582,22 +699,7 @@ local function writeWorldFluidUnmuted(worldObject, fluidAmount, fluidTypeName)
             pcall(worldObject.setTaintedWater, worldObject, clampedAmount > 0 and fluidTypeName == "TaintedWater")
         end
 
-        -- Before sync/transmit: a refused write must not be broadcast as if it had landed.
-        if not verifyWorldFluidWrite(worldObject, prevAmount, clampedAmount) then
-            return false
-        end
-
-        if worldObject.sync then
-            pcall(worldObject.sync, worldObject)
-        end
-
-        if worldObject.transmitModData then
-            pcall(worldObject.transmitModData, worldObject)
-        end
-
-        noteEmptinessCrossing(worldObject, prevAmount, clampedAmount)
-        fireExternalWaterChange(worldObject, prevAmount)
-        return true
+        return finishWorldFluidWrite(worldObject, prevAmount, clampedAmount, true)
     end
 
     local fluidContainer = getWorldFluidContainer(worldObject)
@@ -618,6 +720,11 @@ local function writeWorldFluidUnmuted(worldObject, fluidAmount, fluidTypeName)
         end
     end
 
+    if writeDifference(worldObject, fluidContainer, prevAmount, fluidAmount, fluidTypeName) then
+        restoreInputLock()
+        return finishWorldFluidWrite(worldObject, prevAmount, fluidAmount)
+    end
+
     local cleared = emptyWorldFluid(worldObject, fluidContainer)
 
     if not cleared then
@@ -634,16 +741,7 @@ local function writeWorldFluidUnmuted(worldObject, fluidAmount, fluidTypeName)
 
     if fluidAmount > 0 and fluidTypeName then
         attempted = fluidAmount
-        local fluidType = nil
-        if fluidTypeName == "Water" then
-            fluidType = (FluidType and FluidType.Water) or (Fluid and Fluid.Water)
-        elseif fluidTypeName == "TaintedWater" then
-            fluidType = (FluidType and FluidType.TaintedWater) or (Fluid and Fluid.TaintedWater)
-        elseif FluidType.FromNameLower then
-            fluidType = FluidType.FromNameLower(string.lower(fluidTypeName))
-        elseif Fluid and Fluid.FromNameLower then
-            fluidType = Fluid.FromNameLower(string.lower(fluidTypeName))
-        end
+        local fluidType = resolveFluidType(fluidTypeName)
 
         if not fluidType then
             restoreInputLock()
@@ -664,26 +762,7 @@ local function writeWorldFluidUnmuted(worldObject, fluidAmount, fluidTypeName)
     end
 
     restoreInputLock()
-
-    -- Before sync/transmit: a refused write must not be broadcast as if it had landed.
-    if not verifyWorldFluidWrite(worldObject, prevAmount, attempted) then
-        return false
-    end
-
-    if worldObject.sync then
-        pcall(worldObject.sync, worldObject)
-    end
-
-    if worldObject.transmitModData then
-        pcall(worldObject.transmitModData, worldObject)
-    end
-
-    -- The crossing, from the TRUE before and after. The write gets there via empty-then-refill, so the
-    -- engine's own events describe a trip to 0 and back that never happened as far as the network is
-    -- concerned; this is the one report that is about the actual change.
-    noteEmptinessCrossing(worldObject, prevAmount, attempted)
-    fireExternalWaterChange(worldObject, prevAmount)
-    return true
+    return finishWorldFluidWrite(worldObject, prevAmount, attempted)
 end
 
 -- emptyFluid and addFluid raise OnWaterAmountChange THEMSELVES, from the engine -- not only the one we
@@ -697,9 +776,12 @@ end
 function Adapter.writeWorldFluidAmount(worldObject, fluidAmount, fluidTypeName)
     WaterPipes = WaterPipes or {}
     local saved = WaterPipes._suppressWaterEvent
+    local savedCount = engineEventsDuringWrite
     WaterPipes._suppressWaterEvent = true
+    engineEventsDuringWrite = 0
     local ok, result = pcall(writeWorldFluidUnmuted, worldObject, fluidAmount, fluidTypeName)
     WaterPipes._suppressWaterEvent = saved
+    engineEventsDuringWrite = savedCount
     if not ok then
         Logger.error("writeWorldFluidAmount failed: " .. tostring(result))
         return false
@@ -786,6 +868,13 @@ local function writeIsNoOp(descriptor, fluidAmount, fluidTypeName)
     return descriptor.fluidType == fluidTypeName
 end
 
+-- Every litre this mod moves passes through the function below, which is why the tile is marked here
+-- and not in the four passes that call it: a pass added later cannot forget to mark. The prebuilt
+-- squareKey is used where the descriptor has one, so the hottest path pays no concatenation.
+local function markWaterMoved(descriptor)
+    pcall(Invalidate.waterMovedAt, descriptor.squareKey, descriptor.x, descriptor.y, descriptor.z)
+end
+
 -- Returns (ok, touchedTheWorld).
 -- The second value is what lets a caller keep its books straight. `ok` means "the vessel is in the state
 -- you asked for", which is ALSO true when the request was close enough that writing was not worth it --
@@ -804,12 +893,23 @@ function Adapter.writeDescriptorWaterAmount(descriptor, fluidAmount, fluidTypeNa
     end
 
     if descriptor.fluidMode == "purifierOut" then
+        local before = descriptor.waterAmount or 0
         local ok = writePurifierOutAmount(descriptor.object, fluidAmount, fluidTypeName)
+        -- The clean buffer supplies head only while it holds water: announce the flip on its OUT tile.
+        if ok and (before > 0) ~= ((fluidAmount or 0) > 0) and descriptor.x then
+            pcall(Invalidate.supplyChangedAt, World.squareAt(descriptor.x, descriptor.y, descriptor.z))
+        end
+        if ok then
+            markWaterMoved(descriptor)
+        end
         return ok, ok
     end
 
     if descriptor.fluidMode == "worldObject" then
         local ok = Adapter.writeWorldFluidAmount(descriptor.object, fluidAmount, fluidTypeName)
+        if ok then
+            markWaterMoved(descriptor)
+        end
         return ok, ok
     end
 
@@ -817,6 +917,9 @@ function Adapter.writeDescriptorWaterAmount(descriptor, fluidAmount, fluidTypeNa
         local ok = Adapter.writeWaterAmount(descriptor.container, fluidAmount)
         if ok and descriptor.container.setTaintedWater then
             pcall(descriptor.container.setTaintedWater, descriptor.container, fluidTypeName == "TaintedWater")
+        end
+        if ok then
+            markWaterMoved(descriptor)
         end
         return ok, ok
     end
@@ -952,6 +1055,21 @@ local function classifySquareVesselsCached(square)
     return cached
 end
 
+local function sameVessels(fresh, remembered)
+    if #fresh ~= #remembered then
+        return false
+    end
+    for index = 1, #fresh do
+        -- Object identity AND position in the list: the index is baked into every descriptor key, so a renumber
+        -- is just as wrong as a substitution even when the same objects are present.
+        if fresh[index].object ~= remembered[index].object
+            or fresh[index].objectIndex ~= remembered[index].objectIndex then
+            return false
+        end
+    end
+    return true
+end
+
 -- (Defined here, below classifySquareVessels, and not beside the other invalidation helpers: it closes
 -- over that local, and a function compiled above it would bind the name to a nil GLOBAL instead --
 -- silently, since that is valid Lua and luac -p cannot see it. test_container_cache.lua now calls it.)
@@ -977,19 +1095,87 @@ function Adapter.verifySquareVessels(square)
     local fresh = classifySquareVessels(square)
     vesselMemo[key] = fresh
 
-    if #fresh ~= #remembered then
+    return sameVessels(fresh, remembered)
+end
+
+-- Re-read one tile now. True when which objects there hold fluid changed -- or, with nothing remembered
+-- to compare against, when it holds any, so the caller never misses one.
+function Adapter.reclassifySquare(square)
+    if not square or not square.getObjects then
         return false
     end
-    for index = 1, #fresh do
-        -- Object identity AND position in the list: the index is baked into every descriptor key, so a renumber
-        -- is just as wrong as a substitution even when the same objects are present.
-        if fresh[index].object ~= remembered[index].object
-            or fresh[index].objectIndex ~= remembered[index].objectIndex then
-            return false
+    local key = vesselMemoKey(square)
+    local remembered = vesselMemo[key]
+    local fresh = classifySquareVessels(square)
+    vesselMemo[key] = fresh
+    if not remembered then
+        -- A forgotten tile is not a change by itself: the registry says what the network counts there.
+        -- Only the server's registry is the network's; a client's drifts, so a client errs on telling.
+        local State = WaterPipes.State
+        if State and State.containerCountAt and not (isClient and isClient()) then
+            return #fresh ~= State.containerCountAt(square:getX(), square:getY(), square:getZ())
+        end
+        return #fresh > 0
+    end
+    return not sameVessels(fresh, remembered)
+end
+local function isRemembered(remembered, worldObject)
+    for _, vessel in ipairs(remembered) do
+        if vessel.object == worldObject then
+            return true
         end
     end
-    return true
+    return false
 end
+
+-- A vessel the tile's remembered classification misses. An object can become a vessel in place, with no
+-- add or remove event: Useful Barrels adds the FluidContainer to the barrel itself when its lid is cut.
+function Adapter.isUnclassifiedVessel(worldObject)
+    local square = worldObject and worldObject.getSquare and worldObject:getSquare() or nil
+    if not square or not square.getObjects then
+        return false
+    end
+    if isRemembered(classifySquareVesselsCached(square), worldObject) or not getDirectWorldFluidKind(worldObject) then
+        return false
+    end
+    return isRemembered(classifySquareVessels(square), worldObject)
+end
+
+-- Debug readout: every object on the tile that holds fluid, and whether the network counts it.
+function Adapter.describeSquareVessels(square)
+    local lines = {}
+    if not square or not square.getObjects then
+        return lines
+    end
+
+    local remembered = classifySquareVesselsCached(square)
+    local fresh = classifySquareVessels(square)
+    local objects = square:getObjects()
+    for objectIndex = 0, objects:size() - 1 do
+        local worldObject = objects:get(objectIndex)
+        local holdsFluid = getWorldFluidContainer(worldObject) ~= nil
+            or (worldObject and (worldObject.getReserveWaterMax or worldObject.getReserveWaterAmount)) ~= nil
+        if holdsFluid then
+            local verdict
+            if isRemembered(remembered, worldObject) then
+                verdict = "counted"
+            elseif isRemembered(fresh, worldObject) then
+                verdict = "MISSED: the tile's remembered classification is stale"
+            elseif EndpointObjects.isEndpointCandidate(worldObject) then
+                verdict = "not storage: read as a fixture (endpoint)"
+            elseif isExcludedByName(worldObject) then
+                verdict = "not storage: excluded by name"
+            else
+                verdict = "not storage: no usable capacity"
+            end
+            lines[#lines + 1] = string.format("  #%d %s  %.1f / %.1f L  -> %s", objectIndex,
+                describeVessel(worldObject), getRawWorldFluidAmount(worldObject) or 0,
+                getRawWorldFluidCapacity(worldObject) or 0, verdict)
+        end
+    end
+    return lines
+end
+
 -- Is there any network vessel on this square at all? The router walk asks this per crossing and does not
 -- care what is inside, so it never pays for a fluid read.
 function Adapter.hasSquareContainers(square)

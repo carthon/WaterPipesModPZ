@@ -1,5 +1,6 @@
 require "TimedActions/ISBaseTimedAction"
 require "WaterPipes/GeneratorFuel"
+require "WaterPipes/SoundOptions"
 
 ISPlumbWaterPipeGenerator = ISBaseTimedAction:derive("ISPlumbWaterPipeGenerator")
 
@@ -16,16 +17,16 @@ end
 
 function ISPlumbWaterPipeGenerator:start()
     self:setActionAnim("VehicleWorkOnMid")
-    self.sound = self.character:playSound("RepairWithWrench")
+    self.sound = WaterPipes.SoundOptions.playOnCharacter(self.character, "RepairWithWrench")
 end
 
 function ISPlumbWaterPipeGenerator:stop()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
     ISBaseTimedAction.stop(self)
 end
 
 function ISPlumbWaterPipeGenerator:perform()
-    self.character:stopOrTriggerSound(self.sound)
+    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
 
     local square = self.generator and self.generator.getSquare and self.generator:getSquare()
     if isClient() and square then

@@ -12,6 +12,10 @@ require "WaterPipes/NetworkAccess"
 require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Hydrant"
+require "WaterPipes/Valve"
+require "WaterPipes/BuildingPlumbing"
+require "WaterPipes/ISPlumbBuilding"
+require "WaterPipes/ISToggleValve"
 require "WaterPipes/ISToggleHydrant"
 require "WaterPipes/ISTogglePump"
 require "WaterPipes/ISOpenWaterPump"
@@ -46,6 +50,8 @@ local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Purifier = WaterPipes.Purifier
 local Router = WaterPipes.Router
 local Hydrant = WaterPipes.Hydrant
+local Valve = WaterPipes.Valve
+local BuildingPlumbing = WaterPipes.BuildingPlumbing
 local Pump = WaterPipes.Pump
 local Pressure = WaterPipes.Pressure
 local Irrigation = WaterPipes.Irrigation
@@ -596,6 +602,28 @@ function ContextMenu.inspectPressure(playerObj, square)
         Logger.log(line)
     end
 
+    -- Every fluid-holding object here and on the network's tiles, counted or not and why. A vessel only
+    -- joins when it shares its tile with a pipe, so the clicked tile is listed even off the network.
+    local Adapter = WaterPipes.ContainerAdapter
+    if Adapter and Adapter.describeSquareVessels then
+        local function logSection(title, squares)
+            Logger.log(title)
+            local found = 0
+            for _, listed in ipairs(squares) do
+                local lines = Adapter.describeSquareVessels(listed)
+                for _, line in ipairs(lines) do
+                    Logger.log(line)
+                end
+                found = found + #lines
+            end
+            if found == 0 then
+                Logger.log("  none")
+            end
+        end
+        logSection("Fluid objects on this tile:", { square })
+        logSection("Fluid objects on this network's tiles:", NetworkAccess.getNetworkSquares(square) or {})
+    end
+
     if playerObj and HaloTextHelper then
         local tap = report.kinds and report.kinds[Constants.PRESSURE_KIND_TAP]
         HaloTextHelper.addText(playerObj, tap and tap.head
@@ -617,11 +645,17 @@ end
 
 -- Real milliseconds, on this machine, for this mod's periodic work. Turning it on resets the window,
 -- so the numbers describe what happened since you asked rather than since the save loaded.
+-- Both halves, because they are separate Lua states: on a dedicated server the periodic work is the
+-- server's and a client-only toggle would measure an empty window. The server writes to its own
+-- console.txt.
 function ContextMenu.toggleProfiler(playerObj)
     if not isDebugActive() then
         return
     end
-    WaterPipes.Profiler.toggle()
+    local on = WaterPipes.Profiler.toggle()
+    if playerObj and isClient and isClient() then
+        sendClientCommand(playerObj, "WaterPipes", "toggleProfiler", { on = on })
+    end
 end
 
 function ContextMenu.dumpProfile(playerObj)
@@ -629,6 +663,9 @@ function ContextMenu.dumpProfile(playerObj)
         return
     end
     WaterPipes.Profiler.dump()
+    if playerObj and isClient and isClient() then
+        sendClientCommand(playerObj, "WaterPipes", "dumpProfile", {})
+    end
 end
 
 -- One log line per removal this mod would care about, naming what left and which of the mod's tables
@@ -968,6 +1005,14 @@ local function onServerCommand(module, command, args)
         return
     end
 
+    if command == "buildingPlumbingRefused" or command == "buildingPipeRefused"
+        or command == "buildingPlumbingAccepted" then
+        if ISPlumbBuilding and ISPlumbBuilding.onServerRefusal then
+            ISPlumbBuilding.onServerRefusal(command, args)
+        end
+        return
+    end
+
     local playerObj = getPlayer()
     if not playerObj or not HaloTextHelper then
         return
@@ -1070,6 +1115,27 @@ local function findGaugeInWorldObjects(worldobjects)
     return nil
 end
 
+-- Looked up on the clicked squares too: the valve is drawn over its pipe, so the click can pick the
+-- pipe instead of the valve.
+local function findValveInWorldObjects(worldobjects)
+    if not worldobjects then
+        return nil
+    end
+    for _, worldObject in ipairs(worldobjects) do
+        if Valve.isValve(worldObject) then
+            return worldObject
+        end
+    end
+    for _, worldObject in ipairs(worldobjects) do
+        local square = worldObject and worldObject.getSquare and worldObject:getSquare() or nil
+        local valve = square and Valve.findOnSquare(square) or nil
+        if valve then
+            return valve
+        end
+    end
+    return nil
+end
+
 local function findHydrantInWorldObjects(worldobjects)
     if not worldobjects then
         return nil
@@ -1110,6 +1176,135 @@ function ContextMenu.setHydrantOpen(playerObj, hydrant, open)
     if luautils.walkAdj(playerObj, square, false) then
         ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
         ISTimedActionQueue.add(ISToggleHydrant:new(playerObj, hydrant, wrench, open))
+    end
+end
+
+-- Walk to the valve, equip the wrench, and turn it as a timed action -- the flip itself is
+-- server-authoritative (ISToggleValve sends the command; direct in SP).
+function ContextMenu.setValveOpen(playerObj, valve, open)
+    local square = valve and valve:getSquare()
+    if not square or not playerObj then
+        return
+    end
+    local wrench = getPipeWrench(playerObj)
+    if not wrench then
+        return
+    end
+    if luautils.walkAdj(playerObj, square, false) then
+        ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
+        ISTimedActionQueue.add(ISToggleValve:new(playerObj, valve, wrench, open))
+    end
+end
+
+-- Halo notes by tone: good = it worked, bad = refused or stopped partway, nil = neutral. Falls back to
+-- addText where the coloured variants are missing.
+local function halo(playerObj, text, tone)
+    if not playerObj or not HaloTextHelper then
+        return
+    end
+    if tone == "good" and HaloTextHelper.addGoodText then
+        HaloTextHelper.addGoodText(playerObj, text)
+    elseif tone == "bad" and HaloTextHelper.addBadText then
+        HaloTextHelper.addBadText(playerObj, text)
+    else
+        HaloTextHelper.addText(playerObj, text)
+    end
+end
+
+-- ===== Plumbing a whole building =====
+--
+-- The plan is built when the option is chosen, never when the menu opens: planning floods the building.
+local SKIPPED_SHOWN = 3
+
+local function reportPlumbing(playerObj, plan, action)
+    local skipped = #plan.skipped
+    local text, tone
+    if skipped > 0 then
+        -- It worked, but not on everything. Neither a win nor a refusal.
+        text = getText("IGUI_WaterPipesPlumbBuildingPartial",
+            tostring(#plan.connected), tostring(skipped))
+        tone = nil
+    else
+        text = getText("IGUI_WaterPipesPlumbBuildingDone",
+            tostring(#plan.connected), tostring(plan.cost))
+        tone = "good"
+    end
+    halo(playerObj, text, tone)
+
+    -- Which fixtures were left out and why, a few lines in the halo; the full list stays in console.txt.
+    if skipped > 0 then
+        for index = 1, math.min(skipped, SKIPPED_SHOWN) do
+            local entry = plan.skipped[index]
+            local name = entry.fixture.object and resolveFixtureName(entry.fixture.object)
+                or getText("IGUI_WaterPipesFixture")
+            halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingSkipped", name,
+                getText("IGUI_WaterPipesPlumbBuildingReason_" .. tostring(entry.reason))))
+        end
+        if skipped > SKIPPED_SHOWN then
+            halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingSkippedMore", tostring(skipped - SKIPPED_SHOWN)))
+        end
+    end
+
+    Logger.log(string.format(
+        "Building plumbing finished: %d fixture(s) reached, %d connected, %d tile(s) of pipe, %d skipped",
+        #plan.connected, action and action.plumbed or 0, plan.cost, skipped))
+
+    -- The detail goes to console.txt: which fixture, where, and why. A halo line cannot carry it, and
+    -- "some of them" is not an answer the player can act on.
+    for _, entry in ipairs(plan.skipped) do
+        Logger.log(string.format("Building plumbing skipped %s at %d:%d:%d -- %s",
+            tostring(entry.fixture.name or "fixture"),
+            entry.fixture.x, entry.fixture.y, entry.fixture.z, entry.reason))
+    end
+end
+
+function ContextMenu.plumbBuilding(playerObj, square)
+    if not playerObj or not square then
+        return
+    end
+    local wrench = getPipeWrench(playerObj)
+    if not wrench then
+        return
+    end
+
+    local probe = BuildingPlumbing.probeAt(square)
+    if not probe then
+        halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingNoBuilding"), "bad")
+        return
+    end
+
+    local plan = BuildingPlumbing.plan(
+        { x = square:getX(), y = square:getY(), z = square:getZ() }, probe)
+
+    if probe.truncated then
+        halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingTruncated"), "bad")
+    end
+
+    -- A fixture on pipe already laid but not connected is work too, with nothing to lay.
+    if not BuildingPlumbing.hasWork(plan) then
+        if #plan.skipped > 0 then
+            reportPlumbing(playerObj, plan, nil)
+        elseif #(plan.alreadyConnected or {}) > 0 then
+            halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingNothingToDo"))
+        else
+            halo(playerObj, getText("IGUI_WaterPipesPlumbBuildingNoFixtures"), "bad")
+        end
+        return
+    end
+
+    local needed = plan.pipes or 0
+    local held = BuildingPlumbing.countPipes(playerObj:getInventory())
+    if held < needed then
+        halo(playerObj,
+            getText("IGUI_WaterPipesPlumbBuildingNeedPipes", tostring(needed), tostring(held)), "bad")
+        return
+    end
+
+    if luautils.walkAdj(playerObj, square, true) then
+        ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
+        ISTimedActionQueue.add(ISPlumbBuilding:new(playerObj, plan, function(action)
+            reportPlumbing(playerObj, plan, action)
+        end))
     end
 end
 
@@ -1184,8 +1379,13 @@ local function buildGaugeTooltip(square)
         lines[#lines + 1] = getText("IGUI_WaterPipesPressureModelOff")
     else
         local tap = NetworkAccess.getPressureAtSquare(square, Constants.PRESSURE_KIND_TAP)
-        lines[#lines + 1] = tap and getText("IGUI_WaterPipesGaugeReading", formatHead(tap))
-            or getText("IGUI_WaterPipesGaugeNoSupply")
+        if tap == nil then
+            lines[#lines + 1] = getText("IGUI_WaterPipesGaugeNoSupply")
+        elseif not Pressure.onDial(tap) then
+            lines[#lines + 1] = getText("IGUI_WaterPipesGaugeNoPressure")
+        else
+            lines[#lines + 1] = getText("IGUI_WaterPipesGaugeReading", formatHead(tap))
+        end
     end
 
     tooltip.description = table.concat(lines, " <LINE> ")
@@ -1233,7 +1433,9 @@ local function buildEmitterTooltip(emitterObject)
             needed = WaterPipes.Hydraulics.headNeededToServe(solution, square, status.kind)
         end
 
-        if head then
+        if head and not Pressure.onDial(head) then
+            lines[#lines + 1] = getText("IGUI_WaterPipesEmitterNoPressure")
+        elseif head then
             lines[#lines + 1] = getText("IGUI_WaterPipesEmitterPressure", formatHead(head))
         elseif status.hasWater then
             lines[#lines + 1] = getText("IGUI_WaterPipesEmitterNoSupply")
@@ -1262,6 +1464,22 @@ local function buildEmitterTooltip(emitterObject)
         end
     end
 
+    tooltip.description = table.concat(lines, " <LINE> ")
+    return tooltip
+end
+
+-- The valve's state is stated here, not left to its sprite: a sprite that fails to resolve makes a shut
+-- valve look open.
+local function buildValveTooltip(valve, hasWrench)
+    local tooltip = ISWorldObjectContextMenu.addToolTip()
+    local open = Valve.isOpen(valve)
+    tooltip:setName(getText(open and "IGUI_WaterPipesValveOpenName" or "IGUI_WaterPipesValveClosedName"))
+    local lines = { getText(open and "IGUI_WaterPipesValveOpenDesc" or "IGUI_WaterPipesValveClosedDesc") }
+    if not hasWrench then
+        lines[#lines + 1] = " "
+        lines[#lines + 1] = getText("Tooltip_WaterPipesRepairNeeds")
+        lines[#lines + 1] = "  1 x " .. (getItemNameFromFullType(Constants.PIPE_TOOL_TYPE) or "Pipe Wrench")
+    end
     tooltip.description = table.concat(lines, " <LINE> ")
     return tooltip
 end
@@ -1368,6 +1586,18 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     local gaugeObject = findGaugeInWorldObjects(worldobjects)
     local hasGaugeOption = gaugeObject ~= nil
 
+    -- Turning a valve needs the wrench. Without one the option still shows, disabled, saying so: a
+    -- valve that offers nothing reads as broken.
+    local valveObject = findValveInWorldObjects(worldobjects)
+    local hasValveOption = valveObject ~= nil
+
+    -- Plumbing a whole building. Offered on ANY tile of a building, not only on a fixture: the root of
+    -- the tree is wherever the player clicked, so where they click is the decision they are making.
+    -- Deliberately cheap: whether a building is there is one call, and the plan waits for the click.
+    local plumbSquare = PipeObjectUtils.getSquareFromWorldObjects(worldobjects)
+    local hasPlumbBuildingOption = plumbSquare ~= nil and playerHasPipeWrench(playerObj)
+        and plumbSquare.getBuilding ~= nil and plumbSquare:getBuilding() ~= nil
+
     -- The pump's switch and readout stay available with the pressure model off, unlike the router
     -- regulator: the switch still stops the intake, and the readout still answers whether it has power.
     local pumpObject = findPumpInWorldObjects(worldobjects)
@@ -1390,6 +1620,7 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         and not hasPurifierOption
         and not hasRouterPressureOption and not hasGaugeOption and not hasDripRepairOption
         and not hasEmitterOption and not hasHydrantOption and not hasPumpOption
+        and not hasValveOption and not hasPlumbBuildingOption
         and not isDebugActive() then
         return false
     end
@@ -1460,6 +1691,26 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
         local option = context:addOption(label, playerObj, ContextMenu.setHydrantOpen,
             hydrantObject, not open)
         option.toolTip = buildHydrantTooltip(hydrantObject)
+    end
+
+    if hasPlumbBuildingOption then
+        local option = context:addOption(getText("ContextMenu_WaterPipesPlumbBuilding"), playerObj,
+            ContextMenu.plumbBuilding, plumbSquare)
+        local tooltip = ISWorldObjectContextMenu.addToolTip()
+        tooltip:setName(getText("ContextMenu_WaterPipesPlumbBuilding"))
+        tooltip.description = getText("IGUI_WaterPipesPlumbBuildingDesc",
+            tostring(BuildingPlumbing.costPerFixture()))
+        option.toolTip = tooltip
+    end
+
+    if hasValveOption then
+        local open = Valve.isOpen(valveObject)
+        local label = open and getText("ContextMenu_WaterPipesCloseValve")
+            or getText("ContextMenu_WaterPipesOpenValve")
+        local option = context:addOption(label, playerObj, ContextMenu.setValveOpen, valveObject, not open)
+        local hasWrench = playerHasPipeWrench(playerObj)
+        option.notAvailable = not hasWrench
+        option.toolTip = buildValveTooltip(valveObject, hasWrench)
     end
 
     if hasGaugeOption then
