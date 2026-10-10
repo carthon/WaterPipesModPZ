@@ -33,6 +33,15 @@ function ISPlumbBuilding:isValid()
 end
 
 function ISPlumbBuilding:update()
+    -- Refused as it started (single player): stopped here rather than from inside start().
+    if self.refused then
+        if self.forceStop then
+            self:forceStop()
+        else
+            self:stop()
+        end
+        return
+    end
     self.character:setMetabolicTarget(Metabolics.HeavyWork)
 
     local budget = Constants.BUILDING_PLUMB_MS_PER_TICK
@@ -106,7 +115,10 @@ function ISPlumbBuilding:start()
         self.askedAt = getTimestampMs and getTimestampMs() or 0
         sendClientCommand(self.character, "WaterPipes", "beginBuildingPlumbing", { fixtures = fixtures })
     else
-        BuildingPlumbing.beginPaidPass({ fixtures = fixtures }, self.character)
+        local charged, reason = BuildingPlumbing.beginPaidPass({ fixtures = fixtures }, self.character)
+        if not charged then
+            ISPlumbBuilding.refuse(self, reason, true)
+        end
     end
 
     self:setActionAnim("VehicleWorkOnMid")
@@ -155,6 +167,26 @@ function ISPlumbBuilding:perform()
     ISBaseTimedAction.perform(self)
 end
 
+-- The pass was refused: say why, connect nothing, stop. `later` leaves the stop to the next update.
+function ISPlumbBuilding.refuse(action, reason, later)
+    action.refused = reason or "?"
+    if HaloTextHelper and HaloTextHelper.addBadText then
+        local text = getTextOrNull
+            and getTextOrNull("IGUI_WaterPipesPlumbBuildingRefusal_" .. tostring(reason))
+            or tostring(reason)
+        HaloTextHelper.addBadText(action.character, getText("IGUI_WaterPipesPlumbBuildingRefused", text))
+    end
+    Logger.warn("Building plumbing: the pass was refused (" .. tostring(reason) .. ")")
+    if later then
+        return
+    end
+    if action.forceStop then
+        action:forceStop()
+    else
+        action:stop()
+    end
+end
+
 -- The server's answer to the pass, or its refusal of one tile. Multiplayer only: the client sent
 -- requests and counted them as laid, and this is how it learns otherwise.
 function ISPlumbBuilding.onServerRefusal(command, args)
@@ -166,20 +198,7 @@ function ISPlumbBuilding.onServerRefusal(command, args)
         end
     elseif command == "buildingPlumbingRefused" then
         if action and not action.settled then
-            action.refused = args.reason or "?"
-            if HaloTextHelper and HaloTextHelper.addBadText then
-                local reason = getTextOrNull
-                    and getTextOrNull("IGUI_WaterPipesPlumbBuildingRefusal_" .. tostring(args.reason))
-                    or tostring(args.reason)
-                HaloTextHelper.addBadText(action.character,
-                    getText("IGUI_WaterPipesPlumbBuildingRefused", reason))
-            end
-            Logger.warn("Building plumbing: the server refused the pass (" .. tostring(args.reason) .. ")")
-            if action.forceStop then
-                action:forceStop()
-            else
-                action:stop()
-            end
+            ISPlumbBuilding.refuse(action, args.reason)
         end
     elseif command == "buildingPipeRefused" and action and not action.settled then
         for index = #action.laid, 1, -1 do
