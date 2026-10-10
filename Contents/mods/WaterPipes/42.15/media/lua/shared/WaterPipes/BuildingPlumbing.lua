@@ -790,6 +790,13 @@ function BuildingPlumbing.probeAt(originSquare)
         linksOut(outside[cursor])
         cursor = cursor + 1
     end
+    -- Not followed to its end, a ring through the rest of it cannot be seen: say so.
+    local outsideTruncated = cursor <= #outside
+    if outsideTruncated then
+        Logger.warn(string.format(
+            "Building plumbing: the pipe outside this building runs past %d tiles; past that a ring through "
+            .. "it cannot be seen, so check the plan before closing any valve on it.", maxTiles))
+    end
 
     Logger.log(string.format("Building plumbing scan at %d:%d:%d -> %d tile(s), %d fixture(s), %d pipe tile(s) outside%s",
         ox, oy, originSquare:getZ(), math.min(index - 1, #queue), #fixtures, #outside,
@@ -802,6 +809,7 @@ function BuildingPlumbing.probeAt(originSquare)
         hasRiser = function(x, y, z, edge) return edge ~= nil and hasEdge(risers[keyOf(x, y, z)], edge) end,
         riserEdges = function(x, y, z) return risers[keyOf(x, y, z)] end,
         outsidePipes = function() return outside end,
+        outsideTruncated = outsideTruncated,
         fixtures = function() return fixtures end,
         truncated = truncated,
     }
