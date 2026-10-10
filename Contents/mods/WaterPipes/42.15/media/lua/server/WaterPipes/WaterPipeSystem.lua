@@ -1970,9 +1970,10 @@ local function onWaterAmountChange(object, prevAmount)
     end
 
     -- A vessel made in place raised no add event, so it joins the network the way one set down does.
-    -- Not asked for a fixture, which drinking raises this for constantly, nor off the pipes.
-    if Adapter.isUnclassifiedVessel and not EndpointObjects.isEndpointCandidate(object)
-        and object.getSquare and PipeObjectUtils.getPipeOnSquare(object:getSquare()) then
+    -- Not asked off the pipes, nor for a fixture, which drinking raises this for constantly. The pipe
+    -- test first: it is memoised, and the fixture test reads the object several times.
+    if Adapter.isUnclassifiedVessel and object.getSquare and PipeObjectUtils.getPipeOnSquare(object:getSquare())
+        and not EndpointObjects.isEndpointCandidate(object) then
         local okVessel, unclassified = pcall(Adapter.isUnclassifiedVessel, object)
         if okVessel and unclassified then
             pcall(noteVesselEvent, object)
