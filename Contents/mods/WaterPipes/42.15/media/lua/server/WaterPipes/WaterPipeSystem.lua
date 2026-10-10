@@ -2174,9 +2174,11 @@ local function onClientCommand(module, command, player, args)
         -- Answered either way: the client connects nothing until it hears which.
         if not charged then
             Logger.warn("Begin building plumbing: refused (" .. tostring(reason) .. ")")
-            sendServerCommand(player, "WaterPipes", "buildingPlumbingRefused", { reason = tostring(reason) })
+            sendServerCommand(player, "WaterPipes", "buildingPlumbingRefused",
+                { reason = tostring(reason), who = BuildingPlumbing.playerKey(player) })
         else
-            sendServerCommand(player, "WaterPipes", "buildingPlumbingAccepted", { charged = charged })
+            sendServerCommand(player, "WaterPipes", "buildingPlumbingAccepted",
+                { charged = charged, who = BuildingPlumbing.playerKey(player) })
         end
         return
     end
@@ -2191,7 +2193,7 @@ local function onClientCommand(module, command, player, args)
             if reason ~= "alreadyPiped" and type(args) == "table" then
                 sendServerCommand(player, "WaterPipes", "buildingPipeRefused",
                     { x = args.x, y = args.y, z = args.z, kind = args.kind, edge = args.edge,
-                      reason = tostring(reason) })
+                      reason = tostring(reason), who = BuildingPlumbing.playerKey(player) })
             end
         end
         return

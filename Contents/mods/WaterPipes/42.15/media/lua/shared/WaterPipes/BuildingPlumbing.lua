@@ -1024,14 +1024,18 @@ end
 local passes = {}   -- player key -> { unit, owed = {squareKey -> true}, plumbed = {squareKey -> true} }
 
 -- By username: the online ID changes between sessions, and a pass outlives the session it opened in.
+-- The seat keeps two players on one machine apart when they share a name.
 local function playerKey(player)
+    local okSeat, seat = pcall(player.getPlayerNum, player)
+    local suffix = okSeat and type(seat) == "number" and seat > 0 and ("#" .. tostring(seat)) or ""
     local okName, name = pcall(player.getUsername, player)
     if okName and name ~= nil and name ~= "" then
-        return name
+        return name .. suffix
     end
     local ok, id = pcall(player.getOnlineID, player)
-    return ok and id ~= nil and id or "?"
+    return (ok and id ~= nil and tostring(id) or "?") .. suffix
 end
+BuildingPlumbing.playerKey = playerKey
 
 local function isWholeNumber(v)
     return type(v) == "number" and v == math.floor(v)

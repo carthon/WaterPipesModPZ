@@ -9,6 +9,8 @@ require "WaterPipes/SoundOptions"
 -- is paid for by FIXTURE when the pass opens, and a fixture the pass never reaches is refunded.
 
 ISPlumbBuilding = ISBaseTimedAction:derive("ISPlumbBuilding")
+-- Multiplayer passes waiting on the server, by BuildingPlumbing.playerKey.
+ISPlumbBuilding.running = {}
 
 local Constants = WaterPipes.Constants
 local BuildingPlumbing = WaterPipes.BuildingPlumbing
@@ -110,8 +112,8 @@ function ISPlumbBuilding:start()
         fixtures[#fixtures + 1] = { x = fixture.x, y = fixture.y, z = fixture.z }
     end
     if isClient and isClient() then
-        -- The server answers a refusal with a command; this is the action it lands on.
-        ISPlumbBuilding.current = self
+        -- The server answers with a command naming the player; this is the action it lands on.
+        ISPlumbBuilding.running[BuildingPlumbing.playerKey(self.character)] = self
         self.askedAt = getTimestampMs and getTimestampMs() or 0
         sendClientCommand(self.character, "WaterPipes", "beginBuildingPlumbing", { fixtures = fixtures })
     else
@@ -135,8 +137,9 @@ function ISPlumbBuilding:settle()
         return
     end
     self.settled = true
-    if ISPlumbBuilding.current == self then
-        ISPlumbBuilding.current = nil
+    local key = BuildingPlumbing.playerKey(self.character)
+    if ISPlumbBuilding.running[key] == self then
+        ISPlumbBuilding.running[key] = nil
     end
     BuildingPlumbing.finish(self.laid, self.character)
     -- A refused pass laid nothing and paid for nothing, so there is nothing to connect.
@@ -190,8 +193,13 @@ end
 -- The server's answer to the pass, or its refusal of one tile. Multiplayer only: the client sent
 -- requests and counted them as laid, and this is how it learns otherwise.
 function ISPlumbBuilding.onServerRefusal(command, args)
-    local action = ISPlumbBuilding.current
     args = type(args) == "table" and args or {}
+    local action = args.who and ISPlumbBuilding.running[args.who]
+    if not action and args.who == nil then
+        for _, running in pairs(ISPlumbBuilding.running) do
+            action = running
+        end
+    end
     if command == "buildingPlumbingAccepted" then
         if action and not action.settled then
             action.verdict = "accepted"
