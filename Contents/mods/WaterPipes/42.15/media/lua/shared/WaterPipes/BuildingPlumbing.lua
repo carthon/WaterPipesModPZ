@@ -423,10 +423,6 @@ local function planOnce(origin, probe, dist, coords, reachable, maxTiles, connec
     for key in pairs(dist) do
         local c = coords[key]
         local x, y, z = c.x, c.y, c.z
-        if probe.hasPipe(x, y, z) then
-            net.piped[key] = true
-            existing[#existing + 1] = key
-        end
         local edges
         if probe.riserEdges then
             edges = probe.riserEdges(x, y, z)
@@ -435,6 +431,11 @@ local function planOnce(origin, probe, dist, coords, reachable, maxTiles, connec
             edges = edge and probe.hasRiser(x, y, z, edge) and edge or nil
         end
         net.riser[key] = edges
+        -- A riser is a pipe object: its tile joins its neighbours with no floor pipe under it.
+        if probe.hasPipe(x, y, z) or edges then
+            net.piped[key] = true
+            existing[#existing + 1] = key
+        end
     end
     -- Pipe outside joins the same union-find: a branch touching it twice closes a ring all the same.
     for _, c in ipairs(probe.outsidePipes and probe.outsidePipes() or {}) do
