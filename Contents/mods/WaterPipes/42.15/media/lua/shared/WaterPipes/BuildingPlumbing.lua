@@ -350,7 +350,9 @@ local function routeFixture(probe, net, origin, fixture, budget, connectedKeys)
         if not closed[best.key] and item.cost == best.cost then
             closed[best.key] = true
 
-            if isTarget(best.key) then
+            -- Forced onto the tree, the tile already joins it through that link: the route ends here.
+            -- The tree tile may be outside the building, where no step can land.
+            if isTarget(best.key) or (best.forced and isTarget(best.forced)) then
                 local path, node = {}, best
                 while node do
                     path[#path + 1] = node
