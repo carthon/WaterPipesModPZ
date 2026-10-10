@@ -1110,8 +1110,9 @@ function Adapter.reclassifySquare(square)
     vesselMemo[key] = fresh
     if not remembered then
         -- A forgotten tile is not a change by itself: the registry says what the network counts there.
+        -- Only the server's registry is the network's; a client's drifts, so a client errs on telling.
         local State = WaterPipes.State
-        if State and State.containerCountAt then
+        if State and State.containerCountAt and not (isClient and isClient()) then
             return #fresh ~= State.containerCountAt(square:getX(), square:getY(), square:getZ())
         end
         return #fresh > 0
