@@ -112,7 +112,7 @@ function Valve.applySprite(worldObject, open)
                 .. (open and "open" or "CLOSED") .. " but will not look it. Restart the game fully: "
                 .. "tilesets load only at boot, so a pack added this session is not there yet.")
         end
-        return
+        return false
     end
     pcall(worldObject.setSprite, worldObject, sprite)
 
@@ -121,7 +121,11 @@ function Valve.applySprite(worldObject, open)
     if autotile and autotile.invalidateMoveableCursorCache then
         autotile.invalidateMoveableCursorCache()
     end
+    return true
 end
+
+-- The state each valve was last seen in by reconcileOnSquare, by object.
+local seenOpen = {}
 
 local function spriteNameOf(worldObject)
     if not worldObject or not worldObject.getSpriteName then
@@ -158,15 +162,21 @@ function Valve.reconcileOnSquare(square)
         return 0
     end
 
-    local corrected, found = 0, 0
+    local corrected, found, flipped = 0, 0, false
     for i = 0, objects:size() - 1 do
         local worldObject = objects:get(i)
         if Valve.isValve(worldObject) then
             found = found + 1
             local open = Valve.isOpen(worldObject)
+            -- A flip made elsewhere, told apart from a repaint: a handle that cannot be painted would
+            -- otherwise read as a fresh flip on every sweep.
+            local key = tostring(worldObject)
+            if seenOpen[key] ~= nil and seenOpen[key] ~= open then
+                flipped = true
+            end
+            seenOpen[key] = open
             local wanted = wantedSprite(worldObject, open)
-            if spriteNameOf(worldObject) ~= wanted then
-                Valve.applySprite(worldObject, open)
+            if spriteNameOf(worldObject) ~= wanted and Valve.applySprite(worldObject, open) then
                 corrected = corrected + 1
             end
         end
@@ -183,7 +193,7 @@ function Valve.reconcileOnSquare(square)
     -- A redrawn handle is a state this side's caches never heard of; so is a valve the scan memo
     -- missed (its modData arrived after the object did).
     local Utils = WaterPipes.PipeObjectUtils
-    if corrected > 0 or (found > 0 and Utils and Utils.squareHasNoValve
+    if flipped or corrected > 0 or (found > 0 and Utils and Utils.squareHasNoValve
         and Utils.squareHasNoValve(square, true)) then
         Invalidate.squareChanged(square)
     end
