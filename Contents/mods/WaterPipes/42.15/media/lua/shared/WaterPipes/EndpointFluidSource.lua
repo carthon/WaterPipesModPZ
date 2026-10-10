@@ -545,12 +545,13 @@ function FluidSource.restoreOriginalState(endpoint)
     -- Restore the pre-plumb water-source flags. canBeWaterPiped governs the engine's infinite
     -- city-mains water: leaving it nil/false makes the fixture an infinite tap again (if the water
     -- service is on), which is exactly the pre-plumb behaviour we want back.
-    -- Cleared before the transmit, so the clients forget the mirror too.
+    -- Cleared before the one transmit, so the clients forget the mirror too.
     if modData then
         modData.canBeWaterPiped = state and state.canBeWaterPiped
         modData[Constants.ENDPOINT_ORIGINAL_FLUID_KEY] = nil
         modData[OUR_TANK_KEY] = nil
         modData[MIRROR_KEY] = nil
+        modData[Constants.ENDPOINT_FLUID_LAST_SYNC_KEY] = 0
     end
     if endpoint.setUsesExternalWaterSource then
         pcall(endpoint.setUsesExternalWaterSource, endpoint, (state and state.usesExternalWaterSource) and true or false)
@@ -561,8 +562,6 @@ function FluidSource.restoreOriginalState(endpoint)
     if endpoint.sync then
         pcall(endpoint.sync, endpoint)
     end
-
-    setLastSync(endpoint, 0)
 end
 
 -- Empties the mirror and unlocks input (used on unplumb / pipe removal).
@@ -596,12 +595,15 @@ function FluidSource.clearForEndpoint(endpoint)
     if endpoint.sync then
         pcall(endpoint.sync, endpoint)
     end
+
+    -- The modData goes once, with every key already in its final state.
+    setSyncing(endpoint, false)
+    if modData then
+        modData[Constants.ENDPOINT_FLUID_LAST_SYNC_KEY] = 0
+    end
     if endpoint.transmitModData then
         pcall(endpoint.transmitModData, endpoint)
     end
-
-    setSyncing(endpoint, false)
-    setLastSync(endpoint, 0)
 end
 
 -- Triggered (via OnWaterAmountChange) when the player drinks/washes/fills from the endpoint.
