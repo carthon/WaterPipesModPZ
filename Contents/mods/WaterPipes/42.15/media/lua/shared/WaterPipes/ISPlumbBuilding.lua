@@ -201,9 +201,11 @@ function ISPlumbBuilding.onServerRefusal(command, args)
             ISPlumbBuilding.refuse(action, args.reason)
         end
     elseif command == "buildingPipeRefused" and action and not action.settled then
+        -- Only what was refused: a riser and a floor pipe can share a tile.
         for index = #action.laid, 1, -1 do
             local p = action.laid[index]
-            if p.x == args.x and p.y == args.y and p.z == args.z then
+            if p.x == args.x and p.y == args.y and p.z == args.z
+                and (args.kind == nil or (p.kind == args.kind and p.edge == args.edge)) then
                 table.remove(action.laid, index)
             end
         end

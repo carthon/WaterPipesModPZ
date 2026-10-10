@@ -2190,7 +2190,8 @@ local function onClientCommand(module, command, player, args)
             -- A tile that already has its pipe still serves the fixture behind it.
             if reason ~= "alreadyPiped" and type(args) == "table" then
                 sendServerCommand(player, "WaterPipes", "buildingPipeRefused",
-                    { x = args.x, y = args.y, z = args.z, reason = tostring(reason) })
+                    { x = args.x, y = args.y, z = args.z, kind = args.kind, edge = args.edge,
+                      reason = tostring(reason) })
             end
         end
         return
