@@ -117,6 +117,10 @@ local OUR_TANK_KEY = "waterpipesOwnTank"
 -- which puts a second copy of the fixture in the client's world. So each client sizes its own copy.
 local MIRROR_KEY = "waterpipesMirror"
 
+-- The capacity a tank we attached was given back on unplumb. With the mirror gone it is the only
+-- thing that tells a client's copy of the tank to shrink too.
+local RESTORED_KEY = "waterpipesTankRestored"
+
 local reportedClient = {}
 
 local function objectsOnTile(endpoint)
@@ -308,6 +312,9 @@ local function writeSnapshot(endpoint, amount, fluidTypeName, networkCapacity)
     -- An empty-sized tank already there is the one we attached and shrank on unplumb: reuse it, since
     -- attaching a second component is what duplicates a fixture.
     local tankModData = getModData(endpoint)
+    if tankModData then
+        tankModData[RESTORED_KEY] = nil
+    end
     if ownCapacity(endpoint) <= 0 and tankModData and getFluidContainer(endpoint) then
         tankModData[OUR_TANK_KEY] = true
     end
@@ -383,6 +390,12 @@ function FluidSource.mirrorForClient(endpoint)
                 ownCapacity(endpoint)))
     end
     if type(mirror) ~= "table" then
+        -- Unplumbed: a tank we attached went back to what the fixture held, so this copy does too.
+        local restored = modData and tonumber(modData[RESTORED_KEY])
+        local fluidContainer = restored and getFluidContainer(endpoint)
+        if fluidContainer and fluidContainer.setCapacity and ownCapacity(endpoint) ~= restored then
+            pcall(fluidContainer.setCapacity, fluidContainer, math.max(restored, 0))
+        end
         return false
     end
 
@@ -552,6 +565,7 @@ function FluidSource.restoreOriginalState(endpoint)
         modData[OUR_TANK_KEY] = nil
         modData[MIRROR_KEY] = nil
         modData[Constants.ENDPOINT_FLUID_LAST_SYNC_KEY] = 0
+        modData[RESTORED_KEY] = ours and math.max(state and state.capacity or 0, 0) or nil
     end
     if endpoint.setUsesExternalWaterSource then
         pcall(endpoint.setUsesExternalWaterSource, endpoint, (state and state.usesExternalWaterSource) and true or false)
