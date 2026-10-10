@@ -183,23 +183,27 @@ function PipeObjectUtils.getPipeObjectsOnSquare(square, excludeObject)
     local cached = scanMemo[key]
     if not cached then
         cached = {}
-        local sawValve = false
+        local sawValve, unstamped = false, false
         local objects = square:getObjects()
         for index = 0, objects:size() - 1 do
             local worldObject = objects:get(index)
             -- isPipeObject inlined, so the valve test reuses its one modData read.
             if instanceof and instanceof(worldObject, "IsoThumpable") then
                 local modData = getPipeModData(worldObject)
-                if (modData and modData[Constants.PIPE_MODDATA_KEY])
-                    or (worldObject.getName and worldObject:getName() == Constants.PIPE_OBJECT_NAME) then
+                if modData and modData[Constants.PIPE_MODDATA_KEY] then
                     cached[#cached + 1] = worldObject
+                elseif worldObject.getName and worldObject:getName() == Constants.PIPE_OBJECT_NAME then
+                    cached[#cached + 1] = worldObject
+                    unstamped = true
                 elseif modData and modData[Constants.VALVE_MODDATA_KEY] == true then
                     sawValve = true
                 end
             end
         end
         scanMemo[key] = cached
-        valveFree[key] = not sawValve or nil
+        -- A pipe known only by its name means the tile's modData has not arrived yet: a valve would not
+        -- show either, so its absence is not remembered.
+        valveFree[key] = not (sawValve or unstamped) or nil
     end
 
     if not excludeObject then
