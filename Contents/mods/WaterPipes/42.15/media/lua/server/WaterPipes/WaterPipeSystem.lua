@@ -2051,6 +2051,9 @@ local function resolveCommandSquare(args)
     return getSquare(args.x, args.y, args.z)
 end
 
+-- When each tile last answered a client's syncFixture.
+local fixtureSyncAt = {}
+
 local function onClientCommand(module, command, player, args)
     if module ~= "WaterPipes" then
         return
@@ -2249,6 +2252,32 @@ local function onClientCommand(module, command, player, args)
         local ok, err = pcall(Irrigation.run, dt)
         if not ok then
             Logger.error("Manual irrigation pass failed: " .. tostring(err))
+        end
+        return
+    end
+
+    -- A client gave a fixture its own copy of the tank; the litres travel with sync(). Near the sender
+    -- only, and at most once every two seconds per tile.
+    if command == "syncFixture" then
+        local reach = Constants.VESSEL_NOTICE_REACH
+        if not player or type(args) ~= "table" or type(args.x) ~= "number" or type(args.y) ~= "number"
+            or math.abs(args.x - player:getX()) > reach or math.abs(args.y - player:getY()) > reach then
+            return
+        end
+        local square = resolveCommandSquare(args)
+        if not square then
+            return
+        end
+        local key = State.squareKey(square:getX(), square:getY(), square:getZ())
+        local now = getTimestampMs and getTimestampMs() or 0
+        if fixtureSyncAt[key] and now - fixtureSyncAt[key] < 2000 then
+            return
+        end
+        fixtureSyncAt[key] = now
+        for _, endpoint in ipairs(EndpointObjects.collectOnSquare(square)) do
+            if EndpointPlumbing.isPlumbed(endpoint) and endpoint.sync then
+                pcall(endpoint.sync, endpoint)
+            end
         end
         return
     end

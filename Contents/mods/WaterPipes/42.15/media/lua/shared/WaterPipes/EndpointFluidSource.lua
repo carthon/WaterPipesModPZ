@@ -403,8 +403,17 @@ function FluidSource.mirrorForClient(endpoint)
     if capacity <= 0 then
         return false
     end
-    if ownCapacity(endpoint) <= 0 and not attachTank(endpoint, capacity) then
-        return false
+    if ownCapacity(endpoint) <= 0 then
+        if not attachTank(endpoint, capacity) then
+            return false
+        end
+        -- A tank attached after the server's last sync() reads empty until something moves: ask for one.
+        local square = endpoint.getSquare and endpoint:getSquare() or nil
+        local player = getPlayer and getPlayer() or nil
+        if square and player and sendClientCommand then
+            sendClientCommand(player, "WaterPipes", "syncFixture",
+                { x = square:getX(), y = square:getY(), z = square:getZ() })
+        end
     end
 
     -- Only the size. The litres come with the server's sync(); a fluid write on a client does nothing.
