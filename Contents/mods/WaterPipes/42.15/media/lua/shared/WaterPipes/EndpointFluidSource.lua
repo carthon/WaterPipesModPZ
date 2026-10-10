@@ -262,25 +262,31 @@ local function writeFluid(endpoint, amount, fluidTypeName, networkCapacity)
 
     -- Both calls raise OnWaterAmountChange from the engine. The mod's own handler is muted for them, as
     -- for a vessel write: it would mark this network's taps dirty for the mod's own write.
+    -- One pcall around the whole muted stretch: an error inside must not leave the mod deaf.
     local muted = WaterPipes._suppressWaterEvent
     WaterPipes._suppressWaterEvent = true
-    if endpoint.emptyFluid then
-        pcall(endpoint.emptyFluid, endpoint)
-    elseif fluidContainer and fluidContainer.Empty then
-        pcall(fluidContainer.Empty, fluidContainer)
-    end
+    local okWrite, errWrite = pcall(function()
+        if endpoint.emptyFluid then
+            pcall(endpoint.emptyFluid, endpoint)
+        elseif fluidContainer and fluidContainer.Empty then
+            pcall(fluidContainer.Empty, fluidContainer)
+        end
 
-    if effectiveAmount > 0 and fluidTypeName then
-        local fluidType = getFluidTypeByName(fluidTypeName)
-        if fluidType then
-            if endpoint.addFluid then
-                pcall(endpoint.addFluid, endpoint, fluidType, effectiveAmount)
-            elseif fluidContainer and fluidContainer.addFluid then
-                pcall(fluidContainer.addFluid, fluidContainer, fluidType, effectiveAmount)
+        if effectiveAmount > 0 and fluidTypeName then
+            local fluidType = getFluidTypeByName(fluidTypeName)
+            if fluidType then
+                if endpoint.addFluid then
+                    pcall(endpoint.addFluid, endpoint, fluidType, effectiveAmount)
+                elseif fluidContainer and fluidContainer.addFluid then
+                    pcall(fluidContainer.addFluid, fluidContainer, fluidType, effectiveAmount)
+                end
             end
         end
-    end
+    end)
     WaterPipes._suppressWaterEvent = muted
+    if not okWrite then
+        Logger.error("EndpointFluidSource: write to " .. describeObject(endpoint) .. " failed: " .. tostring(errWrite))
+    end
 
     if fluidContainer and fluidContainer.setInputLocked then
         pcall(fluidContainer.setInputLocked, fluidContainer, true)
