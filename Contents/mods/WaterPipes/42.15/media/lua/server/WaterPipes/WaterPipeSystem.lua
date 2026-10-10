@@ -1222,7 +1222,10 @@ local function processPendingPipeRemovals()
         local square = getSquare(entry.x, entry.y, entry.z)
         if square and not squareHoldsObject(square, entry.object) then
             Invalidate.squareChanged(square)
-            if not (isClient and isClient()) then
+            -- Only a valve the registry held closed splits anything; an open one has nothing to rejoin.
+            local pipe = State.ensure().pipes[State.squareKey(entry.x, entry.y, entry.z)]
+            local wasClosed = pipe and pipe.metadata and pipe.metadata.valveClosed == true
+            if wasClosed and not (isClient and isClient()) then
                 reopened = State.setPipeValveClosed(entry.x, entry.y, entry.z, false) or reopened
             end
         end
