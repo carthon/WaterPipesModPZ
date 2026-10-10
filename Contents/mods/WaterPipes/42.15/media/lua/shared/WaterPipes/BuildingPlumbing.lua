@@ -368,7 +368,9 @@ local function routeFixture(probe, net, origin, fixture, budget, connectedKeys)
             while cursor do
                 chain[cursor.key] = true
                 if cursor.riserAt and cursor.newRiser then
-                    chainRisers[keyOf(cursor.riserAt.x, cursor.riserAt.y, cursor.riserAt.z)] = cursor.edge
+                    -- Added to whatever riser the tile already carries, never in place of it.
+                    local rk = keyOf(cursor.riserAt.x, cursor.riserAt.y, cursor.riserAt.z)
+                    chainRisers[rk] = withEdge(rawget(chainRisers, rk) or net.riser[rk], cursor.edge)
                 end
                 cursor = cursor.prev and labels[cursor.prev] or nil
             end
