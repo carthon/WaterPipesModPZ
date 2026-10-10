@@ -1005,7 +1005,8 @@ local function onServerCommand(module, command, args)
         return
     end
 
-    if command == "buildingPlumbingRefused" or command == "buildingPipeRefused" then
+    if command == "buildingPlumbingRefused" or command == "buildingPipeRefused"
+        or command == "buildingPlumbingAccepted" then
         if ISPlumbBuilding and ISPlumbBuilding.onServerRefusal then
             ISPlumbBuilding.onServerRefusal(command, args)
         end

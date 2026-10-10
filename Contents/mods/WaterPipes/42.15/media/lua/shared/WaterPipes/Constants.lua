@@ -580,6 +580,8 @@ Constants.BUILDING_PLUMB_MAX_SCAN_TILES = 8000
 Constants.BUILDING_PLUMB_REACH = 34
 -- How far from a player a vesselChanged notice may name a tile: about what a client has loaded.
 Constants.VESSEL_NOTICE_REACH = 120
+-- How long a multiplayer building pass waits for the server to accept it before it connects anything.
+Constants.BUILDING_PLUMB_VERDICT_TIMEOUT_MS = 10000
 -- How long one frame may spend laying pipe, in milliseconds. At least one tile is always laid.
 Constants.BUILDING_PLUMB_MS_PER_TICK = 8
 -- In multiplayer a client only sends each tile to the server, which costs it nothing, so the budget above

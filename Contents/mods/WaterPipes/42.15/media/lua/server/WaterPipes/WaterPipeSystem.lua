@@ -2171,10 +2171,12 @@ local function onClientCommand(module, command, player, args)
     -- The whole price of a pass, taken against a fixture list this side counts for itself.
     if command == "beginBuildingPlumbing" then
         local charged, reason = BuildingPlumbing.beginPaidPass(args, player)
+        -- Answered either way: the client connects nothing until it hears which.
         if not charged then
             Logger.warn("Begin building plumbing: refused (" .. tostring(reason) .. ")")
-            -- The client stops and connects nothing; until told, it reports a plumbed house.
             sendServerCommand(player, "WaterPipes", "buildingPlumbingRefused", { reason = tostring(reason) })
+        else
+            sendServerCommand(player, "WaterPipes", "buildingPlumbingAccepted", { charged = charged })
         end
         return
     end

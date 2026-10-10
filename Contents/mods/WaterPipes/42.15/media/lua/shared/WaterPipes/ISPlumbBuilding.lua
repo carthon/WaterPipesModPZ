@@ -72,6 +72,15 @@ function ISPlumbBuilding:update()
     end
 
     if self.next > #self.plan.placements then
+        -- Multiplayer: nothing is connected before the server has answered the pass. Settling on a
+        -- refusal still on its way connected fixtures and reported a plumbed house.
+        if remote and not self.verdict then
+            local waited = getTimestampMs and (getTimestampMs() - (self.askedAt or 0)) or 0
+            if waited < Constants.BUILDING_PLUMB_VERDICT_TIMEOUT_MS then
+                return
+            end
+            Logger.warn("Building plumbing: no answer from the server about the pass; finishing anyway.")
+        end
         self:forceComplete()
     end
 end
@@ -94,6 +103,7 @@ function ISPlumbBuilding:start()
     if isClient and isClient() then
         -- The server answers a refusal with a command; this is the action it lands on.
         ISPlumbBuilding.current = self
+        self.askedAt = getTimestampMs and getTimestampMs() or 0
         sendClientCommand(self.character, "WaterPipes", "beginBuildingPlumbing", { fixtures = fixtures })
     else
         BuildingPlumbing.beginPaidPass({ fixtures = fixtures }, self.character)
@@ -145,12 +155,16 @@ function ISPlumbBuilding:perform()
     ISBaseTimedAction.perform(self)
 end
 
--- The server refused the pass, or one tile of it. Multiplayer only: the client sent requests and
--- counted them as laid, and this is how it learns otherwise.
+-- The server's answer to the pass, or its refusal of one tile. Multiplayer only: the client sent
+-- requests and counted them as laid, and this is how it learns otherwise.
 function ISPlumbBuilding.onServerRefusal(command, args)
     local action = ISPlumbBuilding.current
     args = type(args) == "table" and args or {}
-    if command == "buildingPlumbingRefused" then
+    if command == "buildingPlumbingAccepted" then
+        if action and not action.settled then
+            action.verdict = "accepted"
+        end
+    elseif command == "buildingPlumbingRefused" then
         if action and not action.settled then
             action.refused = args.reason or "?"
             if HaloTextHelper and HaloTextHelper.addBadText then
