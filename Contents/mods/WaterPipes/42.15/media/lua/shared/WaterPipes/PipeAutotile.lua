@@ -471,6 +471,7 @@ local function refreshStreamedSquare(coord, cleared)
     PipeObjectUtils.invalidateSquareScan(square)
     PipeAutotile.refreshFloorPipeAt(coord.x, coord.y, coord.z)
     for _, pipe in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+        -- MIGRATION(0.10.0-thumpable), see PipeObjectUtils.clearThumpable; `cleared` goes with it.
         if PipeObjectUtils.clearThumpable(pipe) then
             PipeObjectUtils.noteCleared(cleared, coord.x, coord.y, coord.z)
         end
@@ -492,7 +493,7 @@ local function onTickProcessPending()
         pendingStreamed = {}
         Profiler.count("autotile/streamed squares", #streamed)
         local cleared = Profiler.time("autotile/streamed", refreshStreamedBatch, streamed)
-        if cleared.count then
+        if cleared.count then   -- MIGRATION(0.10.0-thumpable)
             Logger.log("Thumpable pipes cleared on load: " .. PipeObjectUtils.describeCleared(cleared))
         end
     end

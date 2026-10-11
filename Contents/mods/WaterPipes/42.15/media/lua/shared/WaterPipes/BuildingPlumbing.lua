@@ -862,7 +862,7 @@ function BuildingPlumbing.place(placement, player)
     local north = placement.kind == RISER and placement.edge == "N" or false
     local object = IsoThumpable.new(getWorld():getCell(), square, faceSprite, north, {})
     -- Not thumpable, as the hand-built script says: the engine collides with a thumpable as a wall on
-    -- its edge, whatever canPassThrough says.
+    -- its edge, whatever canPassThrough says. Permanent: NOT part of MIGRATION(0.10.0-thumpable).
     object:setIsThumpable(false)
     object:setIsDismantable(true)
     object:setCanPassThrough(true)
@@ -895,7 +895,7 @@ function BuildingPlumbing.place(placement, player)
 
     -- Registry only. State.registerPipe does not rebuild; BuildingPlumbing.finish does, once.
     -- Not marked thumpChecked: the tile may hold an older 0.10.0 pipe, and only the sweep in that
-    -- rebuild looks at the objects.
+    -- rebuild looks at the objects. MIGRATION(0.10.0-thumpable): this note goes with the sweep.
     WaterPipes.State.registerPipe(placement.x, placement.y, placement.z, {
         kinds = true, riser = placement.kind == RISER or nil,
     })

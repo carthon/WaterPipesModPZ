@@ -28,9 +28,16 @@ function PipeObjectUtils.isPipeObject(worldObject)
     return worldObject.getName and worldObject:getName() == Constants.PIPE_OBJECT_NAME
 end
 
--- No pipe may be thumpable: the engine collides with a thumpable as a wall on its edge. 0.10.0 laid
--- building pipes that way and the flag is saved with them; the setter is not synced, so each side clears
--- its own copy. Takes a pipe object; true when it cleared one.
+-- MIGRATION(0.10.0-thumpable). Temporary: repairs saves from 0.10.0, whose building pipes were laid
+-- thumpable (the engine collides with a thumpable as a wall on its edge; the flag is saved with the
+-- object and the setter is not synced, so each side clears its own copy). Since 0.10.1 pipes are born
+-- non-thumpable, so this can go once 0.10.0 saves no longer matter: a pipe in a chunk nobody loaded since
+-- would then keep blocking. To remove it, grep the tag and delete every site:
+--   clearThumpable/noteCleared/describeCleared here, the call and its log in PipeAutotile
+--   (refreshStreamedSquare/onTickProcessPending), the sweep in WaterPipeSystem.scanContainersAroundPipes.
+-- KEEP setIsThumpable(false) in BuildingPlumbing.place: that is the fix itself. The saved keys
+-- metadata.thumpChecked and state.thumpableSwept may stay in old saves; nothing else reads them.
+-- Takes a pipe object; true when it cleared one.
 function PipeObjectUtils.clearThumpable(pipe)
     if pipe:isThumpable() then
         pipe:setIsThumpable(false)
@@ -39,7 +46,7 @@ function PipeObjectUtils.clearThumpable(pipe)
     return false
 end
 
--- Count and bounds of the pipes a sweep cleared, for its log line.
+-- MIGRATION(0.10.0-thumpable): count and bounds of the pipes a sweep cleared, for its log line.
 function PipeObjectUtils.noteCleared(area, x, y, z)
     area.count = (area.count or 0) + 1
     area.minX = math.min(area.minX or x, x)
