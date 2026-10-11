@@ -30,11 +30,29 @@ end
 
 -- No pipe may be thumpable: the engine collides with a thumpable as a wall on its edge. 0.10.0 laid
 -- building pipes that way and the flag is saved with them; the setter is not synced, so each side clears
--- its own copy. Takes a pipe object.
+-- its own copy. Takes a pipe object; true when it cleared one.
 function PipeObjectUtils.clearThumpable(pipe)
     if pipe:isThumpable() then
         pipe:setIsThumpable(false)
+        return true
     end
+    return false
+end
+
+-- Count and bounds of the pipes a sweep cleared, for its log line.
+function PipeObjectUtils.noteCleared(area, x, y, z)
+    area.count = (area.count or 0) + 1
+    area.minX = math.min(area.minX or x, x)
+    area.maxX = math.max(area.maxX or x, x)
+    area.minY = math.min(area.minY or y, y)
+    area.maxY = math.max(area.maxY or y, y)
+    area.minZ = math.min(area.minZ or z, z)
+    area.maxZ = math.max(area.maxZ or z, z)
+end
+
+function PipeObjectUtils.describeCleared(area)
+    return string.format("%d pipe(s) in x %d..%d, y %d..%d, z %d..%d", area.count,
+        area.minX, area.maxX, area.minY, area.maxY, area.minZ, area.maxZ)
 end
 
 function PipeObjectUtils.getPipePlacement(worldObject)

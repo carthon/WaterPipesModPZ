@@ -454,7 +454,7 @@ local function onLoadGridsquare(square)
     pendingStreamed[#pendingStreamed + 1] = { x = square:getX(), y = square:getY(), z = square:getZ() }
 end
 
-local function refreshStreamedSquare(coord)
+local function refreshStreamedSquare(coord, cleared)
     local square = getSquare(coord.x, coord.y, coord.z)
     if not square then
         return
@@ -462,7 +462,9 @@ local function refreshStreamedSquare(coord)
     PipeObjectUtils.invalidateSquareScan(square)
     PipeAutotile.refreshFloorPipeAt(coord.x, coord.y, coord.z)
     for _, pipe in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
-        PipeObjectUtils.clearThumpable(pipe)
+        if PipeObjectUtils.clearThumpable(pipe) then
+            PipeObjectUtils.noteCleared(cleared, coord.x, coord.y, coord.z)
+        end
         refreshRiserVisibility(pipe)
     end
 end
@@ -471,8 +473,12 @@ local function onTickProcessPending()
     if #pendingStreamed > 0 then
         local streamed = pendingStreamed
         pendingStreamed = {}
+        local cleared = {}
         for _, coord in ipairs(streamed) do
-            refreshStreamedSquare(coord)
+            refreshStreamedSquare(coord, cleared)
+        end
+        if cleared.count then
+            Logger.log("Thumpable pipes cleared on load: " .. PipeObjectUtils.describeCleared(cleared))
         end
     end
 

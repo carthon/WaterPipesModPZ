@@ -146,6 +146,7 @@ function System.scanContainersAroundPipes()
     -- registered pipe is left unchecked the whole sweep is off for good.
     local sweepThumpable = not state.thumpableSwept
     local unchecked = 0
+    local cleared = {}
 
     -- A container connects only when a (horizontal) pipe sits on its OWN tile -- not by adjacency.
     for _, pipeData in pairs(state.pipes) do
@@ -192,8 +193,8 @@ function System.scanContainersAroundPipes()
             local derived = nil
             local checkThumpable = sweepThumpable and not metadata.thumpChecked
             for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
-                if checkThumpable then
-                    PipeObjectUtils.clearThumpable(worldObject)
+                if checkThumpable and PipeObjectUtils.clearThumpable(worldObject) then
+                    PipeObjectUtils.noteCleared(cleared, pipeData.x, pipeData.y, pipeData.z)
                 end
                 local okMod, modData = pcall(worldObject.getModData, worldObject)
                 if okMod and modData and modData[Constants.PIPE_MODDATA_KEY] then
@@ -248,8 +249,13 @@ function System.scanContainersAroundPipes()
         end
     end
 
+    if cleared.count then
+        Logger.log(string.format("Thumpable sweep cleared %s; %d registered pipe(s) still unchecked",
+            PipeObjectUtils.describeCleared(cleared), unchecked))
+    end
     if sweepThumpable and unchecked == 0 then
         state.thumpableSwept = true
+        Logger.log("Thumpable sweep finished: every registered pipe checked, the sweep is off for this save")
     end
 
     State.replaceContainers(found)
