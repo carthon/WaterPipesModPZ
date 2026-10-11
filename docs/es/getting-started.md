@@ -19,7 +19,7 @@ Necesitas una Llave para tubos, una Tubería de metal o un Segmento de tubería 
 
 ## Tres instalaciones de inicio
 
-La altura se cuenta en plantas y la distancia en casillas, pero la presión se da en metros (m), la unidad que usan todos los manómetros y las ventanas de bombas y enrutadores del juego. La regla práctica: **1 planta = 3 m**, así que los 25 m de una bomba equivalen a subir el depósito unas 8 plantas. Con los valores predeterminados, un aparato recibe:
+La altura se cuenta en plantas y la distancia en casillas, pero la presión se da en metros (m), la unidad que usan todos los manómetros y las ventanas de bombas y enrutadores del juego. La regla práctica: **1 planta = 3 m**, así que los 25 m de una bomba equivalen a subir el depósito unas 8 plantas. Las cifras van redondeadas al metro. Con los valores predeterminados, un aparato recibe:
 
 - **Lo que construyen los depósitos.** Cada recipiente con agua aporta 1 m en su propia planta, más 3 m por cada planta que esté por encima del aparato. Los recipientes no se suman: manda el más alto.
 - **Más 25 m por cada bomba con corriente** de la red. La bomba eleva todos los recipientes de la red, y las bombas en serie se suman.
@@ -43,9 +43,9 @@ El propio depósito es la fuente de presión: subirlo es la forma más barata de
 ![Depósito con bomba de agua](../assets/images/diagram-install-pump-es.svg){ .wp-diagram }
 
 - **1** Barril en la planta baja: 1 m.
-- **2** Bomba de agua con corriente: 1 m + 25 m = **26 m** para toda la red.
-- **3** Fregadero una planta más arriba: 26 m − 1 planta × 3 m = unos **23 m** (el caudal del aspersor resta un poco en el tramo compartido).
-- **4** Aspersor a 10 casillas de tubería del barril: 26 m − 10 casillas × 0,2 m = **24 m**, por encima de los 20 m que necesita. Sin la bomba recibiría 1 m − 10 casillas × 0,2 m = −1 m y no regaría.
+- **2** Bomba de agua con corriente, a 2 casillas del barril: 1 m + 25 m = **26 m** para toda la red.
+- **3** Fregadero una planta más arriba, con la subida a 6 casillas del barril: el caudal del aspersor le quita 6 casillas × 0,2 m del tramo compartido y la planta 3 m, así que recibe **22 m**.
+- **4** Aspersor a 10 casillas del barril: 26 m − 10 casillas × 0,2 m = **24 m**, por encima de los 20 m que necesita. Sin la bomba recibiría 1 m − 10 casillas × 0,2 m = −1 m y no regaría.
 
 El barril sigue siendo necesario: la bomba empuja y mueve el agua, pero no almacena nada.
 

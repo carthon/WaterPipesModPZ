@@ -19,7 +19,7 @@ This first network needs one Pipe Wrench, one Metal Pipe or fired Clay Pipe Segm
 
 ## Three starter installations
 
-Height is counted in floors and distance in tiles, but pressure is shown in metres (m), the unit every in-game gauge, pump, and router window uses. The rule of thumb: **1 floor = 3 m**, so a pump's 25 m is like raising the storage about 8 floors. With default settings, a fixture receives:
+Height is counted in floors and distance in tiles, but pressure is shown in metres (m), the unit every in-game gauge, pump, and router window uses. The rule of thumb: **1 floor = 3 m**, so a pump's 25 m is like raising the storage about 8 floors. Figures are rounded to the metre. With default settings, a fixture receives:
 
 - **What the storage builds.** Every container holding water gives 1 m on its own floor, plus 3 m for each floor it stands above the fixture. Containers do not add up: the highest one sets the pressure.
 - **Plus 25 m per powered pump** in the network. A pump lifts every container in it, and pumps in series add up.
@@ -43,9 +43,9 @@ The storage itself is the pressure source: raising it is the cheapest way to gai
 ![Storage with a water pump](../assets/images/diagram-install-pump-en.svg){ .wp-diagram }
 
 - **1** Barrel on the ground floor: 1 m.
-- **2** Powered Water Pump: 1 m + 25 m = **26 m** for the whole network.
-- **3** Sink one floor up: 26 m − 1 floor × 3 m = about **23 m** (the sprinkler's flow costs a little on the shared stretch).
-- **4** Sprinkler 10 tiles of pipe from the barrel: 26 m − 10 tiles × 0.2 m = **24 m**, above the 20 m it needs. Without the pump it would get 1 m − 10 tiles × 0.2 m = −1 m and stay dry.
+- **2** Powered Water Pump, 2 tiles from the barrel: 1 m + 25 m = **26 m** for the whole network.
+- **3** Sink one floor up, its riser 6 tiles from the barrel: the sprinkler's flow takes 6 tiles × 0.2 m on the shared stretch and the floor takes 3 m, so it gets **22 m**.
+- **4** Sprinkler 10 tiles from the barrel: 26 m − 10 tiles × 0.2 m = **24 m**, above the 20 m it needs. Without the pump it would get 1 m − 10 tiles × 0.2 m = −1 m and stay dry.
 
 The barrel is still required: a pump boosts and moves water but stores none.
 

@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" role="img" aria-label="Depósito con bomba de agua: 1 m más 25 m da 26 m; unos 23 m en un fregadero una planta más arriba; 24 m en un aspersor a 10 casillas">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" role="img" aria-label="Depósito con bomba de agua a 2 casillas del barril: 1 m más 25 m da 26 m; 22 m en un fregadero una planta más arriba, con la subida a 6 casillas; 24 m en un aspersor a 10 casillas">
   <defs>
     <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#202b26"/><stop offset="1" stop-color="#121815"/></linearGradient>
     <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0v24" fill="none" stroke="#d7c79d" stroke-opacity=".045"/></pattern>
@@ -9,26 +9,27 @@
   <rect x="20" y="370" width="920" height="12" fill="#2b3832"/><path d="M20 370H940" stroke="#71837a" stroke-width="2"/>
   <rect x="520" y="200" width="420" height="12" fill="#2b3832"/><path d="M520 200H940" stroke="#71837a" stroke-width="2"/>
   <!-- pipes -->
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M100 358H880M560 358V188H700" stroke="#090d0b" stroke-width="25"/><path d="M100 358H880M560 358V188H700" stroke="#8d9a93" stroke-width="14"/></g>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M100 358H880M568 358V188H700" stroke="#090d0b" stroke-width="25"/><path d="M100 358H880M568 358V188H700" stroke="#8d9a93" stroke-width="14"/></g>
   <g stroke="#71837a" stroke-width="3"><path d="M100 345v26M178 345v26M256 345v26M334 345v26M412 345v26M490 345v26M568 345v26M646 345v26M724 345v26M802 345v26M880 345v26"/></g>
-  <g fill="none" stroke="#79b8b2" stroke-width="4" marker-end="url(#arrow)"><path d="M128 358h70"/><path d="M292 358h200"/><path d="M560 330v-110"/><path d="M588 188h60"/><path d="M620 358h180"/></g>
+  <g stroke="#d9c99f" stroke-width="3"><path d="M256 341v34M568 341v34M880 341v34"/></g>
+  <g fill="none" stroke="#79b8b2" stroke-width="4" marker-end="url(#arrow)"><path d="M128 358h76"/><path d="M298 358h196"/><path d="M568 330v-110"/><path d="M596 188h52"/><path d="M604 358h196"/></g>
   <!-- height -->
   <g stroke="#d9c99f" stroke-width="2"><path d="M505 212V370M497 212h16M497 370h16"/></g>
   <!-- barrel -->
   <g stroke="#d9c99f" stroke-width="5" stroke-linejoin="round"><path d="M54 278h92l-8 92h-76z" fill="#526655"/><path d="M60 316h80" stroke="#79b8b2" stroke-width="22"/><path d="M58 290h84M56 350h88" stroke-width="3"/></g>
   <!-- pump -->
-  <g stroke="#e2cf9d" stroke-width="5"><circle cx="250" cy="340" r="28" fill="#914f39"/><path d="M234 340h32M250 324v32"/></g>
-  <path d="M292 292l-10 16h8l-6 14 16-20h-8l6-10z" fill="#d2a85d"/>
+  <g stroke="#e2cf9d" stroke-width="5"><circle cx="256" cy="340" r="28" fill="#914f39"/><path d="M240 340h32M256 324v32"/></g>
+  <path d="M298 292l-10 16h8l-6 14 16-20h-8l6-10z" fill="#d2a85d"/>
   <!-- sink, upper floor -->
   <g stroke="#d9c99f" stroke-width="5" fill="none" stroke-linejoin="round"><path d="M666 162v38M734 162v38"/><path d="M658 118h84v44h-84z" fill="#526655"/><path d="M679 118v-28h42v28M652 118h96"/></g>
   <!-- sprinkler -->
   <path d="M880 358V306" stroke="#d9c99f" stroke-width="6"/><circle cx="880" cy="300" r="10" fill="#914f39" stroke="#e2cf9d" stroke-width="3"/>
   <path d="M858 288q22-20 44 0M846 276q34-30 68 0" fill="none" stroke="#79b8b2" stroke-width="3" stroke-dasharray="6 6"/>
   <!-- pressure -->
-  <g fill="#16201c" stroke="#79b8b2" stroke-width="2.5"><rect x="62" y="220" width="76" height="38" rx="10"/><rect x="202" y="240" width="96" height="38" rx="10"/><rect x="770" y="110" width="96" height="38" rx="10"/><rect x="832" y="218" width="96" height="38" rx="10"/></g>
-  <g fill="#fff2cf" font-family="Arial,sans-serif" font-size="20" font-weight="700" text-anchor="middle"><text x="100" y="246">1 m</text><text x="250" y="266">26 m</text><text x="818" y="136">23 m</text><text x="880" y="244">24 m</text></g>
-  <g fill="#d9c99f" font-family="Arial,sans-serif" font-size="18" font-weight="700"><text x="493" y="296" text-anchor="end"><tspan fill="#d9c99f">1 planta</tspan><tspan fill="#e07a5f"> → −3 m</tspan></text><text x="490" y="402" text-anchor="middle"><tspan fill="#d9c99f">10 casillas</tspan><tspan fill="#e07a5f"> → −2 m</tspan></text></g>
+  <g fill="#16201c" stroke="#79b8b2" stroke-width="2.5"><rect x="62" y="220" width="76" height="38" rx="10"/><rect x="208" y="240" width="96" height="38" rx="10"/><rect x="770" y="110" width="96" height="38" rx="10"/><rect x="832" y="218" width="96" height="38" rx="10"/></g>
+  <g fill="#fff2cf" font-family="Arial,sans-serif" font-size="20" font-weight="700" text-anchor="middle"><text x="100" y="246">1 m</text><text x="256" y="266">26 m</text><text x="818" y="136">22 m</text><text x="880" y="244">24 m</text></g>
+  <g fill="#d9c99f" font-family="Arial,sans-serif" font-size="18" font-weight="700"><text x="493" y="296" text-anchor="end">1 planta</text><g text-anchor="middle"><text x="100" y="402">0</text><text x="256" y="402">2 casillas</text><text x="568" y="402">6 casillas</text><text x="880" y="402">10 casillas</text></g></g>
   <!-- markers -->
-  <g fill="#d5744e" stroke="#171d1a" stroke-width="3"><circle cx="50" cy="272" r="18"/><circle cx="214" cy="306" r="18"/><circle cx="652" cy="86" r="18"/><circle cx="838" cy="330" r="18"/></g>
-  <g fill="#fff2cf" font-family="Arial,sans-serif" font-size="18" font-weight="700" text-anchor="middle"><text x="50" y="278">1</text><text x="214" y="312">2</text><text x="652" y="92">3</text><text x="838" y="336">4</text></g>
+  <g fill="#d5744e" stroke="#171d1a" stroke-width="3"><circle cx="50" cy="272" r="18"/><circle cx="220" cy="306" r="18"/><circle cx="652" cy="86" r="18"/><circle cx="838" cy="330" r="18"/></g>
+  <g fill="#fff2cf" font-family="Arial,sans-serif" font-size="18" font-weight="700" text-anchor="middle"><text x="50" y="278">1</text><text x="220" y="312">2</text><text x="652" y="92">3</text><text x="838" y="336">4</text></g>
 </svg>
