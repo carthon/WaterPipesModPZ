@@ -4,12 +4,14 @@ WaterPipes.PipeAutotile = WaterPipes.PipeAutotile or {}
 require "WaterPipes/Constants"
 require "WaterPipes/Logger"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/Profiler"
 require "WaterPipes/Router"
 require "WaterPipes/World"
 
 local Constants = WaterPipes.Constants
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local Profiler = WaterPipes.Profiler
 local Router = WaterPipes.Router
 local PipeAutotile = WaterPipes.PipeAutotile
 
@@ -469,14 +471,21 @@ local function refreshStreamedSquare(coord, cleared)
     end
 end
 
+local function refreshStreamedBatch(streamed)
+    local cleared = {}
+    for _, coord in ipairs(streamed) do
+        refreshStreamedSquare(coord, cleared)
+    end
+    return cleared
+end
+
 local function onTickProcessPending()
     if #pendingStreamed > 0 then
         local streamed = pendingStreamed
         pendingStreamed = {}
-        local cleared = {}
-        for _, coord in ipairs(streamed) do
-            refreshStreamedSquare(coord, cleared)
-        end
+        -- Every square streamed in since the last tick goes in one batch; the count says how big they get.
+        Profiler.count("autotile/streamed squares", #streamed)
+        local cleared = Profiler.time("autotile/streamed", refreshStreamedBatch, streamed)
         if cleared.count then
             Logger.log("Thumpable pipes cleared on load: " .. PipeObjectUtils.describeCleared(cleared))
         end
@@ -496,5 +505,7 @@ if Events then
     if Events.OnObjectAdded then Events.OnObjectAdded.Add(onPipeObjectAdded) end
     if Events.OnObjectAboutToBeRemoved then Events.OnObjectAboutToBeRemoved.Add(onPipeObjectRemoved) end
     if Events.OnTick then Events.OnTick.Add(onTickProcessPending) end
-    if Events.LoadGridsquare then Events.LoadGridsquare.Add(onLoadGridsquare) end
+    if Events.LoadGridsquare then
+        Events.LoadGridsquare.Add(function(square) Profiler.time("load/autotile", onLoadGridsquare, square) end)
+    end
 end

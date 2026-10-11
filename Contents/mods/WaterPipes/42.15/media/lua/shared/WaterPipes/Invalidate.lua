@@ -2,9 +2,11 @@ WaterPipes = WaterPipes or {}
 WaterPipes.Invalidate = WaterPipes.Invalidate or {}
 
 require "WaterPipes/World"
+require "WaterPipes/Profiler"
 
 local Invalidate = WaterPipes.Invalidate
 local World = WaterPipes.World
+local Profiler = WaterPipes.Profiler
 
 -- Who drops what, in one file.
 --
@@ -305,7 +307,10 @@ if Events then
         Events.OnObjectAboutToBeRemoved.Add(Invalidate.objectChanged)
     end
     if Events.LoadGridsquare then
-        Events.LoadGridsquare.Add(Invalidate.squareStreamedIn)
+        -- Timed per square at ms resolution: one call reads 0 or 1 ms, the bucket total is what counts.
+        Events.LoadGridsquare.Add(function(square)
+            Profiler.time("load/invalidate", Invalidate.squareStreamedIn, square)
+        end)
     end
 end
 

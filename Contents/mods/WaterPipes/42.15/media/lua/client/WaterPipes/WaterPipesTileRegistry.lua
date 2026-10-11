@@ -439,7 +439,9 @@ if Events then
     if Events.LoadGridsquare then
         -- Streaming rebuilds a square, leaving any reference we hold pointing at one that no longer exists. Too
         -- early to CLASSIFY here (see the header), but never too early to forget.
-        Events.LoadGridsquare.Add(function(square) pcall(Registry.forgetResolved, square) end)
+        Events.LoadGridsquare.Add(function(square)
+            pcall(Profiler.time, "load/registry", Registry.forgetResolved, square)
+        end)
     end
     if Events.OnGameStop then
         Events.OnGameStop.Add(function()
