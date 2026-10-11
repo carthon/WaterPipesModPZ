@@ -142,11 +142,19 @@ end
 function System.scanContainersAroundPipes()
     local state = State.ensure()
     local found = {}
+    -- Thumpable sweep: each pipe is checked once, on the first pass its square is loaded. Once no
+    -- registered pipe is left unchecked the whole sweep is off for good.
+    local sweepThumpable = not state.thumpableSwept
+    local unchecked = 0
 
     -- A container connects only when a (horizontal) pipe sits on its OWN tile -- not by adjacency.
     for _, pipeData in pairs(state.pipes) do
         local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
-        if square then
+        if not square then
+            if sweepThumpable and not (pipeData.metadata and pipeData.metadata.thumpChecked) then
+                unchecked = unchecked + 1
+            end
+        else
             mergeInto(found, Adapter.collectSquareContainers(square))
 
             -- Reconcile the purifier registry and fill in a missing `kind` while standing on the tile anyway: a
@@ -182,7 +190,11 @@ function System.scanContainersAroundPipes()
             -- MP window the old one-shot stamp fell into, from the other side.
             local metadata = pipeData.metadata or {}
             local derived = nil
+            local checkThumpable = sweepThumpable and not metadata.thumpChecked
             for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+                if checkThumpable then
+                    PipeObjectUtils.clearThumpable(worldObject)
+                end
                 local okMod, modData = pcall(worldObject.getModData, worldObject)
                 if okMod and modData and modData[Constants.PIPE_MODDATA_KEY] then
                     derived = derived or {}
@@ -215,6 +227,11 @@ function System.scanContainersAroundPipes()
                 metadata.valveClosed = derived.valveClosed
                 metadata.kinds = true
             end
+            -- The pipe is found by name as well as modData, and the name loads with the flag, so a loaded
+            -- square is a complete answer. A tile whose pipe is gone has nothing left to clear.
+            if checkThumpable then
+                metadata.thumpChecked = true
+            end
             pipeData.metadata = metadata
 
             if pipeData.metadata and pipeData.metadata.router == true then
@@ -229,6 +246,10 @@ function System.scanContainersAroundPipes()
                 end
             end
         end
+    end
+
+    if sweepThumpable and unchecked == 0 then
+        state.thumpableSwept = true
     end
 
     State.replaceContainers(found)

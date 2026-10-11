@@ -28,6 +28,15 @@ function PipeObjectUtils.isPipeObject(worldObject)
     return worldObject.getName and worldObject:getName() == Constants.PIPE_OBJECT_NAME
 end
 
+-- No pipe may be thumpable: the engine collides with a thumpable as a wall on its edge. 0.10.0 laid
+-- building pipes that way and the flag is saved with them; the setter is not synced, so each side clears
+-- its own copy. Takes a pipe object.
+function PipeObjectUtils.clearThumpable(pipe)
+    if pipe:isThumpable() then
+        pipe:setIsThumpable(false)
+    end
+end
+
 function PipeObjectUtils.getPipePlacement(worldObject)
     local modData = getPipeModData(worldObject) or {}
     local axis = modData[Constants.PIPE_AXIS_MODDATA_KEY]

@@ -462,6 +462,7 @@ local function refreshStreamedSquare(coord)
     PipeObjectUtils.invalidateSquareScan(square)
     PipeAutotile.refreshFloorPipeAt(coord.x, coord.y, coord.z)
     for _, pipe in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+        PipeObjectUtils.clearThumpable(pipe)
         refreshRiserVisibility(pipe)
     end
 end

@@ -894,31 +894,12 @@ function BuildingPlumbing.place(placement, player)
     end
 
     -- Registry only. State.registerPipe does not rebuild; BuildingPlumbing.finish does, once.
+    -- Born non-thumpable, so the server's thumpable sweep has nothing to check here.
     WaterPipes.State.registerPipe(placement.x, placement.y, placement.z, {
-        kinds = true, riser = placement.kind == RISER or nil,
+        kinds = true, riser = placement.kind == RISER or nil, thumpChecked = true,
     })
 
     return object
-end
-
--- 0.10.0 laid its pipes thumpable, and the flag is saved with each one. Cleared as a square loads, on
--- every side: the setter is not synced, and each side runs its own collision. The name is enough to
--- find the pipe, as the modData may not be attached yet.
-local function clearThumpablePipes(square)
-    local specials = square and square:getSpecialObjects()
-    if not specials then
-        return
-    end
-    for index = 0, specials:size() - 1 do
-        local object = specials:get(index)
-        if PipeObjectUtils.isPipeObject(object) and object:isThumpable() then
-            object:setIsThumpable(false)
-        end
-    end
-end
-
-if Events and Events.LoadGridsquare then
-    Events.LoadGridsquare.Add(function(square) pcall(clearThumpablePipes, square) end)
 end
 
 -- Everything the network owes after a pass, paid once rather than per pipe laid.
