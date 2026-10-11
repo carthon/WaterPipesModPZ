@@ -1,65 +1,64 @@
 # Water Pipes
 
-A Project Zomboid (Build 42) mod that adds buildable water pipes: lay a network through your base
-and link sinks, barrels, rain collectors and generators so they share a single supply.
-Multiplayer-ready and bilingual (EN/ES).
+**Water Pipes** is a Project Zomboid Build 42 mod for building networks that transport and distribute water, petrol, and other compatible liquids around a base.
+
+[Read the official guide](https://carthon.github.io/WaterPipesModPZ/) · [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3739595559) · [Report a bug or suggest an improvement](https://github.com/carthon/WaterPipesModPZ/issues)
+
+## Highlights
+
+- Floor, vertical, and concealed pipes that form connected networks.
+- Shared storage, pumps, municipal water, wells, rivers, and hydrants.
+- Plumbing for fixtures and whole buildings.
+- Pressure-aware routers, shut-off valves, and pressure gauges.
+- Electric water purification, drip irrigation, and sprinklers.
+- Petrol transport and automatic generator refuelling.
+- Multiplayer support and configurable Sandbox and Mod Options.
+
+The player guide is available in **English** and **Spanish**. The mod itself also includes a **Simplified Chinese** translation. Tutorials belong in the guide so this README can remain a concise project entry point.
 
 ## Installation
 
-Subscribe on the Steam Workshop, or for local use point Project Zomboid at the mod folder:
-
-```text
-Contents/mods/WaterPipes
-```
-
-For local testing, link `Contents/mods/WaterPipes` (a Windows junction/symlink is easiest) into:
+Subscribe on the [Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3739595559). For local development or testing, link `Contents/mods/WaterPipes` into the Project Zomboid mods directory; on Windows this is usually:
 
 ```text
 C:\Users\<your_user>\Zomboid\mods\WaterPipes
 ```
 
-## Usage
+## Documentation development
 
-You need a **Pipe Wrench** (kept, not consumed) and a **Metal Pipe** for each pipe placed. Metal
-pipes can be scavenged or **forged** at a blacksmith forge from bar stock, so the network stays
-renewable even in a low-loot game.
+Python 3.13 is used in CI. Create and activate a virtual environment, then run:
 
-1. **Lay pipes.** Build menu → category **Piping** → **Water Pipe**. Floor pipes auto-connect into
-   straights, corners, T-junctions and crosses. While placing, rotate to switch to the **vertical
-   pipe** (North / West wall) to run pipes up a wall and link different floors.
-2. **Add a source.** Put a pipe on the same tile as a barrel or rain collector to add it to the
-   network; its contents are shared across the whole network.
-3. **Plumb a sink.** With a pipe on the fixture's own tile, right-click it → **Plumb** (wrench in
-   inventory). Vanilla Drink / Wash / Fill now draw from the network, and tainted rain water comes
-   out clean. Use **Unplumb** to disconnect and restore its original state.
-4. **Fuel a generator.** With a pipe on the generator's tile, right-click → **Connect**. If the
-   network carries gasoline (Petrol), the generator refuels itself when its tank runs low.
-5. **Inspect the network.** Right-click any pipe → **Show pipe network** to highlight it: pipes in
-   red, fluid sources in green, consumers (sinks/generators) in blue.
-6. **Remove.** Right-click a pipe → **Disassemble** (hammer) to take it down; you get the **Metal
-   Pipe** back ~90% of the time.
+```bash
+python -m pip install --requirement requirements-docs.txt
+mkdocs serve
+```
 
-**One fluid per network** — water *or* petrol, never mixed. A sink needs a water network; a
-generator needs a Petrol network.
+Open `http://127.0.0.1:8000/WaterPipesModPZ/`. Run `mkdocs build --strict` for the same strict build used by CI.
+
+English is the source language under `docs/en/`; Spanish pages live under `docs/es/` with matching filenames. Shared media belongs in `docs/assets/`. Keep unverified gameplay details clearly marked.
+
+### Publishing with GitHub Pages
+
+The `Documentation` workflow validates both language trees, builds the site, checks generated internal links, and uploads a Pages artifact. A repository administrator must enable it once:
+
+1. Open **Settings → Pages** in GitHub.
+2. Under **Build and deployment**, select **GitHub Actions** as the source.
+3. Merge or push the documentation to `main`, or run the workflow manually.
+
+Pull requests build and validate the site but never deploy it. This change does not deploy to production.
+
+## Contributing
+
+Bug reports, feature requests, documentation corrections, translations, and pull requests are welcome through [GitHub Issues](https://github.com/carthon/WaterPipesModPZ/issues). Back up saves before testing mod changes.
 
 ## Credits
 
-- **Tileset and sprite art** — [aariak_einherjer](https://steamcommunity.com/id/aariak_einherjer/)
-  ([ArtStation](https://www.artstation.com/adrianechanizrol))
+- **Tileset and sprite art** — [aariak_einherjer](https://steamcommunity.com/id/aariak_einherjer/) ([ArtStation](https://www.artstation.com/adrianechanizrol))
 - **Simplified Chinese translation** — rakkasumi
 - Everything else by Carthon.
-
-Still open to more hands: art, translations into a language that is not covered yet, or ideas worth
-trying. Open an issue or say hello on the Workshop page.
 
 ## Licence
 
 Copyright (c) 2026 Carthon. All rights reserved — see [LICENSE](LICENSE).
 
-Short version: play with it, host it, read the source and learn from it. Do **not** re-upload it or
-publish a modified version without asking first, and credit *Water Pipes by Carthon* wherever you
-reuse any of it. Asking usually gets a yes.
-
-Note that some sprites are cropped from Project Zomboid's own tilesheets and remain The Indie Stone's
-property — they are not mine to sublicense. Project Zomboid is © The Indie Stone; this mod is
-unofficial and not endorsed by them.
+You may play with the mod, host it, read its source, and learn from it. Do not re-upload it or publish a modified version without permission, and credit **Water Pipes by Carthon** for permitted reuse. Some sprites derive from Project Zomboid assets and remain The Indie Stone's property. Project Zomboid is © The Indie Stone; this unofficial mod is not endorsed by or affiliated with The Indie Stone.

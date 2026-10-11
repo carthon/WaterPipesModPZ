@@ -9,7 +9,7 @@
 --
 -- This turns the doubt into an experiment. Destroy things by every means you can arrange and read the
 -- log: every removal this mod NOTICES prints a line, and one that produces no line is a hole.
--- See docs/removal-events.md for what has been established so far.
+-- See dev-notes/removal-events.md for what has been established so far.
 --
 -- Off by default. Turn it on from the pipe Debug menu.
 

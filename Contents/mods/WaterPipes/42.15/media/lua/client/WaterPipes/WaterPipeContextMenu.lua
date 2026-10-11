@@ -669,9 +669,9 @@ function ContextMenu.dumpProfile(playerObj)
 end
 
 -- One log line per removal this mod would care about, naming what left and which of the mod's tables
--- claimed its tile. See docs/removal-events.md.
+-- claimed its tile. See dev-notes/removal-events.md.
 
--- ===== Destruction tools, for docs/removal-events.md =====
+-- ===== Destruction tools, for dev-notes/removal-events.md =====
 -- The open question there is whether the engine ever removes an object WITHOUT raising
 -- OnObjectAboutToBeRemoved, since three periodic safety nets exist solely for that doubt.
 -- Every call below is wrapped and logged rather than trusted: these are engine entry points whose
@@ -717,7 +717,7 @@ function ContextMenu.startFireHere(playerObj, square)
     local x, y, z = square:getX(), square:getY(), square:getZ()
     WaterPipes.Logger.log(("debug tool: starting a fire at %d:%d:%d"):format(x, y, z))
     WaterPipes.Logger.log("debug tool: turn the Removal Audit ON first, then watch for a REMOVAL line "
-        .. "for whatever burns. No line means the event never fired -- see docs/removal-events.md.")
+        .. "for whatever burns. No line means the event never fired -- see dev-notes/removal-events.md.")
 
     local manager = _G.IsoFireManager
     if not manager then

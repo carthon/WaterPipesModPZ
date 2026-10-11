@@ -1732,14 +1732,14 @@ local function verifyCachesAgainstTheWorld()
                 Logger.warn(string.format(
                     "CACHE DRIFT: vessel classification at %d:%d:%d disagreed with the world. An "
                         .. "object arrived on or left that tile without either object event reaching "
-                        .. "this side. See docs/removal-events.md -- please report what was there.",
+                        .. "this side. See dev-notes/removal-events.md -- please report what was there.",
                     pipeData.x, pipeData.y, pipeData.z))
             end
             if PipeObjectUtils.verifySquareScan and not PipeObjectUtils.verifySquareScan(square) then
                 disagreed = disagreed + 1
                 Logger.warn(string.format(
                     "CACHE DRIFT: pipe scan at %d:%d:%d disagreed with the world. See "
-                        .. "docs/removal-events.md.",
+                        .. "dev-notes/removal-events.md.",
                     pipeData.x, pipeData.y, pipeData.z))
             end
             -- Not drift and not a reason for the wholesale drop: a re-pricing repairs it, without a walk.

@@ -1,0 +1,122 @@
+site_name: Water Pipes
+site_description: Official player guide for the Water Pipes Project Zomboid mod
+site_url: https://carthon.github.io/WaterPipesModPZ/
+repo_url: https://github.com/carthon/WaterPipesModPZ
+repo_name: carthon/WaterPipesModPZ
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  logo: assets/images/water-pipes-wordmark-v3.png
+  favicon: assets/images/water-pipes-favicon.png
+  features:
+    - navigation.sections
+    - navigation.indexes
+    - navigation.footer
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: waterpipes
+      primary: blue grey
+      accent: deep orange
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: amber
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search
+  - i18n:
+      docs_structure: folder
+      languages:
+        - locale: en
+          name: English
+          build: true
+          default: true
+        - locale: es
+          name: Español
+          build: true
+          nav_translations:
+            Home: Inicio
+            Introduction: Introducción
+            Getting started: Primeros pasos
+            Core concepts: Conceptos básicos
+            Component reference: Catálogo de componentes
+            Practical examples: Ejemplos prácticos
+            Construction and networks: Construcción y redes
+            Pipe networks: Redes de tuberías
+            Plumbing a building: Fontanear un edificio
+            Sources and storage: Fuentes y almacenamiento
+            Fixtures and plumbing: Aparatos y fontanería
+            Control and automation: Control y automatización
+            Pumps and pressure: Bombas y presión
+            Routers and valves: Enrutadores y válvulas
+            Purification: Purificación
+            Irrigation: Riego
+            Fuel transport: Transporte de combustible
+            Configuration and help: Configuración y ayuda
+            Sandbox settings: Opciones de Sandbox
+            Compatibility: Compatibilidad
+            FAQ: Preguntas frecuentes
+            Troubleshooting: Resolución de problemas
+
+nav:
+  - Home: index.md
+  - Introduction:
+      - Getting started: getting-started.md
+      - Core concepts: core-concepts.md
+      - Component reference: component-reference.md
+      - Practical examples: practical-examples.md
+  - Construction and networks:
+      - Pipe networks: pipe-networks.md
+      - Plumbing a building: building-plumbing.md
+      - Sources and storage: sources-and-storage.md
+      - Fixtures and plumbing: fixtures-and-plumbing.md
+  - Control and automation:
+      - Pumps and pressure: pumps-and-pressure.md
+      - Routers and valves: routers-and-valves.md
+      - Purification: purification.md
+      - Irrigation: irrigation.md
+      - Fuel transport: fuel-transport.md
+  - Configuration and help:
+      - Sandbox settings: sandbox-settings.md
+      - Compatibility: compatibility.md
+      - FAQ: faq.md
+      - Troubleshooting: troubleshooting.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.details
+  - pymdownx.superfences
+
+extra_css:
+  - assets/stylesheets/extra.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/steam
+      link: https://steamcommunity.com/sharedfiles/filedetails/?id=3739595559
+    - icon: fontawesome/brands/github
+      link: https://github.com/carthon/WaterPipesModPZ
+  generator: false
+
+copyright: Copyright &copy; 2026 Carthon. Water Pipes is an unofficial Project Zomboid mod.
+strict: true
