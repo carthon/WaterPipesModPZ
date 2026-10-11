@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" role="img" aria-label="Instalaciones solo con depósitos: un barril en la planta del fregadero da 1 m; uno una planta más arriba da 4 m">
+  <defs>
+    <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#202b26"/><stop offset="1" stop-color="#121815"/></linearGradient>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0v24" fill="none" stroke="#d7c79d" stroke-opacity=".045"/></pattern>
+    <marker id="arrow" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto"><path d="M0 0l16 8L0 16z" fill="#79b8b2"/></marker>
+  </defs>
+  <rect x="5" y="5" width="950" height="390" rx="16" fill="url(#bg)" stroke="#65756d" stroke-width="2"/><rect x="6" y="6" width="948" height="388" rx="15" fill="url(#grid)"/>
+  <!-- floors -->
+  <rect x="20" y="350" width="920" height="12" fill="#2b3832"/><path d="M20 350H940" stroke="#71837a" stroke-width="2"/>
+  <rect x="480" y="200" width="460" height="12" fill="#2b3832"/><path d="M480 200H940" stroke="#71837a" stroke-width="2"/>
+  <path d="M450 40V370" stroke="#65756d" stroke-width="2" stroke-dasharray="8 8"/>
+  <!-- pipes -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M130 338H330M580 188H700V338H860" stroke="#090d0b" stroke-width="25"/><path d="M130 338H330M580 188H700V338H860" stroke="#8d9a93" stroke-width="14"/></g>
+  <g fill="none" stroke="#79b8b2" stroke-width="4" marker-end="url(#arrow)"><path d="M160 338h110"/><path d="M610 188h60"/><path d="M700 222v86"/><path d="M730 338h70"/></g>
+  <!-- height -->
+  <g stroke="#d9c99f" stroke-width="2"><path d="M500 212V350M492 212h16M492 350h16"/></g>
+  <!-- barrels -->
+  <g stroke="#d9c99f" stroke-width="5" stroke-linejoin="round">
+    <path d="M84 258h92l-8 92h-76z" fill="#526655"/><path d="M90 296h80" stroke="#79b8b2" stroke-width="22"/><path d="M88 270h84M86 330h88" stroke-width="3"/>
+    <path d="M534 108h92l-8 92h-76z" fill="#526655"/><path d="M540 146h80" stroke="#79b8b2" stroke-width="22"/><path d="M538 120h84M536 180h88" stroke-width="3"/>
+  </g>
+  <!-- sinks -->
+  <g stroke="#d9c99f" stroke-width="5" fill="none" stroke-linejoin="round">
+    <path d="M296 312v38M364 312v38"/><path d="M288 268h84v44h-84z" fill="#526655"/><path d="M309 268v-28h42v28M282 268h96"/>
+    <path d="M826 312v38M894 312v38"/><path d="M818 268h84v44h-84z" fill="#526655"/><path d="M839 268v-28h42v28M812 268h96"/>
+  </g>
+  <!-- pressure at the fixture -->
+  <g fill="#16201c" stroke="#79b8b2" stroke-width="2.5"><rect x="282" y="168" width="96" height="38" rx="10"/><rect x="718" y="236" width="88" height="38" rx="10"/></g>
+  <g fill="#fff2cf" font-family="Arial,sans-serif" font-size="20" font-weight="700" text-anchor="middle"><text x="330" y="194">1 m</text><text x="762" y="262">4 m</text></g>
+  <text x="512" y="287" fill="#d9c99f" font-family="Arial,sans-serif" font-size="18" font-weight="700">+1 planta</text>
+  <!-- markers -->
+  <g fill="#d5744e" stroke="#171d1a" stroke-width="3"><circle cx="80" cy="252" r="18"/><circle cx="282" cy="236" r="18"/><circle cx="530" cy="102" r="18"/><circle cx="812" cy="236" r="18"/></g>
+  <g fill="#fff2cf" font-family="Arial,sans-serif" font-size="18" font-weight="700" text-anchor="middle"><text x="80" y="258">1</text><text x="282" y="242">2</text><text x="530" y="108">3</text><text x="812" y="242">4</text></g>
+</svg>

@@ -19,7 +19,7 @@ This first network needs one Pipe Wrench, one Metal Pipe or fired Clay Pipe Segm
 
 ## Three starter installations
 
-Pressure is measured in metres of water column (m). With default settings, a fixture receives:
+Height is counted in floors and distance in tiles, but pressure is shown in metres (m), the unit every in-game gauge, pump, and router window uses. The rule of thumb: **1 floor = 3 m**, so a pump's 25 m is like raising the storage about 8 floors. With default settings, a fixture receives:
 
 - **What the storage builds.** Every container holding water gives 1 m on its own floor, plus 3 m for each floor it stands above the fixture. Containers do not add up: the highest one sets the pressure.
 - **Plus 25 m per powered pump** in the network. A pump lifts every container in it, and pumps in series add up.
@@ -29,21 +29,21 @@ Distance only costs pressure where irrigation draws through the pipe: about 0.2 
 
 ### 1. Storage only
 
-![Storage-only installations](../assets/images/diagram-install-storage.svg){ .wp-diagram }
+![Storage-only installations](../assets/images/diagram-install-storage-en.svg){ .wp-diagram }
 
 - **1** Barrel on the same floor as **2**, a sink: 1 m base = **1 m**. Low, but enough for a fixture.
-- **3** Barrel one floor up, piped down to **4**, a sink on the ground floor: 1 m + 3 m = **4 m**.
+- **3** Barrel one floor up, piped down to **4**, a sink on the ground floor: 1 m + 1 floor × 3 m = **4 m**.
 
-The storage itself is the pressure source: raising it is the cheapest way to gain pressure. The reverse does not work: a sink one floor above its only barrel gets 1 − 3 = −2 m and no water. Raise the barrel or add a pump.
+The storage itself is the pressure source: raising it is the cheapest way to gain pressure. The reverse does not work: a sink one floor above its only barrel gets 1 m − 1 floor × 3 m = −2 m and no water. Raise the barrel or add a pump.
 
 ### 2. Storage and a water pump
 
-![Storage with a water pump](../assets/images/diagram-install-pump.svg){ .wp-diagram }
+![Storage with a water pump](../assets/images/diagram-install-pump-en.svg){ .wp-diagram }
 
 - **1** Barrel on the ground floor: 1 m.
-- **2** Powered Water Pump: 1 + 25 = **26 m** for the whole network.
-- **3** Sink one floor up: 26 − 3 = about **23 m** (the sprinkler's flow costs a little on the shared stretch).
-- **4** Sprinkler ten tiles of pipe from the barrel: 26 − 10 × 0.2 = **24 m**, above the 20 m it needs. Without the pump it would get 1 − 2 = −1 m and stay dry.
+- **2** Powered Water Pump: 1 m + 25 m = **26 m** for the whole network.
+- **3** Sink one floor up: 26 m − 1 floor × 3 m = about **23 m** (the sprinkler's flow costs a little on the shared stretch).
+- **4** Sprinkler 10 tiles of pipe from the barrel: 26 m − 10 tiles × 0.2 m = **24 m**, above the 20 m it needs. Without the pump it would get 1 m − 10 tiles × 0.2 m = −1 m and stay dry.
 
 The barrel is still required: a pump boosts and moves water but stores none.
 
