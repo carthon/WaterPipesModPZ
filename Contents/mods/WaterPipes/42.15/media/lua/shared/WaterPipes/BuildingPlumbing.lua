@@ -894,9 +894,10 @@ function BuildingPlumbing.place(placement, player)
     end
 
     -- Registry only. State.registerPipe does not rebuild; BuildingPlumbing.finish does, once.
-    -- Born non-thumpable, so the server's thumpable sweep has nothing to check here.
+    -- Not marked thumpChecked: the tile may hold an older 0.10.0 pipe, and only the sweep in that
+    -- rebuild looks at the objects.
     WaterPipes.State.registerPipe(placement.x, placement.y, placement.z, {
-        kinds = true, riser = placement.kind == RISER or nil, thumpChecked = true,
+        kinds = true, riser = placement.kind == RISER or nil,
     })
 
     return object
