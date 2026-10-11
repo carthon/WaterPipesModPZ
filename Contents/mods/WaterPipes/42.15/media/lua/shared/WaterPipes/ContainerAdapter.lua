@@ -1079,7 +1079,7 @@ end
 -- the memo is RIGHT, checks a few tiles, and says so when it is not. The memo is left holding the fresh
 -- answer either way, so a disagreement is also a repair.
 -- A disagreement means an object left a tile without OnObjectAboutToBeRemoved firing, which nobody has
--- ever observed. Evidence instead of nerve -- see docs/removal-events.md.
+-- ever observed. Evidence instead of nerve -- see dev-notes/removal-events.md.
 function Adapter.verifySquareVessels(square)
     if not square or not square.getX then
         return true

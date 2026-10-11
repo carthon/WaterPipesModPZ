@@ -28,7 +28,7 @@ local World = WaterPipes.World
 -- the others. A verb whose target is absent does nothing, which is what the call sites already did by
 -- hand with `if Hydraulics and Hydraulics.invalidate then`.
 --
--- What this does NOT replace: docs/removal-events.md established in game that FIRE destroys objects
+-- What this does NOT replace: dev-notes/removal-events.md established in game that FIRE destroys objects
 -- without raising either removal event. No event-driven seam can see that, so the periodic drift
 -- verifier stays. This gives its findings somewhere to be reported from, not a reason to delete it.
 
