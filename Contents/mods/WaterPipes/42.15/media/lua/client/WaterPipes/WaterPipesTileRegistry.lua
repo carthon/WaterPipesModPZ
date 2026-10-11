@@ -122,8 +122,12 @@ function Registry.forgetResolved(square)
     if not square or not square.getX then
         return
     end
+    Registry.forgetResolvedAtKey(keyOf(square:getX(), square:getY(), square:getZ()))
+end
 
-    local key = keyOf(square:getX(), square:getY(), square:getZ())
+-- Same, from a key already built ("x:y:z"). Invalidate.squareStreamedIn calls this for every streamed
+-- square with the key it built for its own caches.
+function Registry.forgetResolvedAtKey(key)
     for _, kind in ipairs(RESOLVED_KINDS) do
         local entry = Registry[kind][key]
         if entry then
@@ -436,11 +440,9 @@ if Events then
             end
         end)
     end
-    if Events.LoadGridsquare then
-        -- Streaming rebuilds a square, leaving any reference we hold pointing at one that no longer exists. Too
-        -- early to CLASSIFY here (see the header), but never too early to forget.
-        Events.LoadGridsquare.Add(function(square) pcall(Registry.forgetResolved, square) end)
-    end
+    -- Streaming rebuilds a square, leaving any reference we hold pointing at one that no longer exists. Too
+    -- early to CLASSIFY then (see the header), but never too early to forget: Invalidate.squareStreamedIn
+    -- calls forgetResolvedAtKey with the key it already built.
     if Events.OnGameStop then
         Events.OnGameStop.Add(function()
             Registry.clear()

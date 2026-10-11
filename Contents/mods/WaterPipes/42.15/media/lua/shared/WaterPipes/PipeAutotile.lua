@@ -4,12 +4,14 @@ WaterPipes.PipeAutotile = WaterPipes.PipeAutotile or {}
 require "WaterPipes/Constants"
 require "WaterPipes/Logger"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/Profiler"
 require "WaterPipes/Router"
 require "WaterPipes/World"
 
 local Constants = WaterPipes.Constants
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local Profiler = WaterPipes.Profiler
 local Router = WaterPipes.Router
 local PipeAutotile = WaterPipes.PipeAutotile
 
@@ -446,15 +448,22 @@ end
 -- per-tile scan memo remembers that answer. The next endpoint refresh then saw no pipe under a plumbed
 -- sink and unplumbed it, every time its chunk came back (issue #23). The square's memo is dropped
 -- again right before the deferred scan, so it is rebuilt from the loaded objects.
+-- Only a square that can hold a pipe is queued: running into new chunks used to queue every square.
 local pendingStreamed = {}
+-- Asked on the first square, not at file load, where isCoopHost may not be settled yet; it does not
+-- change after. A dedicated server then pays one boolean per square instead of two engine calls.
+local renderingSide = nil
 local function onLoadGridsquare(square)
-    if not isRenderingSide() or not square then
+    if renderingSide == nil then
+        renderingSide = isRenderingSide()
+    end
+    if not renderingSide or not square or not PipeObjectUtils.squareMayHavePipe(square) then
         return
     end
     pendingStreamed[#pendingStreamed + 1] = { x = square:getX(), y = square:getY(), z = square:getZ() }
 end
 
-local function refreshStreamedSquare(coord)
+local function refreshStreamedSquare(coord, cleared)
     local square = getSquare(coord.x, coord.y, coord.z)
     if not square then
         return
@@ -462,16 +471,30 @@ local function refreshStreamedSquare(coord)
     PipeObjectUtils.invalidateSquareScan(square)
     PipeAutotile.refreshFloorPipeAt(coord.x, coord.y, coord.z)
     for _, pipe in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+        -- MIGRATION(0.10.0-thumpable), see PipeObjectUtils.clearThumpable; `cleared` goes with it.
+        if PipeObjectUtils.clearThumpable(pipe) then
+            PipeObjectUtils.noteCleared(cleared, coord.x, coord.y, coord.z)
+        end
         refreshRiserVisibility(pipe)
     end
+end
+
+local function refreshStreamedBatch(streamed)
+    local cleared = {}
+    for _, coord in ipairs(streamed) do
+        refreshStreamedSquare(coord, cleared)
+    end
+    return cleared
 end
 
 local function onTickProcessPending()
     if #pendingStreamed > 0 then
         local streamed = pendingStreamed
         pendingStreamed = {}
-        for _, coord in ipairs(streamed) do
-            refreshStreamedSquare(coord)
+        Profiler.count("autotile/streamed squares", #streamed)
+        local cleared = Profiler.time("autotile/streamed", refreshStreamedBatch, streamed)
+        if cleared.count then   -- MIGRATION(0.10.0-thumpable)
+            Logger.log("Thumpable pipes cleared on load: " .. PipeObjectUtils.describeCleared(cleared))
         end
     end
 
@@ -489,5 +512,7 @@ if Events then
     if Events.OnObjectAdded then Events.OnObjectAdded.Add(onPipeObjectAdded) end
     if Events.OnObjectAboutToBeRemoved then Events.OnObjectAboutToBeRemoved.Add(onPipeObjectRemoved) end
     if Events.OnTick then Events.OnTick.Add(onTickProcessPending) end
-    if Events.LoadGridsquare then Events.LoadGridsquare.Add(onLoadGridsquare) end
+    if Events.LoadGridsquare then
+        Events.LoadGridsquare.Add(function(square) Profiler.time("load/autotile", onLoadGridsquare, square) end)
+    end
 end

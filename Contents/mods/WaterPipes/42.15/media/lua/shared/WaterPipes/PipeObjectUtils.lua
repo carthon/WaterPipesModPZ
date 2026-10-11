@@ -28,6 +28,40 @@ function PipeObjectUtils.isPipeObject(worldObject)
     return worldObject.getName and worldObject:getName() == Constants.PIPE_OBJECT_NAME
 end
 
+-- MIGRATION(0.10.0-thumpable). Temporary: repairs saves from 0.10.0, whose building pipes were laid
+-- thumpable (the engine collides with a thumpable as a wall on its edge; the flag is saved with the
+-- object and the setter is not synced, so each side clears its own copy). Since 0.10.1 pipes are born
+-- non-thumpable, so this can go once 0.10.0 saves no longer matter: a pipe in a chunk nobody loaded since
+-- would then keep blocking. To remove it, grep the tag and delete every site:
+--   clearThumpable/noteCleared/describeCleared here, the call and its log in PipeAutotile
+--   (refreshStreamedSquare/onTickProcessPending), the sweep in WaterPipeSystem.scanContainersAroundPipes.
+-- KEEP setIsThumpable(false) in BuildingPlumbing.place: that is the fix itself. The saved keys
+-- metadata.thumpChecked and state.thumpableSwept may stay in old saves; nothing else reads them.
+-- Takes a pipe object; true when it cleared one.
+function PipeObjectUtils.clearThumpable(pipe)
+    if pipe:isThumpable() then
+        pipe:setIsThumpable(false)
+        return true
+    end
+    return false
+end
+
+-- MIGRATION(0.10.0-thumpable): count and bounds of the pipes a sweep cleared, for its log line.
+function PipeObjectUtils.noteCleared(area, x, y, z)
+    area.count = (area.count or 0) + 1
+    area.minX = math.min(area.minX or x, x)
+    area.maxX = math.max(area.maxX or x, x)
+    area.minY = math.min(area.minY or y, y)
+    area.maxY = math.max(area.maxY or y, y)
+    area.minZ = math.min(area.minZ or z, z)
+    area.maxZ = math.max(area.maxZ or z, z)
+end
+
+function PipeObjectUtils.describeCleared(area)
+    return string.format("%d pipe(s) in x %d..%d, y %d..%d, z %d..%d", area.count,
+        area.minX, area.maxX, area.minY, area.maxY, area.minZ, area.maxZ)
+end
+
 function PipeObjectUtils.getPipePlacement(worldObject)
     local modData = getPipeModData(worldObject) or {}
     local axis = modData[Constants.PIPE_AXIS_MODDATA_KEY]
@@ -158,6 +192,25 @@ function PipeObjectUtils.invalidateSquareScan(square)
         scanMemo[key] = nil
         valveFree[key] = nil
     end
+end
+
+-- Same, from a key already built ("x:y:z"), for the streaming path that reads each square once.
+function PipeObjectUtils.invalidateScanAtKey(key)
+    scanMemo[key] = nil
+    valveFree[key] = nil
+end
+
+-- False only when the square cannot hold a pipe: every pipe is a special IsoThumpable. Safe as early as
+-- LoadGridsquare, where modData is missing; the name is no test either, as a hand-built pipe carries its
+-- entity's name. On almost every square this is a size check.
+function PipeObjectUtils.squareMayHavePipe(square)
+    local specials = square:getSpecialObjects()
+    for index = 0, specials:size() - 1 do
+        if instanceof(specials:get(index), "IsoThumpable") then
+            return true
+        end
+    end
+    return false
 end
 
 -- The tile's pipe objects, from the memo or one scan of its object list. `key` is passed in, already

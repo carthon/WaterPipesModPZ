@@ -396,13 +396,14 @@ function NetworkAccess.invalidateAroundSquare(square)
         return
     end
 
-    local counters = NetworkAccess.counters
-
     -- One key, and one lookup per cached walk. The neighbourhood is precomputed per WALK instead (the
     -- halo below), because this fires for every streamed object -- ~230 a second -- while a walk is
     -- cached twice in a session.
-    local touched = keyOf(x, y, z)
+    NetworkAccess.invalidateAroundKey(keyOf(x, y, z))
+end
 
+-- Same, from a key already built ("x:y:z"), for the streaming path that reads each square once.
+function NetworkAccess.invalidateAroundKey(touched)
     local dropped = false
     for key, entry in pairs(traversalCache) do
         if entry.halo[touched] then
@@ -412,6 +413,7 @@ function NetworkAccess.invalidateAroundSquare(square)
         end
     end
 
+    local counters = NetworkAccess.counters
     if dropped then
         counters.scoped = counters.scoped + 1
     else

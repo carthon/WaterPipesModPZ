@@ -2,9 +2,11 @@ WaterPipes = WaterPipes or {}
 WaterPipes.Invalidate = WaterPipes.Invalidate or {}
 
 require "WaterPipes/World"
+require "WaterPipes/Profiler"
 
 local Invalidate = WaterPipes.Invalidate
 local World = WaterPipes.World
+local Profiler = WaterPipes.Profiler
 
 -- Who drops what, in one file.
 --
@@ -37,6 +39,7 @@ local function pipes() return WaterPipes.State end
 local function scans() return WaterPipes.PipeObjectUtils end
 local function field() return WaterPipes.Hydraulics end
 local function walks() return WaterPipes.NetworkAccess end
+local function tileRegistry() return WaterPipes.TileRegistry end   -- client-only; absent on a server
 
 local function call(module, name, ...)
     if module and module[name] then
@@ -97,14 +100,19 @@ end
 
 -- A square the engine rebuilt while streaming: its objects were never announced one by one, and every
 -- cache holding the OLD square object -- the head field included -- would go on reading the dead one.
+-- Fires for every square streamed in, so the square is read and its key built ONCE for all four caches
+-- and the client's tile registry; each used to read the coordinates and build the same "x:y:z" key.
 function Invalidate.squareStreamedIn(square)
     if not square then
         return
     end
-    call(adapter(), "invalidateSquareVessels", square)
-    call(scans(), "invalidateSquareScan", square)
-    call(walks(), "invalidateAroundSquare", square)
-    call(field(), "invalidateAroundSquare", square)
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    local key = tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)
+    call(adapter(), "invalidateVesselsAtKey", key)
+    call(scans(), "invalidateScanAtKey", key)
+    call(walks(), "invalidateAroundKey", key)
+    call(field(), "invalidateAroundCoords", x, y, z, key)
+    call(tileRegistry(), "forgetResolvedAtKey", key)
 end
 
 -- ===== What changed, in the mod's own words =====
@@ -305,7 +313,10 @@ if Events then
         Events.OnObjectAboutToBeRemoved.Add(Invalidate.objectChanged)
     end
     if Events.LoadGridsquare then
-        Events.LoadGridsquare.Add(Invalidate.squareStreamedIn)
+        -- Timed per square at ms resolution: one call reads 0 or 1 ms, the bucket total is what counts.
+        Events.LoadGridsquare.Add(function(square)
+            Profiler.time("load/invalidate", Invalidate.squareStreamedIn, square)
+        end)
     end
 end
 

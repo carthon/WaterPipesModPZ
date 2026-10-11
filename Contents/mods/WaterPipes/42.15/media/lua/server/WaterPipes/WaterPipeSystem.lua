@@ -142,11 +142,22 @@ end
 function System.scanContainersAroundPipes()
     local state = State.ensure()
     local found = {}
+    -- MIGRATION(0.10.0-thumpable), see PipeObjectUtils.clearThumpable; every sweepThumpable/checkThumpable
+    -- line below goes with it. Each pipe is checked once, on the first pass its square is loaded. Once no
+    -- registered pipe is left unchecked the whole sweep is off for good. Server-side only: an MP client
+    -- has no registry, and would mark its empty one as swept.
+    local sweepThumpable = not state.thumpableSwept and not (isClient and isClient())
+    local unchecked = 0
+    local cleared = {}
 
     -- A container connects only when a (horizontal) pipe sits on its OWN tile -- not by adjacency.
     for _, pipeData in pairs(state.pipes) do
         local square = getSquare(pipeData.x, pipeData.y, pipeData.z)
-        if square then
+        if not square then
+            if sweepThumpable and not (pipeData.metadata and pipeData.metadata.thumpChecked) then
+                unchecked = unchecked + 1
+            end
+        else
             mergeInto(found, Adapter.collectSquareContainers(square))
 
             -- Reconcile the purifier registry and fill in a missing `kind` while standing on the tile anyway: a
@@ -182,7 +193,11 @@ function System.scanContainersAroundPipes()
             -- MP window the old one-shot stamp fell into, from the other side.
             local metadata = pipeData.metadata or {}
             local derived = nil
+            local checkThumpable = sweepThumpable and not metadata.thumpChecked
             for _, worldObject in ipairs(PipeObjectUtils.getPipeObjectsOnSquare(square)) do
+                if checkThumpable and PipeObjectUtils.clearThumpable(worldObject) then
+                    PipeObjectUtils.noteCleared(cleared, pipeData.x, pipeData.y, pipeData.z)
+                end
                 local okMod, modData = pcall(worldObject.getModData, worldObject)
                 if okMod and modData and modData[Constants.PIPE_MODDATA_KEY] then
                     derived = derived or {}
@@ -215,6 +230,11 @@ function System.scanContainersAroundPipes()
                 metadata.valveClosed = derived.valveClosed
                 metadata.kinds = true
             end
+            -- A generated pipe is found by its name, which loads with the flag, so a loaded square is a
+            -- complete answer for it. A tile whose pipe is gone has nothing left to clear.
+            if checkThumpable then
+                metadata.thumpChecked = true
+            end
             pipeData.metadata = metadata
 
             if pipeData.metadata and pipeData.metadata.router == true then
@@ -229,6 +249,15 @@ function System.scanContainersAroundPipes()
                 end
             end
         end
+    end
+
+    if cleared.count then
+        Logger.log(string.format("Thumpable sweep cleared %s; %d registered pipe(s) still unchecked",
+            PipeObjectUtils.describeCleared(cleared), unchecked))
+    end
+    if sweepThumpable and unchecked == 0 then
+        state.thumpableSwept = true
+        Logger.log("Thumpable sweep finished: every registered pipe checked, the sweep is off for this save")
     end
 
     State.replaceContainers(found)
