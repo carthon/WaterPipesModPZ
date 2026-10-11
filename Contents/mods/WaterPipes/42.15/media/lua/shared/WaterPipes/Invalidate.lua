@@ -99,14 +99,18 @@ end
 
 -- A square the engine rebuilt while streaming: its objects were never announced one by one, and every
 -- cache holding the OLD square object -- the head field included -- would go on reading the dead one.
+-- Fires for every square streamed in, so the square is read and its key built ONCE for all four caches;
+-- each used to read the coordinates and build the same "x:y:z" key for itself.
 function Invalidate.squareStreamedIn(square)
     if not square then
         return
     end
-    call(adapter(), "invalidateSquareVessels", square)
-    call(scans(), "invalidateSquareScan", square)
-    call(walks(), "invalidateAroundSquare", square)
-    call(field(), "invalidateAroundSquare", square)
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    local key = tostring(x) .. ":" .. tostring(y) .. ":" .. tostring(z)
+    call(adapter(), "invalidateVesselsAtKey", key)
+    call(scans(), "invalidateScanAtKey", key)
+    call(walks(), "invalidateAroundKey", key)
+    call(field(), "invalidateAroundCoords", x, y, z, key)
 end
 
 -- ===== What changed, in the mod's own words =====

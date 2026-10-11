@@ -1332,7 +1332,25 @@ function Hydraulics.invalidateAroundSquare(square)
         return
     end
 
-    local dropped = forgetZone(zoneOfNode[keyOf(x, y, z)])
+    Hydraulics.invalidateAroundCoords(x, y, z)
+end
+
+-- Same, from coordinates already read, for the streaming path that reads each square once. `key` is the
+-- square's own "x:y:z" when the caller has it. With no zone cached there is nothing to drop, and the
+-- seven keys are not built.
+function Hydraulics.invalidateAroundCoords(x, y, z, key)
+    local counters = Hydraulics.counters
+    local anyZone = false
+    for _ in pairs(zoneOfNode) do
+        anyZone = true
+        break
+    end
+    if not anyZone then
+        counters.untouched = counters.untouched + 1
+        return
+    end
+
+    local dropped = forgetZone(zoneOfNode[key or keyOf(x, y, z)])
     for _, offset in ipairs(Constants.CARDINAL_OFFSETS) do
         if forgetZone(zoneOfNode[keyOf(x + offset.x, y + offset.y, z)]) then
             dropped = true
@@ -1341,7 +1359,6 @@ function Hydraulics.invalidateAroundSquare(square)
     if forgetZone(zoneOfNode[keyOf(x, y, z - 1)]) then dropped = true end
     if forgetZone(zoneOfNode[keyOf(x, y, z + 1)]) then dropped = true end
 
-    local counters = Hydraulics.counters
     if dropped then
         counters.scoped = counters.scoped + 1
     else

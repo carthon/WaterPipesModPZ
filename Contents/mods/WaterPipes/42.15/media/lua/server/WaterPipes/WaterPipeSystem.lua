@@ -229,8 +229,8 @@ function System.scanContainersAroundPipes()
                 metadata.valveClosed = derived.valveClosed
                 metadata.kinds = true
             end
-            -- The pipe is found by name as well as modData, and the name loads with the flag, so a loaded
-            -- square is a complete answer. A tile whose pipe is gone has nothing left to clear.
+            -- A generated pipe is found by its name, which loads with the flag, so a loaded square is a
+            -- complete answer for it. A tile whose pipe is gone has nothing left to clear.
             if checkThumpable then
                 metadata.thumpChecked = true
             end

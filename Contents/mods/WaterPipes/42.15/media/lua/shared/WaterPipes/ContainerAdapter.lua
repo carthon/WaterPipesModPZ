@@ -1001,6 +1001,11 @@ function Adapter.invalidateSquareVessels(square)
     end
 end
 
+-- Same, from a key already built ("x:y:z"), for the streaming path that reads each square once.
+function Adapter.invalidateVesselsAtKey(key)
+    vesselMemo[key] = nil
+end
+
 -- The expensive half, run once per square per frame. Returns the fixed facts about each vessel found;
 -- never the fluid it holds.
 local function classifySquareVessels(square)

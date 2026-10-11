@@ -187,6 +187,25 @@ function PipeObjectUtils.invalidateSquareScan(square)
     end
 end
 
+-- Same, from a key already built ("x:y:z"), for the streaming path that reads each square once.
+function PipeObjectUtils.invalidateScanAtKey(key)
+    scanMemo[key] = nil
+    valveFree[key] = nil
+end
+
+-- False only when the square cannot hold a pipe: every pipe is a special IsoThumpable. Safe as early as
+-- LoadGridsquare, where modData is missing; the name is no test either, as a hand-built pipe carries its
+-- entity's name. On almost every square this is a size check.
+function PipeObjectUtils.squareMayHavePipe(square)
+    local specials = square:getSpecialObjects()
+    for index = 0, specials:size() - 1 do
+        if instanceof(specials:get(index), "IsoThumpable") then
+            return true
+        end
+    end
+    return false
+end
+
 -- The tile's pipe objects, from the memo or one scan of its object list. `key` is passed in, already
 -- built: building it reads the square's coordinates, three engine calls.
 local function scanTile(square, key)
