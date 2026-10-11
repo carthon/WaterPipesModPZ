@@ -2,7 +2,7 @@
 <div class="wp-hero__copy" markdown>
 <p class="wp-eyebrow">Un mod para Project Zomboid — Build 42.15+</p>
 
-<h1 id="water-pipes"><span class="wp-visually-hidden">Water Pipes</span><img class="wp-wordmark" src="assets/images/water-pipes-wordmark-v3.png" alt="" aria-hidden="true"></h1>
+<h1 id="water-pipes"><span class="wp-visually-hidden">Water Pipes</span><img class="wp-wordmark" src="../assets/images/water-pipes-wordmark-v3.png" alt="" aria-hidden="true"></h1>
 
 Construye redes conectadas para transportar y distribuir agua, gasolina y otros líquidos compatibles por tu base de Project Zomboid.
 

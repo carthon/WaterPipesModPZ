@@ -34,10 +34,13 @@ jobs:
             <(find docs/es -maxdepth 1 -name '*.md' -printf '%f\n' | sort)
       - name: Build both languages in strict mode
         run: mkdocs build --strict
+      # Pages serves the site under /WaterPipesModPZ/; mirror that so root-relative links resolve.
+      - name: Stage site under its Pages path
+        run: mkdir -p linkcheck && cp -r site linkcheck/WaterPipesModPZ
       - name: Check generated internal links
         uses: lycheeverse/lychee-action@v2
         with:
-          args: --offline --no-progress 'site/**/*.html'
+          args: --offline --no-progress --root-dir '${{ github.workspace }}/linkcheck' 'linkcheck/WaterPipesModPZ/**/*.html'
           fail: true
       - name: Configure GitHub Pages
         if: github.event_name != 'pull_request'
