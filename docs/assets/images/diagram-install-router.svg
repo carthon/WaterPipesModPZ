@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 360" role="img" aria-label="Pump line with a router-protected drip zone: 26 m on the main line, capped to 12 m behind the router">
+  <defs>
+    <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#202b26"/><stop offset="1" stop-color="#121815"/></linearGradient>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0v24" fill="none" stroke="#d7c79d" stroke-opacity=".045"/></pattern>
+    <marker id="arrow" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto"><path d="M0 0l16 8L0 16z" fill="#79b8b2"/></marker>
+  </defs>
+  <rect x="5" y="5" width="950" height="350" rx="16" fill="url(#bg)" stroke="#65756d" stroke-width="2"/><rect x="6" y="6" width="948" height="348" rx="15" fill="url(#grid)"/>
+  <!-- floor -->
+  <rect x="20" y="320" width="920" height="12" fill="#2b3832"/><path d="M20 320H940" stroke="#71837a" stroke-width="2"/>
+  <!-- crops, behind the drip line -->
+  <g fill="#6f9a5a"><path d="M670 296q-16-10-18-34q16 8 18 34zM670 296q16-10 18-34q-16 8-18 34z"/><path d="M745 296q-16-10-18-34q16 8 18 34zM745 296q16-10 18-34q-16 8-18 34z"/><path d="M820 296q-16-10-18-34q16 8 18 34zM820 296q16-10 18-34q-16 8-18 34z"/><path d="M895 296q-16-10-18-34q16 8 18 34zM895 296q16-10 18-34q-16 8-18 34z"/></g>
+  <!-- pipe -->
+  <g fill="none" stroke-linecap="round"><path d="M90 296H915" stroke="#090d0b" stroke-width="25"/><path d="M90 296H915" stroke="#8d9a93" stroke-width="14"/></g>
+  <g fill="none" stroke="#79b8b2" stroke-width="4" marker-end="url(#arrow)"><path d="M118 296h72"/><path d="M262 296h78"/><path d="M452 296h50"/><path d="M610 296h38"/></g>
+  <!-- drip emitters -->
+  <g fill="#79b8b2" stroke="#171d1a" stroke-width="2"><circle cx="670" cy="296" r="7"/><circle cx="745" cy="296" r="7"/><circle cx="820" cy="296" r="7"/><circle cx="895" cy="296" r="7"/></g>
+  <!-- barrel -->
+  <g stroke="#d9c99f" stroke-width="5" stroke-linejoin="round"><path d="M44 228h92l-8 92h-76z" fill="#526655"/><path d="M50 266h80" stroke="#79b8b2" stroke-width="22"/><path d="M48 240h84M46 300h88" stroke-width="3"/></g>
+  <!-- pump -->
+  <g stroke="#e2cf9d" stroke-width="5"><circle cx="230" cy="290" r="28" fill="#914f39"/><path d="M214 290h32M230 274v32"/></g>
+  <path d="M272 242l-10 16h8l-6 14 16-20h-8l6-10z" fill="#d2a85d"/>
+  <!-- sink -->
+  <g stroke="#d9c99f" stroke-width="5" fill="none" stroke-linejoin="round"><path d="M366 282v38M434 282v38"/><path d="M358 238h84v44h-84z" fill="#526655"/><path d="M379 238v-28h42v28M352 238h96"/></g>
+  <!-- router: green IN, red OUT -->
+  <rect x="516" y="272" width="88" height="48" rx="8" fill="#755f40"/><rect x="519" y="275" width="16" height="42" fill="#5fae6e"/><rect x="585" y="275" width="16" height="42" fill="#c9553d"/>
+  <rect x="516" y="272" width="88" height="48" rx="8" fill="none" stroke="#d9c99f" stroke-width="5"/>
+  <!-- pressure -->
+  <g fill="#16201c" stroke-width="2.5"><rect x="182" y="186" width="96" height="38" rx="10" stroke="#79b8b2"/><rect x="352" y="150" width="96" height="38" rx="10" stroke="#79b8b2"/><rect x="508" y="206" width="104" height="38" rx="10" stroke="#d2a85d"/><rect x="728" y="196" width="110" height="38" rx="10" stroke="#79b8b2"/></g>
+  <g fill="#fff2cf" font-family="Arial,sans-serif" font-size="20" font-weight="700" text-anchor="middle"><text x="230" y="212">26 m</text><text x="400" y="176">26 m</text><text x="560" y="232">≤ 12 m</text><text x="783" y="222">≈ 12 m</text></g>
+  <!-- markers -->
+  <g fill="#d5744e" stroke="#171d1a" stroke-width="3"><circle cx="40" cy="222" r="18"/><circle cx="194" cy="256" r="18"/><circle cx="352" cy="206" r="18"/><circle cx="512" cy="262" r="18"/><circle cx="640" cy="250" r="18"/></g>
+  <g fill="#fff2cf" font-family="Arial,sans-serif" font-size="18" font-weight="700" text-anchor="middle"><text x="40" y="228">1</text><text x="194" y="262">2</text><text x="352" y="212">3</text><text x="512" y="268">4</text><text x="640" y="256">5</text></g>
+</svg>

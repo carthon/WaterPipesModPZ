@@ -12,14 +12,51 @@ Necesitas una Llave para tubos, una Tubería de metal o un Segmento de tubería 
 4. Construye la última tubería en la misma casilla del aparato; una casilla adyacente no basta.
 5. Con la Llave para tubos en el inventario, haz clic derecho en el aparato y elige **Fontanear**.
 6. Haz clic derecho en cualquier tubería y elige **Mostrar red de tuberías**. Las tuberías aparecen rojas, las fuentes y depósitos verdes, los consumidores azules y los enrutadores regulados ámbar.
-7. Prueba el aparato. Si la fuente está más baja o el recorrido es largo, añade una Bomba de agua con corriente y diagnostica la línea con un Manómetro.
-
-![Red básica de Water Pipes](../assets/images/diagram-network-overview.svg){ .wp-diagram }
-
-1. Depósito o fuente. 2. Bomba con corriente. 3. Control o punto de ramificación. 4. Consumidor. Las flechas indican el flujo previsto.
+7. Prueba el aparato. Si no da agua, comprueba que el recipiente tiene agua y está en la planta del aparato o más arriba; si no, consulta las instalaciones de abajo.
 
 <!-- SCREENSHOT: 01-getting-started-materials.png — Llave, tuberías y recipiente preparados para la red inicial. -->
 <!-- SCREENSHOT: 02-getting-started-small-network.png — Red inicial completa entre recipiente y fregadero, con la superposición visible. -->
+
+## Tres instalaciones de inicio
+
+La presión se mide en metros de columna de agua (m). Con los valores predeterminados, un aparato recibe:
+
+- **Lo que construyen los depósitos.** Cada recipiente con agua aporta 1 m en su propia planta, más 3 m por cada planta que esté por encima del aparato. Los recipientes no se suman: manda el más alto.
+- **Más 25 m por cada bomba con corriente** de la red. La bomba eleva todos los recipientes de la red, y las bombas en serie se suman.
+- **Con el tope de un enrutador**, si hay uno en medio. Un enrutador puede bajar la presión, nunca subirla.
+
+La distancia solo cuesta presión donde el riego hace pasar agua por la tubería: unos 0,2 m por casilla por cada aspersor aguas abajo y unos 0,02 m por casilla por cada gotero. Fregaderos, duchas, inodoros y demás aparatos no pierden nada por la distancia. Un aparato funciona con cualquier presión por encima de cero; un aspersor necesita 20 m y un gotero revienta por encima de 15 m.
+
+### 1. Solo depósitos
+
+![Instalaciones solo con depósitos](../assets/images/diagram-install-storage.svg){ .wp-diagram }
+
+- **1** Barril en la misma planta que **2**, un fregadero: 1 m de base = **1 m**. Poco, pero suficiente para un aparato.
+- **3** Barril una planta más arriba, con tubería bajando hasta **4**, un fregadero en la planta baja: 1 m + 3 m = **4 m**.
+
+El propio depósito es la fuente de presión: subirlo es la forma más barata de ganarla. Al revés no funciona: un fregadero una planta por encima de su único barril recibe 1 − 3 = −2 m y no da agua. Sube el barril o añade una bomba.
+
+### 2. Depósito y bomba de agua
+
+![Depósito con bomba de agua](../assets/images/diagram-install-pump.svg){ .wp-diagram }
+
+- **1** Barril en la planta baja: 1 m.
+- **2** Bomba de agua con corriente: 1 + 25 = **26 m** para toda la red.
+- **3** Fregadero una planta más arriba: 26 − 3 = unos **23 m** (el caudal del aspersor resta un poco en el tramo compartido).
+- **4** Aspersor a diez casillas de tubería del barril: 26 − 10 × 0,2 = **24 m**, por encima de los 20 m que necesita. Sin la bomba recibiría 1 − 2 = −1 m y no regaría.
+
+El barril sigue siendo necesario: la bomba empuja y mueve el agua, pero no almacena nada.
+
+### 3. Bomba con una zona de goteo protegida por un enrutador
+
+![Línea con bomba y zona de goteo protegida por un enrutador](../assets/images/diagram-install-router.svg){ .wp-diagram }
+
+- **1–2** Barril y bomba con corriente, como antes: **26 m**.
+- **3** Fregadero en la línea principal: **26 m**.
+- **4** Enrutador de fluidos, con la banda verde de entrada hacia la bomba y la roja de salida hacia los cultivos, y **Fijar límite de presión** en 12 m. El agua y la presión solo pasan de la entrada a la salida.
+- **5** Goteros detrás del enrutador: unos **12 m**, por debajo de los 15 m que los revientan. Conectados directamente a la línea de la bomba recibirían 26 m y reventarían.
+
+Un enrutador no necesita corriente y nunca añade presión: con la bomba apagada, los goteros reciben el 1 m del barril. Más en [Enrutadores y válvulas](routers-and-valves.md) y [Riego](irrigation.md).
 
 !!! warning
     Una bomba aporta o mueve agua, pero no la almacena. Añade al menos un recipiente y nunca unas gasolina y agua en la misma red.
