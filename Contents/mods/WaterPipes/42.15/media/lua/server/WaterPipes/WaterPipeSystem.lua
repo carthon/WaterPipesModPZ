@@ -143,8 +143,9 @@ function System.scanContainersAroundPipes()
     local state = State.ensure()
     local found = {}
     -- Thumpable sweep: each pipe is checked once, on the first pass its square is loaded. Once no
-    -- registered pipe is left unchecked the whole sweep is off for good.
-    local sweepThumpable = not state.thumpableSwept
+    -- registered pipe is left unchecked the whole sweep is off for good. Server-side only: an MP client
+    -- has no registry, and would mark its empty one as swept.
+    local sweepThumpable = not state.thumpableSwept and not (isClient and isClient())
     local unchecked = 0
     local cleared = {}
 
