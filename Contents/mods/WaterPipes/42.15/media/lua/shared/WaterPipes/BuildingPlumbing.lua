@@ -826,8 +826,7 @@ local FACE_FOR = {
     end,
 }
 
--- Health of a generated pipe. Matched to a hand-built one so a zombie does not find the building's
--- plumbing softer than the player's own line.
+-- Health of a generated pipe, matched to a hand-built one.
 local GENERATED_HEALTH = 200
 
 -- Lay ONE pipe. Returns the object, true when the server was asked to lay it, or nil and a reason.
@@ -862,7 +861,9 @@ function BuildingPlumbing.place(placement, player)
 
     local north = placement.kind == RISER and placement.edge == "N" or false
     local object = IsoThumpable.new(getWorld():getCell(), square, faceSprite, north, {})
-    object:setIsThumpable(true)
+    -- Not thumpable, as the hand-built script says: the engine collides with a thumpable as a wall on
+    -- its edge, whatever canPassThrough says.
+    object:setIsThumpable(false)
     object:setIsDismantable(true)
     object:setCanPassThrough(true)
     object:setCanBarricade(false)
@@ -898,6 +899,26 @@ function BuildingPlumbing.place(placement, player)
     })
 
     return object
+end
+
+-- 0.10.0 laid its pipes thumpable, and the flag is saved with each one. Cleared as a square loads, on
+-- every side: the setter is not synced, and each side runs its own collision. The name is enough to
+-- find the pipe, as the modData may not be attached yet.
+local function clearThumpablePipes(square)
+    local specials = square and square:getSpecialObjects()
+    if not specials then
+        return
+    end
+    for index = 0, specials:size() - 1 do
+        local object = specials:get(index)
+        if PipeObjectUtils.isPipeObject(object) and object:isThumpable() then
+            object:setIsThumpable(false)
+        end
+    end
+end
+
+if Events and Events.LoadGridsquare then
+    Events.LoadGridsquare.Add(function(square) pcall(clearThumpablePipes, square) end)
 end
 
 -- Everything the network owes after a pass, paid once rather than per pipe laid.
