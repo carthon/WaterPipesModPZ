@@ -448,12 +448,8 @@ end
 -- per-tile scan memo remembers that answer. The next endpoint refresh then saw no pipe under a plumbed
 -- sink and unplumbed it, every time its chunk came back (issue #23). The square's memo is dropped
 -- again right before the deferred scan, so it is rebuilt from the loaded objects.
--- Only a square that can hold a pipe is queued, and the queue drains a few squares per tick: running
--- into new chunks used to queue every square and repaint them all in one frame.
-local STREAMED_PER_TICK = 32
+-- Only a square that can hold a pipe is queued: running into new chunks used to queue every square.
 local pendingStreamed = {}
-local streamedHead = 1
-local streamedCleared = {}
 local function onLoadGridsquare(square)
     if not isRenderingSide() or not square or not PipeObjectUtils.squareMayHavePipe(square) then
         return
@@ -476,26 +472,22 @@ local function refreshStreamedSquare(coord, cleared)
     end
 end
 
-local function refreshStreamedBatch()
-    local last = math.min(streamedHead + STREAMED_PER_TICK - 1, #pendingStreamed)
-    Profiler.count("autotile/streamed squares", last - streamedHead + 1)
-    for index = streamedHead, last do
-        -- Moved past first, so a square that throws is not retried every tick.
-        streamedHead = index + 1
-        refreshStreamedSquare(pendingStreamed[index], streamedCleared)
+local function refreshStreamedBatch(streamed)
+    local cleared = {}
+    for _, coord in ipairs(streamed) do
+        refreshStreamedSquare(coord, cleared)
     end
+    return cleared
 end
 
 local function onTickProcessPending()
-    if streamedHead <= #pendingStreamed then
-        Profiler.time("autotile/streamed", refreshStreamedBatch)
-        if streamedHead > #pendingStreamed then
-            pendingStreamed = {}
-            streamedHead = 1
-            if streamedCleared.count then
-                Logger.log("Thumpable pipes cleared on load: " .. PipeObjectUtils.describeCleared(streamedCleared))
-            end
-            streamedCleared = {}
+    if #pendingStreamed > 0 then
+        local streamed = pendingStreamed
+        pendingStreamed = {}
+        Profiler.count("autotile/streamed squares", #streamed)
+        local cleared = Profiler.time("autotile/streamed", refreshStreamedBatch, streamed)
+        if cleared.count then
+            Logger.log("Thumpable pipes cleared on load: " .. PipeObjectUtils.describeCleared(cleared))
         end
     end
 
