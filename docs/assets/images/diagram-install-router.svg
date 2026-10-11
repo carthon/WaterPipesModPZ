@@ -25,8 +25,8 @@
   <rect x="516" y="272" width="88" height="48" rx="8" fill="#755f40"/><rect x="519" y="275" width="16" height="42" fill="#5fae6e"/><rect x="585" y="275" width="16" height="42" fill="#c9553d"/>
   <rect x="516" y="272" width="88" height="48" rx="8" fill="none" stroke="#d9c99f" stroke-width="5"/>
   <!-- pressure -->
-  <g fill="#16201c" stroke-width="2.5"><rect x="182" y="186" width="96" height="38" rx="10" stroke="#79b8b2"/><rect x="352" y="150" width="96" height="38" rx="10" stroke="#79b8b2"/><rect x="508" y="206" width="104" height="38" rx="10" stroke="#d2a85d"/><rect x="728" y="196" width="110" height="38" rx="10" stroke="#79b8b2"/></g>
-  <g fill="#fff2cf" font-family="Arial,sans-serif" font-size="20" font-weight="700" text-anchor="middle"><text x="230" y="212">26 m</text><text x="400" y="176">26 m</text><text x="560" y="232">≤ 12 m</text><text x="783" y="222">≈ 12 m</text></g>
+  <g fill="#16201c" stroke-width="2.5"><rect x="52" y="172" width="76" height="38" rx="10" stroke="#79b8b2"/><rect x="182" y="186" width="96" height="38" rx="10" stroke="#79b8b2"/><rect x="352" y="150" width="96" height="38" rx="10" stroke="#79b8b2"/><rect x="508" y="206" width="104" height="38" rx="10" stroke="#d2a85d"/><rect x="728" y="196" width="110" height="38" rx="10" stroke="#79b8b2"/></g>
+  <g fill="#fff2cf" font-family="Arial,sans-serif" font-size="20" font-weight="700" text-anchor="middle"><text x="90" y="198">1 m</text><text x="230" y="212">26 m</text><text x="400" y="176">26 m</text><text x="560" y="232">≤ 12 m</text><text x="783" y="222">≈ 12 m</text></g>
   <!-- markers -->
   <g fill="#d5744e" stroke="#171d1a" stroke-width="3"><circle cx="40" cy="222" r="18"/><circle cx="194" cy="256" r="18"/><circle cx="352" cy="206" r="18"/><circle cx="512" cy="262" r="18"/><circle cx="640" cy="250" r="18"/></g>
   <g fill="#fff2cf" font-family="Arial,sans-serif" font-size="18" font-weight="700" text-anchor="middle"><text x="40" y="228">1</text><text x="194" y="262">2</text><text x="352" y="212">3</text><text x="512" y="268">4</text><text x="640" y="256">5</text></g>

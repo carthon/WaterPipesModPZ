@@ -27,6 +27,8 @@ La altura se cuenta en plantas y la distancia en casillas, pero la presión se d
 
 La distancia solo cuesta presión donde el riego hace pasar agua por la tubería: unos 0,2 m por casilla por cada aspersor aguas abajo y unos 0,02 m por casilla por cada gotero. Fregaderos, duchas, inodoros y demás aparatos no pierden nada por la distancia. Un aparato funciona con cualquier presión por encima de cero; un aspersor necesita 20 m y un gotero revienta por encima de 15 m.
 
+Como referencia: todos los recipientes aportan el mismo 1 m, sea cual sea su tipo, así que un barril o un ánfora en la planta del fregadero lo alimentan a cualquier distancia. Con ese 1 m, un solo gotero llega a unas 45 casillas (1 m ÷ 0,02 m). Los 20 m de un aspersor exigen unas 7 plantas de altura o una bomba.
+
 ### 1. Solo depósitos
 
 ![Instalaciones solo con depósitos](../assets/images/diagram-install-storage-es.svg){ .wp-diagram }

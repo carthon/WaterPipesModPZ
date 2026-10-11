@@ -27,6 +27,8 @@ Height is counted in floors and distance in tiles, but pressure is shown in metr
 
 Distance only costs pressure where irrigation draws through the pipe: about 0.2 m per tile for each sprinkler downstream, about 0.02 m per tile for each drip emitter. Sinks, showers, toilets, and other fixtures lose nothing over distance. A fixture works with any pressure above zero; a sprinkler needs 20 m, and a drip emitter bursts above 15 m.
 
+For reference: every container gives the same 1 m, whatever its type, so a barrel or an amphora on the sink's floor feeds it at any distance. From that 1 m, a single drip emitter reaches about 45 tiles (1 m ÷ 0.02 m). A sprinkler's 20 m takes about 7 floors of height or a pump.
+
 ### 1. Storage only
 
 ![Storage-only installations](../assets/images/diagram-install-storage-en.svg){ .wp-diagram }
