@@ -450,8 +450,14 @@ end
 -- again right before the deferred scan, so it is rebuilt from the loaded objects.
 -- Only a square that can hold a pipe is queued: running into new chunks used to queue every square.
 local pendingStreamed = {}
+-- Asked on the first square, not at file load, where isCoopHost may not be settled yet; it does not
+-- change after. A dedicated server then pays one boolean per square instead of two engine calls.
+local renderingSide = nil
 local function onLoadGridsquare(square)
-    if not isRenderingSide() or not square or not PipeObjectUtils.squareMayHavePipe(square) then
+    if renderingSide == nil then
+        renderingSide = isRenderingSide()
+    end
+    if not renderingSide or not square or not PipeObjectUtils.squareMayHavePipe(square) then
         return
     end
     pendingStreamed[#pendingStreamed + 1] = { x = square:getX(), y = square:getY(), z = square:getZ() }
