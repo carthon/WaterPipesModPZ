@@ -12,6 +12,10 @@ local FluidSource = WaterPipes.EndpointFluidSource
 
 local CONSUME_EPSILON = 0.001
 
+-- FluidUtil.MIN_CONTAINER_CAPACITY: setCapacity never goes below it, so a tank asked for 0 L holds 50 mL.
+-- A tank this size holds nothing of its own.
+local EMPTY_TANK_CAPACITY = 0.05 + CONSUME_EPSILON
+
 -- The plumbed endpoint keeps its OWN FluidContainer component mirroring the connected pipe network.
 -- Using the vanilla "own container" path (usesExternalWaterSource = false) means the engine serves
 -- Drink/Wash/Fill straight from it, and consumption is reconciled back through NetworkAccess.useFluid.
@@ -154,7 +158,7 @@ local function attachTank(endpoint, capacity)
     local after = objectsOnTile(endpoint)
     -- The SIZE is the network's storage at this moment, which is nothing at all until something on the
     -- line holds water -- so a tank born at 1 L means the pipes reach no vessel yet, not a broken tank.
-    Logger.log(("EndpointFluidSource: gave %s a %.0f L tank (it had none); objects on the tile %d -> %d")
+    Logger.log(("EndpointFluidSource: gave %s a %.2f L tank (it had none); objects on the tile %d -> %d")
         :format(describeObject(endpoint), math.max(capacity or 1, 1), before, after))
 
     -- NOT transmitted whole. Sending the complete item works for an object a client has never seen --
@@ -248,7 +252,7 @@ local function writeFluid(endpoint, amount, fluidTypeName, networkCapacity)
         if math.abs(ownCapacity(endpoint) - wanted) > CONSUME_EPSILON then
             -- Only on a real change: the tank follows the network's storage, and saying so is how a
             -- tank stuck at its birth size can be told from one the network never grew.
-            Logger.log(("EndpointFluidSource: %s tank resized %.0f -> %.0f L")
+            Logger.log(("EndpointFluidSource: %s tank resized %.2f -> %.2f L")
                 :format(describeObject(endpoint), ownCapacity(endpoint), wanted))
             pcall(fluidContainer.setCapacity, fluidContainer, wanted)
         end
@@ -315,7 +319,7 @@ local function writeSnapshot(endpoint, amount, fluidTypeName, networkCapacity)
     if tankModData then
         tankModData[RESTORED_KEY] = nil
     end
-    if ownCapacity(endpoint) <= 0 and tankModData and getFluidContainer(endpoint) then
+    if ownCapacity(endpoint) <= EMPTY_TANK_CAPACITY and tankModData and getFluidContainer(endpoint) then
         tankModData[OUR_TANK_KEY] = true
     end
     -- Plumbed before the ownership mark existed: the tank on a fixture that held nothing is ours, and a
@@ -324,11 +328,11 @@ local function writeSnapshot(endpoint, amount, fluidTypeName, networkCapacity)
     if type(original) == "table" and not tankModData[OUR_TANK_KEY] then
         local was = tonumber(original.capacity) or 0
         local tank = getFluidContainer(endpoint)
-        if was <= 0 and tank then
+        if was <= EMPTY_TANK_CAPACITY and tank then
             tankModData[OUR_TANK_KEY] = true
         elseif was > 0 and tank and tank.setCapacity
             and math.abs(ownCapacity(endpoint) - was) > CONSUME_EPSILON then
-            Logger.log(("EndpointFluidSource: %s tank restored %.0f -> %.0f L (plumbed by an older version)")
+            Logger.log(("EndpointFluidSource: %s tank restored %.2f -> %.2f L (plumbed by an older version)")
                 :format(describeObject(endpoint), ownCapacity(endpoint), was))
             pcall(tank.setCapacity, tank, was)
         end
