@@ -19,7 +19,7 @@ Necesitas una Llave para tubos, una Tubería de metal o un Segmento de tubería 
 
 ## Tres instalaciones de inicio
 
-La presión se mide en metros de columna de agua (m). Con los valores predeterminados, un aparato recibe:
+La altura se cuenta en plantas y la distancia en casillas, pero la presión se da en metros (m), la unidad que usan todos los manómetros y las ventanas de bombas y enrutadores del juego. La regla práctica: **1 planta = 3 m**, así que los 25 m de una bomba equivalen a subir el depósito unas 8 plantas. Las cifras van redondeadas al metro. Con los valores predeterminados, un aparato recibe:
 
 - **Lo que construyen los depósitos.** Cada recipiente con agua aporta 1 m en su propia planta, más 3 m por cada planta que esté por encima del aparato. Los recipientes no se suman: manda el más alto.
 - **Más 25 m por cada bomba con corriente** de la red. La bomba eleva todos los recipientes de la red, y las bombas en serie se suman.
@@ -27,23 +27,25 @@ La presión se mide en metros de columna de agua (m). Con los valores predetermi
 
 La distancia solo cuesta presión donde el riego hace pasar agua por la tubería: unos 0,2 m por casilla por cada aspersor aguas abajo y unos 0,02 m por casilla por cada gotero. Fregaderos, duchas, inodoros y demás aparatos no pierden nada por la distancia. Un aparato funciona con cualquier presión por encima de cero; un aspersor necesita 20 m y un gotero revienta por encima de 15 m.
 
+Como referencia: todos los recipientes aportan el mismo 1 m, sea cual sea su tipo, así que un barril o un ánfora en la planta del fregadero lo alimentan a cualquier distancia. Con ese 1 m, un solo gotero llega a unas 45 casillas (1 m ÷ 0,02 m). Los 20 m de un aspersor exigen unas 7 plantas de altura o una bomba.
+
 ### 1. Solo depósitos
 
-![Instalaciones solo con depósitos](../assets/images/diagram-install-storage.svg){ .wp-diagram }
+![Instalaciones solo con depósitos](../assets/images/diagram-install-storage-es.svg){ .wp-diagram }
 
 - **1** Barril en la misma planta que **2**, un fregadero: 1 m de base = **1 m**. Poco, pero suficiente para un aparato.
-- **3** Barril una planta más arriba, con tubería bajando hasta **4**, un fregadero en la planta baja: 1 m + 3 m = **4 m**.
+- **3** Barril una planta más arriba, con tubería bajando hasta **4**, un fregadero en la planta baja: 1 m + 1 planta × 3 m = **4 m**.
 
-El propio depósito es la fuente de presión: subirlo es la forma más barata de ganarla. Al revés no funciona: un fregadero una planta por encima de su único barril recibe 1 − 3 = −2 m y no da agua. Sube el barril o añade una bomba.
+El propio depósito es la fuente de presión: subirlo es la forma más barata de ganarla. Al revés no funciona: un fregadero una planta por encima de su único barril recibe 1 m − 1 planta × 3 m = −2 m y no da agua. Sube el barril o añade una bomba.
 
 ### 2. Depósito y bomba de agua
 
-![Depósito con bomba de agua](../assets/images/diagram-install-pump.svg){ .wp-diagram }
+![Depósito con bomba de agua](../assets/images/diagram-install-pump-es.svg){ .wp-diagram }
 
 - **1** Barril en la planta baja: 1 m.
-- **2** Bomba de agua con corriente: 1 + 25 = **26 m** para toda la red.
-- **3** Fregadero una planta más arriba: 26 − 3 = unos **23 m** (el caudal del aspersor resta un poco en el tramo compartido).
-- **4** Aspersor a diez casillas de tubería del barril: 26 − 10 × 0,2 = **24 m**, por encima de los 20 m que necesita. Sin la bomba recibiría 1 − 2 = −1 m y no regaría.
+- **2** Bomba de agua con corriente, a 2 casillas del barril: 1 m + 25 m = **26 m** para toda la red.
+- **3** Fregadero una planta más arriba, con la subida a 6 casillas del barril: el caudal del aspersor le quita 6 casillas × 0,2 m del tramo compartido y la planta 3 m, así que recibe **22 m**.
+- **4** Aspersor a 10 casillas del barril: 26 m − 10 casillas × 0,2 m = **24 m**, por encima de los 20 m que necesita. Sin la bomba recibiría 1 m − 10 casillas × 0,2 m = −1 m y no regaría.
 
 El barril sigue siendo necesario: la bomba empuja y mueve el agua, pero no almacena nada.
 
