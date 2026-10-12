@@ -17,7 +17,9 @@ The drip charges only its own tile. The sprinkler pays for all nine tiles whethe
 
 ![Pressure-safe drip line](../assets/images/diagram-irrigation-safe.svg){ .wp-diagram }
 
-One +25 m pump feeds a router capped below 15 m, then four drips using 0.2 L/hour each.
+- **1–2** Barrel and powered pump: 1 m + 25 m = **26 m**.
+- **3** Router with **Set pressure limit** at 12 m, under the 15 m that bursts a drip.
+- **4** Four 0.2 L/hour drips on consecutive tiles: **12 m**. Together they lose under 0.1 m per tile.
 
 A burst drip still conducts water but no longer irrigates. Repair it with a Pipe Wrench and 1 Duct Tape. Setting the sandbox burst pressure to 0 disables bursting.
 

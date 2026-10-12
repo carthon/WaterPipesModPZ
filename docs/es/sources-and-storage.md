@@ -8,7 +8,8 @@ El almacenamiento se asienta cada dos minutos de juego: primero se llenan las pl
 
 ![Orden de almacenamiento por gravedad](../assets/images/diagram-storage-gravity.svg){ .wp-diagram }
 
-Los recipientes de la planta inferior (1) se llenan y equilibran antes que el recipiente superior (2).
+- **1** Recipientes de la planta inferior: se llenan y se nivelan primero.
+- **2** Recipiente de la planta superior: recibe el agua que rebosa cuando los de abajo están llenos.
 
 | Fuente | Fluido | Caudal o reserva predeterminados | Preparación |
 |---|---|---:|---|

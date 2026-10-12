@@ -27,7 +27,7 @@ Height is counted in floors and distance in tiles, but pressure is shown in metr
 
 Distance only costs pressure where irrigation draws through the pipe: about 0.2 m per tile for each sprinkler downstream, about 0.02 m per tile for each drip emitter. Sinks, showers, toilets, and other fixtures lose nothing over distance. A fixture works with any pressure above zero; a sprinkler needs 20 m, and a drip emitter bursts above 15 m.
 
-For reference: every container gives the same 1 m, whatever its type, so a barrel or an amphora on the sink's floor feeds it at any distance. From that 1 m, a single drip emitter reaches about 45 tiles (1 m ÷ 0.02 m). A sprinkler's 20 m takes about 7 floors of height or a pump.
+For reference: every container gives the same 1 m, whatever its type, so a barrel or an amphora on the sink's floor feeds it at any distance. From that 1 m, a single drip emitter reaches about 45 tiles (1 m ÷ 0.022 m per tile). A sprinkler's 20 m takes about 7 floors of height or a pump.
 
 ### 1. Storage only
 
@@ -56,7 +56,7 @@ The barrel is still required: a pump boosts and moves water but stores none.
 - **1–2** Barrel and powered pump as above: **26 m**.
 - **3** Sink on the main line: **26 m**.
 - **4** Fluid Router, green IN towards the pump, red OUT towards the crops, with **Set pressure limit** at 12 m. Water and pressure cross only from IN to OUT.
-- **5** Drip emitters behind the router: about **12 m**, safely under the 15 m that bursts them. Wired straight to the pump line they would get 26 m and burst.
+- **5** Drip emitters behind the router: **12 m**, safely under the 15 m that bursts them. Wired straight to the pump line they would get 26 m and burst.
 
 A router needs no power and never adds pressure: with the pump off, the drips get the barrel's 1 m. More in [Routers and valves](routers-and-valves.md) and [Irrigation](irrigation.md).
 

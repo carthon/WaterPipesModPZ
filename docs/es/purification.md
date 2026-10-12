@@ -8,7 +8,11 @@ Construye y orienta primero un Enrutador de fluidos: verde es la **entrada** de 
 
 ![Flujo del purificador](../assets/images/diagram-purifier-flow.svg){ .wp-diagram }
 
-1. Depósito contaminado. 2. Entrada verde. 3. Purificador y filtro con corriente. 4. Salida roja. 5. Depósito limpio.
+- **1** Depósito contaminado.
+- **2** Entrada verde del enrutador.
+- **3** Purificador con corriente y filtro, colocado sobre el enrutador.
+- **4** Salida roja del enrutador.
+- **5** Depósito limpio.
 
 <!-- SCREENSHOT: 13-purifier-placement.png — Fantasma de construcción con el anclaje sobre el enrutador y la huella 2×2. -->
 

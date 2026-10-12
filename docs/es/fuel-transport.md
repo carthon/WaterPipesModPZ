@@ -10,7 +10,11 @@ Cuando su depósito baja del umbral configurado (25 % por defecto), extrae hasta
 
 ![Red aislada de gasolina](../assets/images/diagram-fuel-network.svg){ .wp-diagram }
 
-1. Depósito exclusivo de gasolina. 2. Bomba cuando se necesita presión. 3. Generador conectado. El perímetro discontinuo indica que la línea permanece separada del agua.
+- **1** Depósito exclusivo de gasolina.
+- **2** Bomba, cuando hace falta presión.
+- **3** Generador conectado.
+
+El perímetro discontinuo indica que la línea permanece separada del agua.
 
 <!-- SCREENSHOT: 25-generator-connect-menu.png — Acción Instalar Generador con una tubería en su casilla. -->
 

@@ -8,7 +8,11 @@ First build and orient a Fluid Router: green is tainted-water **IN**, red is cle
 
 ![Purifier flow](../assets/images/diagram-purifier-flow.svg){ .wp-diagram }
 
-1. Tainted storage. 2. Green router input. 3. Powered purifier and filter. 4. Red router output. 5. Clean storage.
+- **1** Tainted storage.
+- **2** Green router IN.
+- **3** Powered purifier and filter, placed on the router.
+- **4** Red router OUT.
+- **5** Clean storage.
 
 <!-- SCREENSHOT: 13-purifier-placement.png — Build ghost showing the purifier anchor over the router and its 2×2 footprint. -->
 
