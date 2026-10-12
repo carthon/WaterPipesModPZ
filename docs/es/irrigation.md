@@ -17,7 +17,9 @@ El gotero solo cobra su casilla. El aspersor gasta por las nueve casillas, tenga
 
 ![Línea de goteo con presión segura](../assets/images/diagram-irrigation-safe.svg){ .wp-diagram }
 
-Una bomba de +25 m alimenta un enrutador limitado por debajo de 15 m y después cuatro goteros de 0,2 L/h cada uno.
+- **1–2** Barril y bomba con corriente: 1 m + 25 m = **26 m**.
+- **3** Enrutador con **Fijar límite de presión** en 12 m, por debajo de los 15 m que revientan un gotero.
+- **4** Cuatro goteros de 0,2 L/h en casillas seguidas: **12 m**. Entre los cuatro pierden menos de 0,1 m por casilla.
 
 Un gotero reventado sigue conduciendo agua, pero deja de regar. Repáralo con Llave para tubos y 1 Cinta americana. Un umbral de rotura 0 en sandbox desactiva las roturas.
 

@@ -27,7 +27,7 @@ La altura se cuenta en plantas y la distancia en casillas, pero la presión se d
 
 La distancia solo cuesta presión donde el riego hace pasar agua por la tubería: unos 0,2 m por casilla por cada aspersor aguas abajo y unos 0,02 m por casilla por cada gotero. Fregaderos, duchas, inodoros y demás aparatos no pierden nada por la distancia. Un aparato funciona con cualquier presión por encima de cero; un aspersor necesita 20 m y un gotero revienta por encima de 15 m.
 
-Como referencia: todos los recipientes aportan el mismo 1 m, sea cual sea su tipo, así que un barril o un ánfora en la planta del fregadero lo alimentan a cualquier distancia. Con ese 1 m, un solo gotero llega a unas 45 casillas (1 m ÷ 0,02 m). Los 20 m de un aspersor exigen unas 7 plantas de altura o una bomba.
+Como referencia: todos los recipientes aportan el mismo 1 m, sea cual sea su tipo, así que un barril o un ánfora en la planta del fregadero lo alimentan a cualquier distancia. Con ese 1 m, un solo gotero llega a unas 45 casillas (1 m ÷ 0,022 m por casilla). Los 20 m de un aspersor exigen unas 7 plantas de altura o una bomba.
 
 ### 1. Solo depósitos
 
@@ -56,7 +56,7 @@ El barril sigue siendo necesario: la bomba empuja y mueve el agua, pero no almac
 - **1–2** Barril y bomba con corriente, como antes: **26 m**.
 - **3** Fregadero en la línea principal: **26 m**.
 - **4** Enrutador de fluidos, con la banda verde de entrada hacia la bomba y la roja de salida hacia los cultivos, y **Fijar límite de presión** en 12 m. El agua y la presión solo pasan de la entrada a la salida.
-- **5** Goteros detrás del enrutador: unos **12 m**, por debajo de los 15 m que los revientan. Conectados directamente a la línea de la bomba recibirían 26 m y reventarían.
+- **5** Goteros detrás del enrutador: **12 m**, por debajo de los 15 m que los revientan. Conectados directamente a la línea de la bomba recibirían 26 m y reventarían.
 
 Un enrutador no necesita corriente y nunca añade presión: con la bomba apagada, los goteros reciben el 1 m del barril. Más en [Enrutadores y válvulas](routers-and-valves.md) y [Riego](irrigation.md).
 

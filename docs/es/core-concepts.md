@@ -25,4 +25,6 @@ Las tuberías verticales conectan plantas por bordes de pared norte u oeste. La 
 
 ![Tres fronteras de red](../assets/images/diagram-network-boundaries.svg){ .wp-diagram }
 
-1. Hueco físico. 2. Válvula de corte cerrada. 3. Enrutador unidireccional, de entrada verde a salida roja.
+- **1** Hueco físico.
+- **2** Válvula de corte cerrada.
+- **3** Enrutador unidireccional, de la entrada verde a la salida roja.

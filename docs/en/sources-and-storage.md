@@ -8,7 +8,8 @@ Network storage settles every two in-game minutes: lower floors fill first, whil
 
 ![Gravity storage order](../assets/images/diagram-storage-gravity.svg){ .wp-diagram }
 
-Lower-floor containers (1) fill and equalize before an upper-floor container (2).
+- **1** Lower-floor containers: they fill and level first.
+- **2** Upper-floor container: it takes the overflow once the ones below are full.
 
 | Source | Fluid | Default rate or reserve | Setup |
 |---|---|---:|---|

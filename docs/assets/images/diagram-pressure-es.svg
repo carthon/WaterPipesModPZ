@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" role="img" aria-label="Presión con un barril una planta más arriba y dos bombas: 54 m para toda la red; 50 m en un aspersor a 10 casillas y 48 m en otro a 20 casillas">
+  <defs>
+    <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#202b26"/><stop offset="1" stop-color="#121815"/></linearGradient>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0v24" fill="none" stroke="#d7c79d" stroke-opacity=".045"/></pattern>
+    <marker id="arrow" markerUnits="userSpaceOnUse" markerWidth="16" markerHeight="16" refX="15" refY="8" orient="auto"><path d="M0 0l16 8L0 16z" fill="#79b8b2"/></marker>
+  </defs>
+  <rect x="5" y="5" width="950" height="410" rx="16" fill="url(#bg)" stroke="#65756d" stroke-width="2"/><rect x="6" y="6" width="948" height="408" rx="15" fill="url(#grid)"/>
+  <!-- floors -->
+  <rect x="20" y="370" width="920" height="12" fill="#2b3832"/><path d="M20 370H940" stroke="#71837a" stroke-width="2"/>
+  <rect x="20" y="200" width="220" height="12" fill="#2b3832"/><path d="M20 200H240" stroke="#71837a" stroke-width="2"/>
+  <!-- pipes -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M140 188V358H880" stroke="#090d0b" stroke-width="25"/><path d="M140 188V358H880" stroke="#8d9a93" stroke-width="14"/></g>
+  <g stroke="#71837a" stroke-width="3"><path d="M177 345v26 M214 345v26 M251 345v26 M288 345v26 M325 345v26 M362 345v26 M399 345v26 M436 345v26 M473 345v26 M547 345v26 M584 345v26 M621 345v26 M658 345v26 M695 345v26 M732 345v26 M769 345v26 M806 345v26 M843 345v26"/></g>
+  <g stroke="#d9c99f" stroke-width="3"><path d="M510 341v34M880 341v34"/></g>
+  <g fill="none" stroke="#79b8b2" stroke-width="4" marker-end="url(#arrow)"><path d="M140 224v104"/><path d="M164 358h46"/><path d="M285 358h76"/><path d="M433 358h60"/><path d="M530 358h300"/></g>
+  <!-- height -->
+  <g stroke="#d9c99f" stroke-width="2"><path d="M40 212V370M32 212h16M32 370h16"/></g>
+  <!-- barrel, upper floor -->
+  <g stroke="#d9c99f" stroke-width="5" stroke-linejoin="round"><path d="M94 108h92l-8 92h-76z" fill="#526655"/><path d="M100 146h80" stroke="#79b8b2" stroke-width="22"/><path d="M98 120h84M96 180h88" stroke-width="3"/></g>
+  <!-- pumps -->
+  <g stroke="#e2cf9d" stroke-width="5"><circle cx="251" cy="340" r="28" fill="#914f39"/><path d="M235 340h32M251 324v32"/><circle cx="399" cy="340" r="28" fill="#914f39"/><path d="M383 340h32M399 324v32"/></g>
+  <g fill="#d2a85d"><path d="M293 292l-10 16h8l-6 14 16-20h-8l6-10z"/><path d="M441 292l-10 16h8l-6 14 16-20h-8l6-10z"/></g>
+  <!-- sprinklers -->
+  <g stroke="#d9c99f" stroke-width="6"><path d="M510 358V306M880 358V306"/></g>
+  <g fill="#914f39" stroke="#e2cf9d" stroke-width="3"><circle cx="510" cy="300" r="10"/><circle cx="880" cy="300" r="10"/></g>
+  <path d="M488 288q22-20 44 0M476 276q34-30 68 0M858 288q22-20 44 0M846 276q34-30 68 0" fill="none" stroke="#79b8b2" stroke-width="3" stroke-dasharray="6 6"/>
+  <!-- pressure -->
+  <g fill="#16201c" stroke="#79b8b2" stroke-width="2.5"><rect x="102" y="58" width="76" height="38" rx="10"/><rect x="277" y="240" width="96" height="38" rx="10"/><rect x="462" y="218" width="96" height="38" rx="10"/><rect x="832" y="218" width="96" height="38" rx="10"/></g>
+  <g fill="#fff2cf" font-family="Arial,sans-serif" font-size="20" font-weight="700" text-anchor="middle"><text x="140" y="84">1 m</text><text x="325" y="266">54 m</text><text x="510" y="244">50 m</text><text x="880" y="244">48 m</text></g>
+  <g fill="#d9c99f" font-family="Arial,sans-serif" font-size="18" font-weight="700"><text x="50" y="296">1 planta</text><g text-anchor="middle"><text x="140" y="402">0</text><text x="510" y="402">10 casillas</text><text x="880" y="402">20 casillas</text></g></g>
+  <!-- markers -->
+  <g fill="#d5744e" stroke="#171d1a" stroke-width="3"><circle cx="90" cy="102" r="18"/><circle cx="215" cy="306" r="18"/><circle cx="363" cy="306" r="18"/><circle cx="468" cy="330" r="18"/><circle cx="838" cy="330" r="18"/></g>
+  <g fill="#fff2cf" font-family="Arial,sans-serif" font-size="18" font-weight="700" text-anchor="middle"><text x="90" y="108">1</text><text x="215" y="312">2</text><text x="363" y="312">3</text><text x="468" y="336">4</text><text x="838" y="336">5</text></g>
+</svg>

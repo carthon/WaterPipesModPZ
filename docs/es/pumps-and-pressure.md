@@ -21,9 +21,14 @@ La presión se mide en metros de columna de agua. En el modelo **Realista** pred
 
 El modelo **Simple** cuenta la altura, pero ignora la pérdida por distancia. **Desactivado** restaura el alcance solo por gravedad. Una transferencia con presión baja todavía puede funcionar más despacio hasta dejar de cumplir el mínimo del consumidor.
 
-![Presión aportada por altura y bombas](../assets/images/diagram-pressure.svg){ .wp-diagram }
+![Presión aportada por altura y bombas](../assets/images/diagram-pressure-es.svg){ .wp-diagram }
 
-La fuente elevada aporta +3 m por planta, cada bomba con corriente suma +25 m, el recorrido pierde presión y la demanda compartida (`Q`) aumenta esa pérdida.
+- **1** Barril una planta por encima de la línea: 1 m + 1 planta × 3 m = 4 m.
+- **2–3** Dos bombas con corriente. Cada una suma 25 m a toda la red, esté donde esté: 4 m + 2 × 25 m = **54 m**.
+- **4** Aspersor a 10 casillas. Por ese tramo pasa el caudal de los dos aspersores: 54 m − 10 casillas × 2 × 0,2 m = **50 m**.
+- **5** Aspersor a 20 casillas. De la casilla 10 a la 20 solo pasa su propio caudal: 50 m − 10 casillas × 0,2 m = **48 m**.
+
+La demanda compartida es lo que encarece la distancia: cada consumidor de riego aguas abajo suma su caudal a la pérdida de cada casilla que comparte.
 
 ## Diagnóstico
 

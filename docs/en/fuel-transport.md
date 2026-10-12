@@ -10,7 +10,11 @@ When its tank falls below the configured threshold (25% by default), it draws to
 
 ![Isolated petrol network](../assets/images/diagram-fuel-network.svg){ .wp-diagram }
 
-1. Dedicated petrol storage. 2. Pump when pressure is required. 3. Connected generator. The dashed perimeter means this line stays isolated from water.
+- **1** Dedicated petrol storage.
+- **2** Pump, when pressure is required.
+- **3** Connected generator.
+
+The dashed perimeter means this line stays isolated from water.
 
 <!-- SCREENSHOT: 25-generator-connect-menu.png — Plumb Generator action with a pipe on the same tile. -->
 

@@ -21,9 +21,14 @@ Pressure is measured in metres of water column (m head). In the default **Realis
 
 The **Simple** model counts height but ignores distance loss. **Off** restores gravity-only reachability. A low-pressure transfer can still run below full speed; flow scales down until the consumer's minimum is no longer met.
 
-![Pressure from height and pumps](../assets/images/diagram-pressure.svg){ .wp-diagram }
+![Pressure from height and pumps](../assets/images/diagram-pressure-en.svg){ .wp-diagram }
 
-The elevated source contributes +3 m per floor, each powered pump contributes +25 m, pipe runs lose pressure, and shared demand (`Q`) increases that loss.
+- **1** Barrel one floor above the line: 1 m + 1 floor × 3 m = 4 m.
+- **2–3** Two powered pumps. Each adds 25 m to the whole network, wherever it stands: 4 m + 2 × 25 m = **54 m**.
+- **4** Sprinkler 10 tiles out. Both sprinklers draw through that stretch: 54 m − 10 tiles × 2 × 0.2 m = **50 m**.
+- **5** Sprinkler 20 tiles out. From tile 10 to 20 only its own flow passes: 50 m − 10 tiles × 0.2 m = **48 m**.
+
+Shared demand is what makes distance expensive: every irrigation consumer downstream adds its flow to the loss on each tile it shares.
 
 ## Diagnosis
 

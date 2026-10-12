@@ -25,4 +25,6 @@ Vertical pipes connect floors through north or west wall edges. Pressure determi
 
 ![Three network boundaries](../assets/images/diagram-network-boundaries.svg){ .wp-diagram }
 
-1. Physical gap. 2. Closed shut-off valve. 3. One-way Fluid Router, green IN to red OUT.
+- **1** Physical gap.
+- **2** Closed shut-off valve.
+- **3** One-way Fluid Router, green IN to red OUT.
