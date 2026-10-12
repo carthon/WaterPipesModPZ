@@ -1,6 +1,6 @@
 # Opciones de sandbox
 
-Water Pipes v0.10.0 incluye 26 opciones por partida. Los valores expresados en **décimas** se dividen entre diez dentro del juego: `250` significa 25,0 m de columna de agua.
+Water Pipes v0.10.x incluye 26 opciones por partida. Los valores expresados en **décimas** se dividen entre diez dentro del juego: `250` significa 25,0 m de columna de agua.
 
 ## Líquidos y generadores
 
@@ -47,11 +47,11 @@ Water Pipes v0.10.0 incluye 26 opciones por partida. Los valores expresados en *
 | Reserva del hidrante | 1000 L | 0–20 000 | Agua restante tras el corte municipal |
 | Presión del hidrante | 400 | 0–1000 décimas | 40,0 m mientras recibe agua municipal |
 
-## Fontanería de edificios
+## Inspección de fontanería de edificios
 
 | Opción | Predeterminado | Rango | Efecto |
 |---|---:|---:|---|
-| Tuberías de metal por aparato | 1 | 0–10 | Coste de **Fontanear el edificio** por aparato conectado |
+| Tuberías de metal por aparato | 1 | 0–10 | Coste por aparato revelado y conectado con **Fontanear el edificio** en un edificio del mundo |
 
 ## Perfiles iniciales sugeridos
 

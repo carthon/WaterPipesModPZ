@@ -1,6 +1,6 @@
 # Catálogo de componentes de Water Pipes
 
-Este catálogo reúne todos los componentes disponibles en **Menú de construcción → Fontanería** en Water Pipes v0.10.0. La Llave para tubos utilizable se conserva en todas las recetas que la requieren.
+Este catálogo reúne todos los componentes disponibles en **Menú de construcción → Fontanería** en Water Pipes v0.10.x. La Llave para tubos utilizable se conserva en todas las recetas que la requieren.
 
 ## Tuberías
 
@@ -11,7 +11,7 @@ Este catálogo reúne todos los componentes disponibles en **Menú de construcci
 | **Tubería de fluidos oculta** | Concealed Fluid Pipe | 1 tubería y 1 cubo compatible completo de cemento de arcilla u hormigón preparado; sin habilidad | Tubería de suelo invisible; revélala con **Mostrar red de tuberías** |
 | **Tubería vertical de fluidos oculta** | Concealed Vertical Fluid Pipe | Igual que la oculta de suelo; sin habilidad | Montante oculto norte/oeste entre plantas |
 
-Cada tubería oculta consume un cubo preparado completo; consulta las variantes admitidas en [Redes de tuberías](pipe-networks.md#recetas-de-tuberias). Las tuberías metálicas manuales tienen un 90 % de recuperación; las de arcilla y las generadas automáticamente no devuelven tubería.
+Cada tubería oculta consume un cubo preparado completo; consulta las variantes admitidas en [Redes de tuberías](pipe-networks.md#recetas-de-tuberias). Las tuberías metálicas manuales tienen un 90 % de recuperación; las de arcilla y la fontanería oculta revelada al inspeccionar un edificio no devuelven tubería.
 
 <!-- SCREENSHOT: 03-pipe-shapes.png — Formas de la Tubería de fluidos y ejemplos visible/oculto. -->
 <!-- SCREENSHOT: 04-vertical-pipe-floors.png — Tubería vertical de fluidos uniendo dos plantas. -->

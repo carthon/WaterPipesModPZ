@@ -1,6 +1,11 @@
-# Fontanería de edificios
+# Inspeccionar la fontanería de un edificio
 
-**Fontanear el edificio** genera un árbol de tubería oculta y sin anillos desde la casilla elegida hasta cada aparato sin conectar que pueda alcanzar dentro del mismo edificio. Reutiliza tuberías existentes, solo cambia de planta donde una pared norte u oeste admite un montante y nunca construye encima de otra tubería.
+Los edificios generados por el mundo se tratan como si su instalación de fontanería ya existiera. Para no generar redes en todos los edificios del mapa, Water Pipes solo materializa esa instalación oculta cuando eliges **Fontanear el edificio**. Para el jugador, la acción **inspecciona y revela la fontanería existente del edificio**; no es una herramienta para instalar tuberías automáticamente en una construcción hecha por el jugador.
+
+Al inspeccionarla, el mod crea un árbol de tubería oculta y sin anillos desde la casilla elegida hasta cada aparato sin conectar que pueda alcanzar en el mismo edificio. Reutiliza las tuberías compatibles que ya haya, solo cambia de planta donde una pared norte u oeste admite un montante y nunca coloca un tramo oculto encima de otra tubería.
+
+!!! warning "Solo edificios del mundo"
+    **Fontanear el edificio no instala automáticamente una red en edificios construidos por jugadores.** En ellos debes tender a mano tuberías de suelo, ocultas y verticales, y después conectar cada aparato de la forma habitual.
 
 ## Procedimiento
 
@@ -8,13 +13,13 @@
 2. Lleva las Tuberías de metal necesarias: por defecto, una por aparato conectado, sin importar la longitud del recorrido.
 3. Haz clic derecho en una casilla con suelo adecuada y elige **Fontanear el edificio**.
 4. Revisa la descripción y comienza la acción. Se planifican primero los aparatos más cercanos.
-5. Al terminar, conecta el árbol generado a un depósito o fuente y revísalo con **Mostrar red de tuberías**.
+5. Al terminar, conecta el árbol revelado a un depósito o fuente y revísalo con **Mostrar red de tuberías**.
 
-Una pasada coloca como máximo 200 casillas nuevas y examina hasta 8000 casillas del edificio. Si el resultado es parcial, repite desde otro lugar. Cobra los aparatos planificados al empezar y devuelve el coste de los que no alcance. El trabajo ya colocado permanece si se interrumpe. La tubería generada no devuelve material al desmontarla.
+Una inspección puede revelar como máximo 200 casillas nuevas y examina hasta 8000 casillas del edificio. Si el resultado es parcial, repite desde otro lugar. Cobra los aparatos planificados al empezar y devuelve el coste de los que no alcance. La fontanería ya revelada permanece si se interrumpe. La tubería oculta revelada no devuelve material al desmontarla.
 
-<!-- SCREENSHOT: 21-building-before.png — Casa de varias estancias sin fontanear antes de ejecutar la acción. -->
-<!-- SCREENSHOT: 22-building-plumb-action.png — Acción Fontanear el edificio y descripción de su coste. -->
-<!-- SCREENSHOT: 23-building-after-overlay.png — Árbol oculto generado, revelado después de completar. -->
+<!-- SCREENSHOT: 21-building-before.png — Casa del mundo con varias estancias antes de inspeccionar su fontanería existente. -->
+<!-- SCREENSHOT: 22-building-plumb-action.png — Acción de inspección Fontanear el edificio y descripción de su coste. -->
+<!-- SCREENSHOT: 23-building-after-overlay.png — Fontanería antes oculta visible en la superposición tras inspeccionarla. -->
 
 ## Mensajes de resultado
 
@@ -23,14 +28,12 @@ Una pasada coloca como máximo 200 casillas nuevas y examina hasta 8000 casillas
 | No estás dentro de un edificio | Elige una casilla con suelo reconocida como parte de un `IsoBuilding` |
 | Aquí no hay nada que fontanear | No se encontró ningún aparato compatible sin conectar |
 | Ya está fontaneado | Todos los aparatos detectados están conectados |
-| Edificio demasiado grande | Solo se planificó la zona examinada más cercana; repite en otra parte |
+| Edificio demasiado grande | Solo se inspeccionó la zona examinada más cercana; repite en otra parte |
 | No hay ruta | La distribución sólida o la red existente impiden un camino seguro |
 | No hay pared para llegar a su planta | Añade o elige una ruta con montante en pared norte/oeste |
 | Cerraría un anillo | Se omite deliberadamente para no crear un bucle |
 | Supera el límite | Se alcanzaron las 200 casillas nuevas; repite desde otro punto |
 | El servidor detuvo el trabajo | En multijugador rechazó trabajo obsoleto, inválido o sin materiales |
 
-En multijugador la construcción es autoritativa en el servidor. El cliente espera aprobación antes de conectar aparatos y se reembolsa lo cobrado por los que no se coloquen al cerrar la pasada.
-
-<!-- TODO: Verificar casas construidas por jugadores y bañeras de varias casillas en una partida real de Build 42. -->
+En multijugador la inspección es autoritativa en el servidor. El cliente espera aprobación antes de conectar aparatos y se reembolsa el coste de las conexiones que no puedan completarse al cerrar la pasada.
 

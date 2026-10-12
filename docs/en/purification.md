@@ -18,7 +18,7 @@ First build and orient a Fluid Router: green is tainted-water **IN**, red is cle
 
 ## Operation and filter
 
-While powered, it draws tainted water at up to 20 units/min and converts up to 10 units/min. Its internal input and output buffers each hold 50 units. Clean water and mixed liquids are not filtered. External clean-side storage is optional, but recommended: without it, processing pauses when the 50-unit output buffer fills.
+While powered, it draws tainted water at up to 20 units/min and converts up to 10 units/min. Its internal input and output buffers each hold 50 units. It does not process clean water or incompatible non-water liquids. External clean-side storage is optional, but recommended: without it, processing pauses when the 50-unit output buffer fills.
 
 The filter starts at 100%. At the default wear rate it cleans about 5,000 units before clogging. Right-click **Repair filter** with 1 charcoal item and 2 Ripped Sheets; repair returns it to 100%. **Open Purifier** reports power, input, output, rate, and filter condition. Ambient machine sound can be disabled under **Options → Mods → Water Pipes**.
 

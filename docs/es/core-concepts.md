@@ -10,7 +10,7 @@ fuente/depósito ── tubería ── bomba ── consumidor
                               └── rama ── consumidor
 ```
 
-La red debe contener un único tipo de fluido. Agua limpia combinada con contaminada se vuelve contaminada. Gasolina combinada con agua crea un componente mezclado que rechazan los consumidores normales.
+Los líquidos incompatibles no se mezclan: se rechaza cualquier transferencia que intentase combinar gasolina con agua u otro par incompatible. El agua limpia y la contaminada sí son compatibles, pero al juntarlas el resultado queda contaminado. Aun así, conviene usar redes independientes para que cada consumidor reciba el fluido previsto.
 
 ## Fronteras
 

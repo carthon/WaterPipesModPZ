@@ -4,11 +4,11 @@ Use this page to diagnose a network that is already built. For general how-to qu
 
 ## General diagnostic sequence
 
-1. Confirm Project Zomboid 42.15+, Water Pipes v0.10.0, and matching server/client mod versions.
+1. Confirm Project Zomboid 42.15+, Water Pipes v0.10.x, and matching server/client mod versions.
 2. Choose **Show pipe network** and trace the complete route.
 3. Verify a pipe on every endpoint's own tile and a Vertical Fluid Pipe at each floor change.
 4. Check closed valves, Fluid Router direction, and any configured pressure ceiling.
-5. Check that connected storage contains one intended fluid and is not dry or mixed.
+5. Check that connected storage contains the fluid required by the consumer and is not empty.
 6. Read local pressure with **Check pump**, a Pressure Gauge, or **Check irrigation emitter**.
 7. Check electricity and manual on/off state for pumps and purifiers.
 8. Review this save's Water Pipes Sandbox settings.
@@ -26,9 +26,9 @@ Use this page to diagnose a network that is already built. For general how-to qu
 ## Fixture has no supply
 
 **Symptom:** A plumbed fixture is empty.  
-**Possible causes:** No connected storage; storage is dry or below the fixture without enough pressure; the network contains mixed liquids; a remote break isolated it.  
+**Possible causes:** No connected storage; storage is dry, contains the wrong fluid, or is below the fixture without enough pressure; a remote break isolated it.
 **Checks:** Inspect storage, overlay, valves, and local pressure.  
-**Resolution:** Restore a valid route and supply. If mixed liquids are present, isolate them; a full recovery procedure is still being verified.  
+**Resolution:** Restore a valid route and a compatible water supply. Incompatible transfers are rejected rather than mixed.
 **Related:** [Sources and storage](sources-and-storage.md), [Fixtures](fixtures-and-plumbing.md)
 
 ## Pump is not moving water
@@ -50,7 +50,7 @@ Use this page to diagnose a network that is already built. For general how-to qu
 ## Purifier does not process water
 
 **Symptom:** No clean water reaches the output.  
-**Possible causes:** No power; clogged filter; input is clean or mixed rather than tainted; output tank full; incorrect router orientation.  
+**Possible causes:** No power; clogged filter; input is clean or is not water; output tank full; incorrect router orientation.
 **Checks:** Open the purifier window and verify the green input/red output layout.  
 **Resolution:** Restore power or capacity, repair the filter, or correct the input network.  
 **Related:** [Purification](purification.md)
@@ -63,20 +63,21 @@ Use this page to diagnose a network that is already built. For general how-to qu
 **Resolution:** Follow the reported condition; repair a burst drip emitter with the required materials and limit upstream pressure.  
 **Related:** [Irrigation](irrigation.md)
 
-## Water and petrol were mixed
+## One connected network contains water and petrol
 
-**Symptom:** Fixtures appear empty and the generator stops refuelling.  
-**Possible cause:** Water and petrol networks became connected.  
-**Checks:** Reveal the network and locate the unintended connection.  
-**Resolution:** Close a valve or separate the pipe routes immediately, then follow the recovery guidance in [Sources and storage](sources-and-storage.md). The exact emptying action depends on the affected vessel type.  
+**Symptom:** Fixtures or generators receive no usable fluid even though their own storage is not empty.
+**Possible cause:** Separate vessels containing incompatible fluids are attached to the same pipe component. The liquids do not blend or contaminate one another, but delivery is refused while the component exposes more than one incompatible type.
+**Checks:** Reveal the network and locate the connection between the water and petrol routes.
+**Resolution:** Close a valve or separate the routes. No draining or decontamination procedure is needed; the fluids remain in their original vessels.
+
 **Related:** [Fuel transport](fuel-transport.md), [Sources and storage](sources-and-storage.md)
 
 ## Multiplayer state differs between players
 
 **Symptom:** An action appears delayed, rejected, or inconsistent.  
-**Possible causes:** Server validation rejected the action, a client disconnected during whole-building plumbing, or mod versions differ.  
+**Possible causes:** Server validation rejected the action, a client disconnected while inspecting a world building's plumbing, or mod versions differ.
 **Checks:** Confirm matching mod versions and review the visible server response.  
-**Resolution:** Reconnect and retry after correcting the reported condition. Interrupted building-plumbing work is settled by the server on the next pass.  
-**Related:** [Compatibility](compatibility.md), [Plumbing a building](building-plumbing.md)
+**Resolution:** Reconnect and retry after correcting the reported condition. An interrupted building inspection is settled by the server on the next pass.
+**Related:** [Compatibility](compatibility.md), [Inspecting building plumbing](building-plumbing.md)
 
 If the documented checks do not explain the problem, report it through [GitHub Issues](https://github.com/carthon/WaterPipesModPZ/issues) with game/mod versions, multiplayer status, relevant settings, steps, logs, and screenshots.

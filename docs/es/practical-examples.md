@@ -1,6 +1,6 @@
 # Instalaciones prácticas con Water Pipes
 
-Estos ejemplos de fontanería para Project Zomboid utilizan mecánicas verificadas de v0.10.0. Consulta las recetas en el [catálogo de componentes](component-reference.md) y usa [Resolución de problemas](troubleshooting.md) si falla la comprobación final.
+Estos ejemplos de fontanería para Project Zomboid utilizan las mecánicas de la serie v0.10.x. Consulta las recetas en el [catálogo de componentes](component-reference.md) y usa [Resolución de problemas](troubleshooting.md) si falla la comprobación final.
 
 ## Primera red de agua
 
@@ -16,19 +16,21 @@ Estos ejemplos de fontanería para Project Zomboid utilizan mecánicas verificad
 
 **Comprobación:** recipiente/fuente verde, fregadero azul y ruta roja completa. **Errores habituales:** tubería adyacente, falta de vertical o esperar que la bomba almacene agua. Consulta [Redes de tuberías](pipe-networks.md) y [Aparatos](fixtures-and-plumbing.md).
 
-## Fontanear automáticamente una vivienda
+## Inspeccionar la fontanería de una casa del mundo
 
-**Objetivo:** generar un árbol oculto y sin anillos hasta los aparatos compatibles de un edificio existente.
+**Objetivo:** inspeccionar una casa generada por el mundo y revelar la fontanería oculta que se considera preexistente.
+
+La acción materializa la red solo cuando se solicita para que el mod no tenga que generar la fontanería de todos los edificios del mapa. No puede fontanear automáticamente una casa construida por el jugador; esa red debe tenderse a mano.
 
 **Materiales:** Llave utilizable y, por defecto, una Tubería de metal por aparato que vaya a conectarse.
 
 1. Sitúate dentro y elige una casilla con suelo próxima al suministro previsto.
 2. Haz clic derecho y selecciona **Fontanear el edificio**; revisa el coste.
-3. Deja terminar la acción. Si se interrumpe, lo ya construido permanece.
-4. Une la raíz al almacenamiento o fuente y revela la red.
+3. Deja terminar la inspección. Si se interrumpe, la fontanería ya revelada permanece.
+4. Une la raíz al almacenamiento o fuente y muestra la red revelada.
 5. Si el resultado es parcial, lee el motivo y repite desde un lugar mejor.
 
-**Comprobación:** cada aparato alcanzado aparece azul y el árbol se revela. **Errores habituales:** edificio no reconocido, tuberías insuficientes, ausencia de pared norte/oeste o límite de 200 tramos nuevos. Las casas construidas por jugadores y bañeras multicasilla siguen [pendientes de prueba real](building-plumbing.md).
+**Comprobación:** cada aparato alcanzado aparece azul y el árbol oculto se muestra en la superposición. **Errores habituales:** intentarlo en una construcción del jugador, edificio del mundo no reconocido, tuberías insuficientes, ausencia de pared norte/oeste o límite de 200 tramos nuevos. Consulta [Inspeccionar la fontanería de un edificio](building-plumbing.md).
 
 ## Extraer agua de un pozo o río
 
@@ -55,7 +57,7 @@ Estos ejemplos de fontanería para Project Zomboid utilizan mecánicas verificad
 4. Comprueba entrada contaminada, filtro y espacio en el búfer OUT de 50 unidades.
 5. Añade almacenamiento limpio para ampliar capacidad y presión posterior si hace falta.
 
-**Comprobación:** la ventana muestra **Filtrando** y aumenta la salida limpia, hasta 10 unidades/min. **Errores habituales:** enrutador invertido, entrada limpia/mezclada, sin corriente, filtro saturado o salida llena. Consulta [Purificación](purification.md).
+**Comprobación:** la ventana muestra **Filtrando** y aumenta la salida limpia, hasta 10 unidades/min. **Errores habituales:** enrutador invertido, entrada limpia o sin agua, falta de corriente, filtro saturado o salida llena. Consulta [Purificación](purification.md).
 
 ## Instalar riego
 
@@ -82,7 +84,7 @@ Estos ejemplos de fontanería para Project Zomboid utilizan mecánicas verificad
 4. Mantén todos los recipientes conectados solo con gasolina. Añade presión si la distancia o altura lo exige.
 5. Deja que baje del 25 % predeterminado; comprueba cada minuto y extrae hacia el 100 %.
 
-**Comprobación:** sale gasolina del depósito y entra en el generador. **Errores habituales:** red con agua/mezclada, depósito vacío, poca presión, umbral 0 o generador no instalado. Consulta [Transporte de combustible](fuel-transport.md).
+**Comprobación:** sale gasolina del depósito y entra en el generador. **Errores habituales:** solo hay agua disponible, el depósito de gasolina está vacío, hay poca presión, el umbral está en 0 o el generador no está instalado. Consulta [Transporte de combustible](fuel-transport.md).
 
 ## Separar y controlar ramales
 

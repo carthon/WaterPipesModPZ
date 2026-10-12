@@ -30,7 +30,7 @@ Usa la acción **Desmontar** del juego, no la herramienta para mover muebles.
 
 - Una tubería metálica construida a mano tiene un 90 % de probabilidad de devolver una Tubería de metal.
 - Una tubería de arcilla no devuelve nada: el segmento cocido se consume al colocarlo.
-- Las tuberías generadas por **Fontanear el edificio** no devuelven material porque esa acción cobra por aparato.
+- Las tuberías ocultas reveladas por **Fontanear el edificio** no devuelven material porque esa inspección cobra por aparato.
 - Destruir con maza, fuego o daño no devuelve nada.
 - Si una válvula o manómetro baja junto con su tubería, cada ingrediente se recupera de forma independiente con un 90 % de probabilidad.
 

@@ -5,7 +5,7 @@
 | Componente | Estado |
 |---|---|
 | Project Zomboid | Build 42.15 o posterior |
-| Water Pipes | La documentación corresponde al mod v0.10.0 |
+| Water Pipes | La documentación cubre la serie v0.10.x |
 | Un jugador | Compatible |
 | Multijugador y servidor dedicado | Compatible; construcción y cambios de fluido son autoritativos en servidor |
 | Idiomas del mod | Inglés, español y chino simplificado |
@@ -33,8 +33,8 @@ El global compartido `WaterPipesAPI` está disponible desde el arranque de parti
 |---|---|
 | `VERSION` | Versión de API; actualmente `1` |
 | `hasNetwork(square)` | Si hay una red alcanzable |
-| `getWaterAmount(square)` | Cantidad utilizable, o `0` si está vacía/mezclada |
-| `getWaterSummary(square)` | `{ amount, capacity, fluidType, isMixed }` o `nil` |
+| `getWaterAmount(square)` | Cantidad utilizable, o `0` si no hay ninguna o el componente expone tipos incompatibles |
+| `getWaterSummary(square)` | `{ amount, capacity, fluidType, isMixed }` o `nil`; `isMixed` señala varios tipos en un componente, no líquidos combinados dentro de un recipiente |
 | `drawWater(square, fluidType, amount)` | Cantidad realmente retirada |
 | `fillWater(square, fluidType, amount)` | Cantidad añadida; nunca crea mezclas |
 

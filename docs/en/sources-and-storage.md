@@ -21,10 +21,8 @@ Network storage settles every two in-game minutes: lower floors fill first, whil
 
 <!-- SCREENSHOT: 06-source-types.png — Barrel, well pump, open-water pump, mains fixture and hydrant examples. -->
 
-## Fluid quality and mixing
+## Fluid compatibility and water quality
 
-Clean and tainted water combine as tainted water. With realistic purification enabled, only the **Water Purifier (Electric)** restores clean water. Water and petrol in one connected component form a mixed network; normal fixture delivery and generator refuelling stop.
+Incompatible liquids never combine. A transfer that would mix petrol with water, or another incompatible liquid pair, is rejected; it does not contaminate either vessel. Keep separate pipe networks because fixtures and generators still require the correct fluid.
 
-To recover a mixed network, close a valve or dismantle a connecting pipe to isolate the liquid types, then empty or replace every contaminated vessel in the affected component before reconnecting it. The exact in-game removal sequence still needs play verification because available drain actions depend on the vessel type.
-
-<!-- TODO: Verify the safest in-game procedure for emptying every supported vessel after a mixed-fluid accident. -->
+Clean and tainted water are the exception: they are compatible, and combining them makes the resulting water tainted. With realistic purification enabled, only the **Water Purifier (Electric)** restores clean water.

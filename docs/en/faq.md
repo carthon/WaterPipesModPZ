@@ -6,7 +6,7 @@ This section also covers questions raised by players in the [Steam Workshop comm
 
 ### Which game version is supported?
 
-Water Pipes v0.10.0 requires **Project Zomboid Build 42.15 or newer**. See [Compatibility](compatibility.md).
+Water Pipes v0.10.x requires **Project Zomboid Build 42.15 or newer**. See [Compatibility](compatibility.md).
 
 ### Does Water Pipes have dependencies?
 
@@ -46,7 +46,7 @@ No. Connect at least one container; sources supply liquid but do not replace sto
 
 ### Can one network carry water and petrol?
 
-It can physically become mixed, but normal delivery then stops. Keep different liquids in isolated networks with a gap, closed valve, or router.
+Water and petrol never mix: an incompatible transfer is rejected. Keep them in isolated networks anyway, because fixtures and generators require the correct fluid. Clean and tainted water can combine, and the result is tainted.
 
 ## Pumps and pressure
 
@@ -100,9 +100,9 @@ After placing the pipe on its tile, equip a Pipe Wrench and use **Plumb Generato
 
 Build it over an existing plain floor pipe. Use **Close valve** to split both sides into independent networks and **Open valve** to join them again. Never reopen it between petrol and water. See the [control example](practical-examples.md#separate-and-control-branches).
 
-### How do I plumb a whole building?
+### What does “Plumb this building” actually do?
 
-Stand inside with a usable Pipe Wrench and enough Metal Pipes, right-click a floored tile, and choose **Plumb this building**. It creates a concealed tree to reachable fixtures. See the [complete walkthrough](practical-examples.md#automatically-plumb-a-house).
+In a world-generated building, it inspects and reveals plumbing that is treated as already existing. The mod materializes the concealed tree only on demand to avoid generating networks for every building on the map. It does **not** auto-plumb player-built structures; pipe those manually. See the [complete walkthrough](practical-examples.md#inspect-a-world-houses-plumbing).
 
 ## Movement and collision
 

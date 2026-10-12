@@ -10,7 +10,7 @@ source/storage ── pipe ── pump ── consumer
                        └── branch ── consumer
 ```
 
-The network should hold one fluid type. Clean water combined with tainted water becomes tainted. Petrol combined with water produces a mixed component that normal consumers refuse.
+Incompatible liquids do not mix: transfers that would combine petrol with water, or any other incompatible pair, are rejected. Clean and tainted water are compatible, but combining them turns the resulting water tainted. Dedicated networks are still recommended so every consumer receives the intended fluid.
 
 ## Boundaries
 

@@ -6,7 +6,7 @@ Esta sección también recoge dudas planteadas por jugadores en los [comentarios
 
 ### ¿Qué versión del juego es compatible?
 
-Water Pipes v0.10.0 requiere **Project Zomboid Build 42.15 o posterior**. Consulta [Compatibilidad](compatibility.md).
+Water Pipes v0.10.x requiere **Project Zomboid Build 42.15 o posterior**. Consulta [Compatibilidad](compatibility.md).
 
 ### ¿Water Pipes tiene dependencias?
 
@@ -46,7 +46,7 @@ No. Conecta al menos un recipiente; las fuentes aportan líquido, pero no sustit
 
 ### ¿Puede una red llevar agua y gasolina?
 
-Puede mezclarse físicamente, pero el suministro normal se detiene. Separa líquidos mediante un hueco, una válvula cerrada o un enrutador.
+El agua y la gasolina nunca se mezclan: se rechaza una transferencia incompatible. Aun así, mantenlas en redes aisladas porque los aparatos y generadores necesitan el fluido correcto. El agua limpia sí puede combinarse con contaminada, y el resultado queda contaminado.
 
 ## Bombas y presión
 
@@ -100,9 +100,9 @@ Además de colocar la tubería en su casilla, equipa una Llave para tubos y usa 
 
 Constrúyela sobre una tubería de suelo normal. **Cerrar válvula** separa ambos lados y **Abrir válvula** vuelve a unirlos. Nunca la abras entre gasolina y agua. Consulta el [ejemplo de control](practical-examples.md#separar-y-controlar-ramales).
 
-### ¿Cómo se fontanea un edificio entero?
+### ¿Qué hace realmente «Fontanear el edificio»?
 
-Sitúate dentro con una Llave utilizable y suficientes Tuberías de metal, haz clic derecho en una casilla con suelo y elige **Fontanear el edificio**. Consulta el [procedimiento completo](practical-examples.md#fontanear-automaticamente-una-vivienda).
+En un edificio generado por el mundo, inspecciona y revela una fontanería que se considera preexistente. El mod solo materializa el árbol oculto cuando se solicita para no generar redes en todos los edificios del mapa. **No** fontanea automáticamente construcciones del jugador; tiende esas redes a mano. Consulta el [procedimiento completo](practical-examples.md#inspeccionar-la-fontaneria-de-una-casa-del-mundo).
 
 ## Movimiento y colisiones
 

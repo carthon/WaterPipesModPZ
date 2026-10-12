@@ -4,11 +4,11 @@ Usa esta página para diagnosticar una red ya construida. Para dudas generales, 
 
 ## Diagnóstico general paso a paso
 
-1. Confirma Project Zomboid 42.15+, Water Pipes v0.10.0 y la misma versión en servidor/clientes.
+1. Confirma Project Zomboid 42.15+, Water Pipes v0.10.x y la misma versión en servidor/clientes.
 2. Usa **Mostrar red de tuberías** y sigue toda la ruta.
 3. Comprueba una tubería en la propia casilla de cada extremo y una vertical en cada cambio de planta.
 4. Revisa válvulas cerradas, orientación del Enrutador y límites de presión.
-5. Comprueba que los depósitos contengan un solo líquido correcto y no estén vacíos ni mezclados.
+5. Comprueba que los depósitos contengan el fluido que necesita el consumidor y no estén vacíos.
 6. Lee la presión con **Ver estado de la bomba**, un Manómetro o **Comprobar emisor de riego**.
 7. Revisa electricidad e interruptor manual de bombas y purificadores.
 8. Revisa las opciones de Sandbox de Water Pipes en esa partida.
@@ -26,9 +26,9 @@ Usa esta página para diagnosticar una red ya construida. Para dudas generales, 
 ## Un aparato no tiene suministro
 
 **Síntoma:** Un aparato instalado aparece vacío.  
-**Posibles causas:** No hay almacenamiento conectado; está vacío o debajo sin presión; líquidos mezclados; rotura lejana.  
+**Posibles causas:** No hay almacenamiento conectado; está vacío, contiene el fluido incorrecto o está debajo sin presión suficiente; rotura lejana.
 **Comprobaciones:** Revisa recipientes, superposición, válvulas y presión local.  
-**Solución:** Restaura una ruta y suministro válidos. Si hay una mezcla, aísla los líquidos; el procedimiento completo de recuperación sigue pendiente de verificación.  
+**Solución:** Restaura una ruta válida y un suministro de agua compatible. Las transferencias incompatibles se rechazan en vez de mezclarse.
 **Relacionado:** [Fuentes y almacenamiento](sources-and-storage.md), [Aparatos](fixtures-and-plumbing.md)
 
 ## La bomba no mueve agua
@@ -50,7 +50,7 @@ Usa esta página para diagnosticar una red ya construida. Para dudas generales, 
 ## El purificador no procesa agua
 
 **Síntoma:** No llega agua limpia a la salida.  
-**Posibles causas:** Sin corriente; filtro saturado; entrada limpia o mezclada; salida llena; orientación incorrecta.  
+**Posibles causas:** Sin corriente; filtro saturado; entrada limpia o que no contiene agua; salida llena; orientación incorrecta.
 **Comprobaciones:** Abre su ventana y revisa la entrada verde y salida roja.  
 **Solución:** Restaura corriente o capacidad, repara el filtro o corrige la red de entrada.  
 **Relacionado:** [Purificación](purification.md)
@@ -63,20 +63,21 @@ Usa esta página para diagnosticar una red ya construida. Para dudas generales, 
 **Solución:** Sigue la condición indicada; repara el gotero y limita la presión anterior.  
 **Relacionado:** [Riego](irrigation.md)
 
-## Se han mezclado agua y gasolina
+## Una red conectada contiene agua y gasolina
 
-**Síntoma:** Los aparatos aparecen vacíos y el generador deja de repostar.  
-**Posible causa:** Las redes de agua y gasolina se han unido.  
-**Comprobaciones:** Revela la red y localiza la unión involuntaria.  
-**Solución:** Cierra una válvula o separa las rutas de inmediato y sigue la recuperación de [Fuentes y almacenamiento](sources-and-storage.md). La acción exacta para vaciar depende del tipo de recipiente afectado.  
+**Síntoma:** Los aparatos o generadores no reciben un fluido utilizable aunque sus depósitos correspondientes no estén vacíos.
+**Posible causa:** Hay recipientes con fluidos incompatibles conectados al mismo componente de tuberías. Los líquidos no se combinan ni se contaminan entre sí, pero el suministro se rechaza mientras el componente exponga más de un tipo incompatible.
+**Comprobaciones:** Revela la red y localiza la unión entre las rutas de agua y gasolina.
+**Solución:** Cierra una válvula o separa las rutas. No hace falta vaciar ni descontaminar nada: los fluidos permanecen en sus recipientes originales.
+
 **Relacionado:** [Transporte de combustible](fuel-transport.md), [Fuentes y almacenamiento](sources-and-storage.md)
 
 ## El estado difiere entre jugadores
 
 **Síntoma:** Una acción tarda, se rechaza o parece incoherente.  
-**Posibles causas:** Rechazo del servidor, desconexión durante el fontanado o versiones distintas.  
+**Posibles causas:** Rechazo del servidor, desconexión mientras se inspeccionaba la fontanería de un edificio del mundo o versiones distintas.
 **Comprobaciones:** Confirma versiones idénticas y revisa la respuesta visible del servidor.  
-**Solución:** Reconecta y repite tras corregir la condición. El servidor liquida un fontanado interrumpido en la siguiente pasada.  
-**Relacionado:** [Compatibilidad](compatibility.md), [Fontanear un edificio](building-plumbing.md)
+**Solución:** Reconecta y repite tras corregir la condición. El servidor liquida una inspección interrumpida en la siguiente pasada.
+**Relacionado:** [Compatibilidad](compatibility.md), [Inspeccionar fontanería](building-plumbing.md)
 
 Si estas comprobaciones no explican el problema, notifícalo en [GitHub Issues](https://github.com/carthon/WaterPipesModPZ/issues) con versiones, estado multijugador, ajustes, pasos, registros y capturas.

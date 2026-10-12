@@ -61,7 +61,7 @@ El barril sigue siendo necesario: la bomba empuja y mueve el agua, pero no almac
 Un enrutador no necesita corriente y nunca añade presión: con la bomba apagada, los goteros reciben el 1 m del barril. Más en [Enrutadores y válvulas](routers-and-valves.md) y [Riego](irrigation.md).
 
 !!! warning
-    Una bomba aporta o mueve agua, pero no la almacena. Añade al menos un recipiente y nunca unas gasolina y agua en la misma red.
+    Una bomba aporta o mueve agua, pero no la almacena. Añade al menos un recipiente. Mantén separadas las rutas de gasolina y agua para que sean fáciles de revisar, aunque los líquidos incompatibles se rechazan en vez de mezclarse.
 
 ## Encuentra lo que necesitas
 
@@ -72,7 +72,7 @@ Un enrutador no necesita corriente y nunca añade presión: con la bomba apagada
 | Seguir instalaciones completas de ejemplo | [Ejemplos prácticos](practical-examples.md) |
 | Extraer de un pozo, río, red municipal o hidrante | [Fuentes y almacenamiento](sources-and-storage.md) |
 | Conectar un fregadero, ducha, inodoro o lavadora | [Aparatos y fontanería](fixtures-and-plumbing.md) |
-| Fontanear automáticamente una casa existente | [Fontanería de edificios](building-plumbing.md) |
+| Inspeccionar y revelar la fontanería oculta de una casa del mundo | [Inspeccionar fontanería](building-plumbing.md) |
 | Transportar gasolina y repostar un generador | [Transporte de combustible](fuel-transport.md) |
 | Cambiar la dificultad o los valores de simulación | [Opciones de sandbox](sandbox-settings.md) |
 | Diagnosticar algo que no funciona | [Resolución de problemas](troubleshooting.md) y [Preguntas frecuentes](faq.md) |
@@ -82,4 +82,4 @@ Un enrutador no necesita corriente y nunca añade presión: con la bomba apagada
 - Aprende a colocar y desmontar en [Redes de tuberías](pipe-networks.md).
 - Añade fuentes naturales y depósitos en [Fuentes y almacenamiento](sources-and-storage.md).
 - Resuelve recorridos largos o cuesta arriba en [Bombas y presión](pumps-and-pressure.md).
-- Conecta una casa completa en [Fontanería de edificios](building-plumbing.md).
+- Revela la red preexistente de un edificio del mundo en [Inspeccionar fontanería](building-plumbing.md). Las construcciones del jugador se conectan a mano.

@@ -7,7 +7,7 @@
 Build connected networks that transport and distribute water, petrol, and other compatible liquids throughout your Project Zomboid base.
 
 <div class="wp-meta" markdown>
-<span>v0.10.0</span>
+<span>v0.10.x</span>
 </div>
 
 <div class="wp-actions" markdown>
@@ -37,7 +37,7 @@ Set up drip emitters or a pressurised 3×3 sprinkler zone.
 <div markdown>
 ### :material-tools: [Fix a network](troubleshooting.md)
 
-Diagnose connections, pressure, pumps, purifiers, and mixed liquids.
+Diagnose connections, pressure, pumps, purifiers, and incorrect fluid supply.
 </div>
 </div>
 
@@ -47,7 +47,7 @@ Diagnose connections, pressure, pumps, purifiers, and mixed liquids.
 <div markdown>
 ### :material-hammer-wrench: Build
 
-Lay floor, vertical, and concealed pipes, or [plumb a whole building](building-plumbing.md).
+Lay floor, vertical, and concealed pipes, or [inspect the hidden plumbing of a world building](building-plumbing.md).
 </div>
 <div markdown>
 ### :material-water: Supply and store
@@ -67,7 +67,7 @@ Supply fixtures, purify water, irrigate crops, or deliver petrol to generators.
 </div>
 
 !!! info "Guide status"
-    This manual documents the verified v0.10.0 features and includes complete setup and troubleshooting instructions. In-game screenshots are being prepared.
+    This manual documents the v0.10.x feature series and includes complete setup and troubleshooting instructions. In-game screenshots are being prepared.
 
 ## Project links
 

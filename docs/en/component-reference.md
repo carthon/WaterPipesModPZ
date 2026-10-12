@@ -1,6 +1,6 @@
 # Water Pipes component reference
 
-This catalogue lists every component available under **Build menu → Piping** in Water Pipes v0.10.0. A usable Pipe Wrench is kept by every recipe that names it.
+This catalogue lists every component available under **Build menu → Piping** in Water Pipes v0.10.x. A usable Pipe Wrench is kept by every recipe that names it.
 
 ## Pipes
 
@@ -11,7 +11,7 @@ This catalogue lists every component available under **Build menu → Piping** i
 | **Concealed Fluid Pipe** | Tubería de fluidos oculta | 1 pipe and 1 full supported bucket of prepared clay cement or concrete; no skill | Hidden floor pipe; reveal it with **Show pipe network** |
 | **Concealed Vertical Fluid Pipe** | Tubería vertical de fluidos oculta | Same as concealed floor pipe; no skill | Hidden north/west riser between levels |
 
-Each concealed pipe consumes one complete prepared bucket; see [Pipe networks](pipe-networks.md#pipe-recipes) for the accepted variants. Metal hand-built pipes have a 90% recovery chance; clay and automatically generated pipes return no pipe.
+Each concealed pipe consumes one complete prepared bucket; see [Pipe networks](pipe-networks.md#pipe-recipes) for the accepted variants. Metal hand-built pipes have a 90% recovery chance; clay pipes and concealed plumbing revealed by a building inspection return no pipe.
 
 <!-- SCREENSHOT: 03-pipe-shapes.png — Fluid Pipe shapes plus a visible and concealed example. -->
 <!-- SCREENSHOT: 04-vertical-pipe-floors.png — Vertical Fluid Pipe joining two levels. -->

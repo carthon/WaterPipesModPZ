@@ -6,7 +6,7 @@
 4. Carry a Pipe Wrench, right-click the generator, and choose **Plumb Generator**.
 5. Keep the network petrol-only. The generator checks once per in-game minute.
 
-When its tank falls below the configured threshold (25% by default), it draws toward the target (100% by default). Setting the threshold to 0 disables automatic refuelling. It only accepts a single-fluid Petrol network; an empty, mixed, or water network supplies nothing.
+When its tank falls below the configured threshold (25% by default), it draws toward the target (100% by default). Setting the threshold to 0 disables automatic refuelling. It only draws Petrol: an empty network or one that offers water supplies nothing. Incompatible liquids are rejected rather than mixed.
 
 ![Isolated petrol network](../assets/images/diagram-fuel-network.svg){ .wp-diagram }
 
@@ -21,4 +21,4 @@ The dashed perimeter means this line stays isolated from water.
 Use **Unplumb Generator** to disconnect it without removing the pipe.
 
 !!! danger
-    Never bridge a petrol network to drinking water. Use a physical gap, closed valve, or correctly oriented router and verify the overlay before opening a boundary.
+    Keep petrol and drinking-water routes separate. They cannot mix, but a shared layout is harder to inspect and does not let a generator draw water or a fixture draw petrol. Use a physical gap, closed valve, or correctly oriented router.

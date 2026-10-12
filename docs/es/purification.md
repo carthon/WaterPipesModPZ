@@ -18,7 +18,7 @@ Construye y orienta primero un Enrutador de fluidos: verde es la **entrada** de 
 
 ## Funcionamiento y filtro
 
-Con corriente, aspira hasta 20 unidades/min y convierte hasta 10 unidades/min. Sus depósitos internos de entrada y salida guardan 50 unidades cada uno. No filtra agua limpia ni líquidos mezclados. El almacenamiento externo del lado limpio es opcional, pero recomendable: sin él, el proceso se detiene cuando se llena el búfer de salida de 50 unidades.
+Con corriente, aspira hasta 20 unidades/min y convierte hasta 10 unidades/min. Sus depósitos internos de entrada y salida guardan 50 unidades cada uno. No procesa agua limpia ni líquidos incompatibles que no sean agua. El almacenamiento externo del lado limpio es opcional, pero recomendable: sin él, el proceso se detiene cuando se llena el búfer de salida de 50 unidades.
 
 El filtro empieza al 100 %. Con el desgaste predeterminado limpia unas 5000 unidades antes de atascarse. Usa **Reparar filtro** con 1 objeto de carbón y 2 Trozos de tela; vuelve al 100 %. **Abrir purificador** muestra corriente, entrada, salida, ritmo y estado del filtro. El sonido ambiente puede desactivarse en **Opciones → Mods → Water Pipes**.
 

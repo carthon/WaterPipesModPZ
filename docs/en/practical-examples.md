@@ -1,6 +1,6 @@
 # Practical Water Pipes installations
 
-These Project Zomboid plumbing examples use the verified v0.10.0 mechanics. Recipe details are in the [component reference](component-reference.md); use [Troubleshooting](troubleshooting.md) if a final check fails.
+These Project Zomboid plumbing examples use the v0.10.x mechanics. Recipe details are in the [component reference](component-reference.md); use [Troubleshooting](troubleshooting.md) if a final check fails.
 
 ## First water network
 
@@ -16,19 +16,21 @@ These Project Zomboid plumbing examples use the verified v0.10.0 mechanics. Reci
 
 **Check:** container/source is green, sink is blue, and the whole pipe route is red. **Common errors:** placing the endpoint pipe beside the object, omitting a vertical riser, or expecting the pump itself to store water. See [Pipe networks](pipe-networks.md) and [Fixtures](fixtures-and-plumbing.md).
 
-## Automatically plumb a house
+## Inspect a world house's plumbing
 
-**Goal:** generate a concealed, loop-free pipe tree to compatible fixtures in an existing building.
+**Goal:** inspect a world-generated house and reveal the concealed plumbing that is treated as already existing there.
+
+This action materializes the network on demand so the mod does not have to generate plumbing for every building on the map. It cannot auto-plumb a player-built house; build that network manually instead.
 
 **Materials:** usable Pipe Wrench and, by default, one Metal Pipe per fixture that will be connected.
 
 1. Stand inside the building and choose a floored root tile near the intended supply.
 2. Right-click and select **Plumb this building**; review the reported price.
-3. Let the timed action finish. If interrupted, already placed work remains.
-4. Connect the root to storage or a source and reveal the network.
+3. Let the timed inspection finish. If interrupted, plumbing already revealed remains.
+4. Connect the root to storage or a source and show the revealed network.
 5. If the result is partial, read the result reason and run another pass from a better location.
 
-**Check:** each reached fixture is blue and the concealed tree appears when revealed. **Common errors:** no recognized building, insufficient pipes, no north/west wall for a floor change, or the 200-new-tile limit. Player-built houses and multi-tile bathtubs remain [live-game verification cases](building-plumbing.md).
+**Check:** each reached fixture is blue and the concealed tree appears in the overlay. **Common errors:** attempting it in a player-built structure, no recognized world building, insufficient pipes, no north/west wall for a floor change, or the 200-new-tile limit. See [Inspecting a building's plumbing](building-plumbing.md).
 
 ## Draw water from a well or river
 
@@ -55,7 +57,7 @@ These Project Zomboid plumbing examples use the verified v0.10.0 mechanics. Reci
 4. Confirm tainted intake, filter condition, and free room in its 50-unit output buffer.
 5. Add clean-side storage for more capacity; add downstream pressure if required.
 
-**Check:** the window says **Filtering** and clean output increases, up to 10 units/min. **Common errors:** reversed router, clean or mixed input, no power, clogged filter, or full output. See [Water purification](purification.md).
+**Check:** the window says **Filtering** and clean output increases, up to 10 units/min. **Common errors:** reversed router, clean or non-water input, no power, clogged filter, or full output. See [Water purification](purification.md).
 
 ## Install irrigation
 
@@ -82,7 +84,7 @@ These Project Zomboid plumbing examples use the verified v0.10.0 mechanics. Reci
 4. Keep every connected vessel petrol-only. Add pressure if distance or elevation requires it.
 5. Let the generator fall below the default 25% threshold; it checks once per minute and draws toward 100%.
 
-**Check:** petrol leaves storage and enters the generator. **Common errors:** water/mixed network, empty storage, insufficient pressure, threshold set to 0, or generator not plumbed. See [Fuel transport](fuel-transport.md).
+**Check:** petrol leaves storage and enters the generator. **Common errors:** only water is available, petrol storage is empty, pressure is insufficient, threshold is set to 0, or the generator is not plumbed. See [Fuel transport](fuel-transport.md).
 
 ## Separate and control branches
 

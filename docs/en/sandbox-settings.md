@@ -1,6 +1,6 @@
 # Sandbox settings
 
-Water Pipes v0.10.0 exposes 26 per-save options. Values described as **tenths** are divided by ten in play: `250` means 25.0 m of water head.
+Water Pipes v0.10.x exposes 26 per-save options. Values described as **tenths** are divided by ten in play: `250` means 25.0 m of water head.
 
 ## Liquids and generators
 
@@ -47,11 +47,11 @@ Water Pipes v0.10.0 exposes 26 per-save options. Values described as **tenths** 
 | Fire hydrant reserve | 1,000 L | 0–20,000 | Water left after town shutoff |
 | Fire hydrant pressure | 400 | 0–1000 tenths | Default 40.0 m while mains-fed |
 
-## Building plumbing
+## Building-plumbing inspection
 
 | Setting | Default | Range | Effect |
 |---|---:|---:|---|
-| Metal pipes per fixture | 1 | 0–10 | Cost of **Plumb this building** per connected fixture |
+| Metal pipes per fixture | 1 | 0–10 | Cost per fixture revealed and connected by **Plumb this building** in a world building |
 
 ## Suggested starting profiles
 

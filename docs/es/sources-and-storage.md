@@ -21,10 +21,8 @@ El almacenamiento se asienta cada dos minutos de juego: primero se llenan las pl
 
 <!-- SCREENSHOT: 06-source-types.png — Ejemplos de barril, bomba en pozo, bomba en agua abierta, aparato municipal e hidrante. -->
 
-## Calidad y mezcla de fluidos
+## Compatibilidad de fluidos y calidad del agua
 
-El agua limpia y contaminada se combinan como agua contaminada. Con purificación realista, solo el **Purificador de agua (eléctrico)** recupera agua limpia. Agua y gasolina en un mismo componente forman una red mezclada; se detienen el suministro a aparatos y el repostaje de generadores.
+Los líquidos incompatibles nunca se combinan. Se rechaza cualquier transferencia que intentase mezclar gasolina con agua u otro par incompatible, sin contaminar ninguno de los recipientes. Mantén redes separadas porque los aparatos y generadores siguen necesitando el fluido correcto.
 
-Para recuperar una red mezclada, cierra una válvula o desmonta una tubería de enlace para aislar los líquidos y después vacía o sustituye todos los recipientes contaminados del componente antes de reconectarlo. La secuencia exacta dentro del juego todavía debe verificarse porque las acciones disponibles dependen del tipo de recipiente.
-
-<!-- TODO: Verificar el procedimiento más seguro dentro del juego para vaciar todos los recipientes compatibles tras una mezcla accidental. -->
+El agua limpia y la contaminada son la excepción: son compatibles y, al juntarlas, el resultado queda contaminado. Con purificación realista, solo el **Purificador de agua (eléctrico)** recupera agua limpia.

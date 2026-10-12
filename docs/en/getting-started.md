@@ -61,7 +61,7 @@ The barrel is still required: a pump boosts and moves water but stores none.
 A router needs no power and never adds pressure: with the pump off, the drips get the barrel's 1 m. More in [Routers and valves](routers-and-valves.md) and [Irrigation](irrigation.md).
 
 !!! warning
-    A pump supplies or moves water but does not store it. Give the network at least one container, and never join petrol and water in the same network.
+    A pump supplies or moves water but does not store it. Give the network at least one container. Keep petrol and water routes separate for clarity, although incompatible liquids are rejected rather than mixed.
 
 ## Find what you need
 
@@ -72,7 +72,7 @@ A router needs no power and never adds pressure: with the pump off, the drips ge
 | Follow complete example installations | [Practical examples](practical-examples.md) |
 | Draw from a well, river, town mains, or hydrant | [Sources and storage](sources-and-storage.md) |
 | Connect a sink, shower, toilet, or washing machine | [Fixtures and plumbing](fixtures-and-plumbing.md) |
-| Automatically pipe an existing house | [Plumbing a building](building-plumbing.md) |
+| Inspect and reveal the hidden plumbing of a world house | [Inspecting building plumbing](building-plumbing.md) |
 | Move petrol and refuel a generator | [Fuel transport](fuel-transport.md) |
 | Change difficulty or simulation values | [Sandbox settings](sandbox-settings.md) |
 | Diagnose something that does not work | [Troubleshooting](troubleshooting.md) and the [FAQ](faq.md) |
@@ -82,4 +82,4 @@ A router needs no power and never adds pressure: with the pump off, the drips ge
 - Learn placement and dismantling in [Pipe networks](pipe-networks.md).
 - Add natural sources and storage in [Sources and storage](sources-and-storage.md).
 - Solve long or uphill runs in [Pumps and pressure](pumps-and-pressure.md).
-- Connect a whole building in [Plumbing a building](building-plumbing.md).
+- Reveal the pre-existing network in a world building with [Inspecting building plumbing](building-plumbing.md). Player-built structures must be piped manually.

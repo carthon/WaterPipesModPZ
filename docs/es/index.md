@@ -7,7 +7,7 @@
 Construye redes conectadas para transportar y distribuir agua, gasolina y otros líquidos compatibles por tu base de Project Zomboid.
 
 <div class="wp-meta" markdown>
-<span>v0.10.0</span>
+<span>v0.10.x</span>
 </div>
 
 <div class="wp-actions" markdown>
@@ -37,7 +37,7 @@ Instala goteros o una zona de aspersión 3×3 con presión suficiente.
 <div markdown>
 ### :material-tools: [Reparar una red](troubleshooting.md)
 
-Diagnostica conexiones, presión, bombas, purificadores y líquidos mezclados.
+Diagnostica conexiones, presión, bombas, purificadores y suministros de líquido incorrectos.
 </div>
 </div>
 
@@ -47,7 +47,7 @@ Diagnostica conexiones, presión, bombas, purificadores y líquidos mezclados.
 <div markdown>
 ### :material-hammer-wrench: Construye
 
-Tiende tuberías de suelo, verticales y ocultas, o [fontanea un edificio completo](building-plumbing.md).
+Tiende tuberías de suelo, verticales y ocultas, o [inspecciona la fontanería oculta de un edificio del mundo](building-plumbing.md).
 </div>
 <div markdown>
 ### :material-water: Abastece y almacena
@@ -67,7 +67,7 @@ Abastece aparatos, purifica agua, riega cultivos o lleva gasolina a generadores.
 </div>
 
 !!! info "Estado de la guía"
-    El manual documenta las funciones verificadas de la versión 0.10.0 e incluye instrucciones completas de instalación, uso y resolución de problemas. Las capturas del juego están en preparación.
+    El manual documenta la serie de funciones v0.10.x e incluye instrucciones completas de instalación, uso y resolución de problemas. Las capturas del juego están en preparación.
 
 ## Enlaces del proyecto
 

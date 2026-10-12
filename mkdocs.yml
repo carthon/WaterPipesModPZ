@@ -58,7 +58,7 @@ plugins:
             Practical examples: Ejemplos prácticos
             Construction and networks: Construcción y redes
             Pipe networks: Redes de tuberías
-            Plumbing a building: Fontanear un edificio
+            Inspect building plumbing: Inspeccionar fontanería
             Sources and storage: Fuentes y almacenamiento
             Fixtures and plumbing: Aparatos y fontanería
             Control and automation: Control y automatización
@@ -82,7 +82,7 @@ nav:
       - Practical examples: practical-examples.md
   - Construction and networks:
       - Pipe networks: pipe-networks.md
-      - Plumbing a building: building-plumbing.md
+      - Inspect building plumbing: building-plumbing.md
       - Sources and storage: sources-and-storage.md
       - Fixtures and plumbing: fixtures-and-plumbing.md
   - Control and automation:
