@@ -358,11 +358,24 @@ local function walkToEndpoint(playerObj, endpointObject)
     if luautils.walkAdjObject(playerObj, endpointObject, true) then
         return true
     end
-    local square = endpointObject.getSquare and endpointObject:getSquare() or nil
-    if square and math.floor(playerObj:getZ()) == square:getZ()
-        and math.abs(square:getX() + 0.5 - playerObj:getX()) <= REACH_TILES
-        and math.abs(square:getY() + 0.5 - playerObj:getY()) <= REACH_TILES then
-        return true
+    -- From the nearest tile of the fixture: a bath spans two.
+    local squares = {}
+    local ok = pcall(function()
+        local parts = ArrayList.new()
+        endpointObject:getSpriteGridObjectsIncludingSelf(parts)
+        for i = 1, parts:size() do
+            squares[#squares + 1] = parts:get(i - 1):getSquare()
+        end
+    end)
+    if not ok or #squares == 0 then
+        squares = { endpointObject.getSquare and endpointObject:getSquare() or nil }
+    end
+    for _, square in ipairs(squares) do
+        if square and math.floor(playerObj:getZ()) == square:getZ()
+            and math.abs(square:getX() + 0.5 - playerObj:getX()) <= REACH_TILES
+            and math.abs(square:getY() + 0.5 - playerObj:getY()) <= REACH_TILES then
+            return true
+        end
     end
     Logger.warn("No tile to reach the fixture from: " .. tostring(endpointObject))
     return false
