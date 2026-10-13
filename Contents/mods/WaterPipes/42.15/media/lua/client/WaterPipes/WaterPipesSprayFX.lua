@@ -111,7 +111,7 @@ local function rescanInner()
     for _, found in ipairs(WaterPipes.Profiler.time("sprayfx: near",
         Registry.near, "hydrants", px, py, pz, DRAW_RADIUS)) do
         claimed[found.key] = true
-        if Hydrant.isFlowing(found.object) then
+        if Hydrant.isGushing(found.object) then
             list[#list + 1] = { x = found.x, y = found.y, z = found.z,
                                 kind = "hydrant", phase = phaseFor(found.x, found.y) }
         end

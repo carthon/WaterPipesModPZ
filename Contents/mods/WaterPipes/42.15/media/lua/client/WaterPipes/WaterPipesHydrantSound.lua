@@ -111,7 +111,7 @@ function Sound.update()
     -- that actually exist. See WaterPipesTileRegistry.
     local seen = {}
     for _, found in ipairs(Registry.near("hydrants", px, py, pz, SCAN_RADIUS)) do
-        if Hydrant.isFlowing(found.object) then
+        if Hydrant.isGushing(found.object) then
             local sq = found.square
             local k = keyFor(sq)
             seen[k] = true

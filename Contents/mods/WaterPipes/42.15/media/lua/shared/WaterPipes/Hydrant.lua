@@ -4,12 +4,14 @@ WaterPipes.Hydrant = WaterPipes.Hydrant or {}
 require "WaterPipes/Invalidate"
 require "WaterPipes/Constants"
 require "WaterPipes/Mains"
+require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/State"
 require "WaterPipes/World"
 
 local Invalidate = WaterPipes.Invalidate
 local Constants = WaterPipes.Constants
 local Mains = WaterPipes.Mains
+local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local State = WaterPipes.State
 local World = WaterPipes.World
 local Hydrant = WaterPipes.Hydrant
@@ -175,7 +177,7 @@ function Hydrant.flowFor(dt)
 end
 
 -- Is water actually coming out right now? Open, and with something to give -- mains-fed, or still
--- holding some reserve. A cut hydrant whose reserve has run dry is open but silent. Drives the sound.
+-- holding some reserve. A cut hydrant whose reserve has run dry is open but gives nothing.
 function Hydrant.isFlowing(hydrant)
     if not Hydrant.isOpen(hydrant) then
         return false
@@ -183,9 +185,24 @@ function Hydrant.isFlowing(hydrant)
     return Hydrant.isMainsFed() or Hydrant.reserve(hydrant) > 0
 end
 
--- An OPEN hydrant gushes at its flow rate: whatever the network on its tile can take is fed in, the
--- rest spills onto the street and is wasted. While the town service runs its reserve is held full and
--- the waste costs nothing; once the water is cut, the whole flow comes out of the fixed reserve.
+-- A pipe on its tile takes the flow: a connected hydrant spills nothing.
+function Hydrant.isConnected(square)
+    return square ~= nil and PipeObjectUtils.getPipeOnSquare(square) ~= nil
+end
+
+-- Flowing onto the street: open, with water, and no pipe on its tile. Drives the gush, its sound and
+-- the wetting.
+function Hydrant.isGushing(hydrant)
+    if not Hydrant.isFlowing(hydrant) then
+        return false
+    end
+    return not Hydrant.isConnected(hydrant.getSquare and hydrant:getSquare() or nil)
+end
+
+-- An OPEN hydrant connected to a network feeds it what it can take and keeps the rest in the main.
+-- One with no pipe on its tile gushes at its flow rate onto the street: the water is lost and waters
+-- the hydrant's 3x3. While the town service runs its reserve is held full; once the water is cut, what
+-- leaves comes out of the fixed reserve.
 -- ===== The per-tick step =====
 -- Moved here from WaterPipeSystem. Which hydrants run comes off the open-hydrant registry in
 -- the tick; what an open one does with a minute is this.
@@ -209,15 +226,18 @@ function Hydrant.step(hydrant, square, dt)
         return
     end
 
-    -- The network takes what it can and the remainder is spilled: the reserve loses the whole flow whether
-    -- or not anything was connected.
-    NetworkAccess.fillFluidAtSquare(square, "Water", flow)
+    if Hydrant.isConnected(square) then
+        local added = NetworkAccess.fillFluidAtSquare(square, "Water", flow) or 0
+        if not mainsFed and added > 0 then
+            Hydrant.setReserve(hydrant, reserve - added)
+        end
+        return
+    end
+
     if not mainsFed then
         Hydrant.setReserve(hydrant, reserve - flow)
     end
-
-    -- The spilled water lands somewhere: the gush waters the hydrant's own 3x3 like a sprinkler. Free
-    -- litres -- they are already leaving through the open cap.
+    -- The gush waters the hydrant's own 3x3 like a sprinkler.
     if Irrigation then
         Irrigation.waterHydrantSurroundings(square, dt / 60)
     end
