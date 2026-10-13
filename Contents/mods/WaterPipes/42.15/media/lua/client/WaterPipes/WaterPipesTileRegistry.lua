@@ -389,8 +389,8 @@ function Registry.invalidate(x, y, z)
     statusCache[keyOf(x, y, z)] = nil
 end
 
--- A valve, hydrant or router changed what the networks deliver. Each status expires at its tile's phase
--- within STATUS_SPREAD_MS, so the recomputes spread over a few rebuilds instead of landing in one.
+-- A valve, hydrant or router changed what the networks deliver. Statuses expire over STATUS_SPREAD_MS,
+-- nearest to the player first, evenly by rank so a cluster around the player does not land in one rebuild.
 local STATUS_SPREAD_MS = 1500
 
 function Registry.invalidateStatuses()
@@ -399,10 +399,24 @@ function Registry.invalidateStatuses()
         statusCache = {}
         return
     end
+    local player = getPlayer and getPlayer() or nil
+    local px = player and player:getX() or nil
+    local py = player and player:getY() or nil
+    local order = {}
     for key, cached in pairs(statusCache) do
-        local x, y, z = key:match("^(-?%d+):(-?%d+):(-?%d+)$")
-        local offset = x and statusPhase(tonumber(x), tonumber(y), tonumber(z)) % STATUS_SPREAD_MS or 0
-        cached.stamp = math.min(cached.stamp, now + offset - STATUS_TTL_MS)
+        local x, y = key:match("^(-?%d+):(-?%d+):")
+        local distance = (px and x) and ((tonumber(x) - px) ^ 2 + (tonumber(y) - py) ^ 2) or 0
+        order[#order + 1] = { key = key, cached = cached, distance = distance }
+    end
+    table.sort(order, function(a, b)
+        if a.distance ~= b.distance then
+            return a.distance < b.distance
+        end
+        return a.key < b.key
+    end)
+    for rank, item in ipairs(order) do
+        local offset = math.floor((rank - 1) * STATUS_SPREAD_MS / #order)
+        item.cached.stamp = math.min(item.cached.stamp, now + offset - STATUS_TTL_MS)
     end
 end
 
