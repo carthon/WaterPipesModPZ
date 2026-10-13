@@ -12,6 +12,9 @@ local FluidSource = WaterPipes.EndpointFluidSource
 
 local CONSUME_EPSILON = 0.001
 
+-- FluidUtil.MIN_CONTAINER_CAPACITY: setCapacity never goes below it.
+local ENGINE_MIN_CAPACITY = 0.05
+
 -- The plumbed endpoint keeps its OWN FluidContainer component mirroring the connected pipe network.
 -- Using the vanilla "own container" path (usesExternalWaterSource = false) means the engine serves
 -- Drink/Wash/Fill straight from it, and consumption is reconciled back through NetworkAccess.useFluid.
@@ -339,9 +342,12 @@ local function writeSnapshot(endpoint, amount, fluidTypeName, networkCapacity)
         wantedCapacity = math.max(networkCapacity, 1)
     end
     local wanted = math.max(math.min(amount or 0, wantedCapacity), 0)
+    -- Checked against the tank itself as well as the recorded mirror: a tank left at another size by
+    -- an older version can carry a mirror that already reads right.
     local settled = type(previous) == "table"
         and previous.fluid == fluidTypeName
         and math.abs((tonumber(previous.capacity) or -1) - wantedCapacity) <= CONSUME_EPSILON
+        and math.abs(ownCapacity(endpoint) - math.max(wantedCapacity, ENGINE_MIN_CAPACITY)) <= CONSUME_EPSILON
         and math.abs(readAmount(endpoint) - wanted) <= CONSUME_EPSILON
 
     -- Written against already-right: a settled base should be almost all of the second.
@@ -385,8 +391,10 @@ function FluidSource.mirrorForClient(endpoint)
         -- Unplumbed: a tank we attached went back to what the fixture held, so this copy does too.
         local restored = modData and tonumber(modData[RESTORED_KEY])
         local fluidContainer = restored and getFluidContainer(endpoint)
-        if fluidContainer and fluidContainer.setCapacity and ownCapacity(endpoint) ~= restored then
-            pcall(fluidContainer.setCapacity, fluidContainer, math.max(restored, 0))
+        local target = math.max(restored or 0, ENGINE_MIN_CAPACITY)
+        if fluidContainer and fluidContainer.setCapacity
+            and math.abs(ownCapacity(endpoint) - target) > CONSUME_EPSILON then
+            pcall(fluidContainer.setCapacity, fluidContainer, target)
         end
         return false
     end
@@ -593,6 +601,9 @@ function FluidSource.clearForEndpoint(endpoint)
     if not isAuthoritative() or not endpoint then
         return
     end
+
+    -- What was drawn since the last refresh is the network's, before the tank is emptied.
+    reconcileConsumption(endpoint)
 
     local modData = getModData(endpoint)
     if modData then
