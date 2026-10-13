@@ -389,9 +389,13 @@ function Registry.invalidate(x, y, z)
     statusCache[keyOf(x, y, z)] = nil
 end
 
--- A valve, hydrant or router changed what the networks deliver. Statuses expire over STATUS_SPREAD_MS,
--- nearest to the player first, evenly by rank so a cluster around the player does not land in one rebuild.
-local STATUS_SPREAD_MS = 1500
+-- A valve, hydrant or router changed what the networks deliver. The stale statuses in reading range
+-- expire STATUS_PER_REBUILD per spray rebuild, nearest to the player first, so a small base updates on
+-- the next rebuild. Never spread past STATUS_TTL_MS: that is the rate they already expire at in play,
+-- so a big farm never recomputes more per rebuild than it does every three seconds anyway.
+local STATUS_PER_REBUILD = 8
+local STATUS_REBUILD_MS = 750           -- WaterPipesSprayFX RESCAN_MS
+local STATUS_READ_RADIUS = 30           -- WaterPipesSprayFX DRAW_RADIUS, the widest status reader
 
 function Registry.invalidateStatuses()
     local now = nowMs()
@@ -402,10 +406,13 @@ function Registry.invalidateStatuses()
     local player = getPlayer and getPlayer() or nil
     local px = player and player:getX() or nil
     local py = player and player:getY() or nil
-    local order = {}
+    local order, inRange = {}, 0
     for key, cached in pairs(statusCache) do
         local x, y = key:match("^(-?%d+):(-?%d+):")
-        local distance = (px and x) and ((tonumber(x) - px) ^ 2 + (tonumber(y) - py) ^ 2) or 0
+        local distance = (px and x) and math.max(math.abs(tonumber(x) - px), math.abs(tonumber(y) - py)) or 0
+        if distance <= STATUS_READ_RADIUS then
+            inRange = inRange + 1
+        end
         order[#order + 1] = { key = key, cached = cached, distance = distance }
     end
     table.sort(order, function(a, b)
@@ -414,9 +421,14 @@ function Registry.invalidateStatuses()
         end
         return a.key < b.key
     end)
+    -- Batches land a whole rebuild apart, so each rebuild takes exactly one whatever its phase.
+    local rebuilds = math.max(1, math.min(math.ceil(inRange / STATUS_PER_REBUILD),
+        math.floor(STATUS_TTL_MS / STATUS_REBUILD_MS)))
+    local perBatch = math.max(1, math.ceil(inRange / rebuilds))
     for rank, item in ipairs(order) do
-        local offset = math.floor((rank - 1) * STATUS_SPREAD_MS / #order)
-        item.cached.stamp = math.min(item.cached.stamp, now + offset - STATUS_TTL_MS)
+        -- Out of range nothing reads them; they go stale with the last batch.
+        local batch = math.min(math.floor((rank - 1) / perBatch), rebuilds - 1)
+        item.cached.stamp = math.min(item.cached.stamp, now + batch * STATUS_REBUILD_MS - STATUS_TTL_MS)
     end
 end
 
