@@ -5,11 +5,13 @@ require "WaterPipes/Invalidate"
 require "WaterPipes/Constants"
 require "WaterPipes/Mains"
 require "WaterPipes/State"
+require "WaterPipes/World"
 
 local Invalidate = WaterPipes.Invalidate
 local Constants = WaterPipes.Constants
 local Mains = WaterPipes.Mains
 local State = WaterPipes.State
+local World = WaterPipes.World
 local Hydrant = WaterPipes.Hydrant
 
 -- A fire hydrant is a plain vanilla street object (Mov_FireHydrant) with no water of its own. This
@@ -87,6 +89,23 @@ function Hydrant.setOpen(worldObject, open)
     -- NetworkAccess requires this module, so requiring it back would be a recursive require.
     local NetworkAccess = WaterPipes.NetworkAccess
     Invalidate.flowPathChanged()
+end
+
+-- Client: the server opened or closed a hydrant. Written here too, since the modData may arrive after this.
+function Hydrant.onServerCommand(module, command, args)
+    if module ~= "WaterPipes" or command ~= "hydrantOpenChanged" or not args then
+        return
+    end
+    local square = World.squareAt(args.x, args.y, args.z)
+    local modData = getModData(square and Hydrant.findOnSquare(square))
+    if modData then
+        modData[Constants.HYDRANT_OPEN_KEY] = args.open == true
+    end
+    Invalidate.flowPathChanged()
+end
+
+if Events and Events.OnServerCommand then
+    Events.OnServerCommand.Add(Hydrant.onServerCommand)
 end
 
 -- ===== Reserve =====
