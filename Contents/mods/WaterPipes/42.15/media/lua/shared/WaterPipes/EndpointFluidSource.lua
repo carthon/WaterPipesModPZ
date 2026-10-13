@@ -585,6 +585,7 @@ function FluidSource.restoreOriginalState(endpoint)
         modData[OUR_TANK_KEY] = nil
         modData[MIRROR_KEY] = nil
         modData[Constants.ENDPOINT_FLUID_LAST_SYNC_KEY] = 0
+        modData[Constants.ENDPOINT_FLUID_LAST_SYNC_LEGACY_KEY] = nil
         modData[RESTORED_KEY] = ours and 0 or nil
     end
     if endpoint.transmitModData then
@@ -635,6 +636,7 @@ function FluidSource.clearForEndpoint(endpoint)
     setSyncing(endpoint, false)
     if modData then
         modData[Constants.ENDPOINT_FLUID_LAST_SYNC_KEY] = 0
+        modData[Constants.ENDPOINT_FLUID_LAST_SYNC_LEGACY_KEY] = nil
     end
     if endpoint.transmitModData then
         pcall(endpoint.transmitModData, endpoint)
