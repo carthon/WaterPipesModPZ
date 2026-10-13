@@ -428,7 +428,8 @@ function Registry.invalidateStatuses()
     for rank, item in ipairs(order) do
         -- Out of range nothing reads them; they go stale with the last batch.
         local batch = math.min(math.floor((rank - 1) / perBatch), rebuilds - 1)
-        item.cached.stamp = math.min(item.cached.stamp, now + batch * STATUS_REBUILD_MS - STATUS_TTL_MS)
+        -- Set, not min: one already due on its own would land on top of an earlier batch.
+        item.cached.stamp = now + batch * STATUS_REBUILD_MS - STATUS_TTL_MS
     end
 end
 
