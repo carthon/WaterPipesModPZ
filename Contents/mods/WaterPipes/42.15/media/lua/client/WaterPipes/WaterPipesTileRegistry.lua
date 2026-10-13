@@ -389,13 +389,20 @@ function Registry.invalidate(x, y, z)
     statusCache[keyOf(x, y, z)] = nil
 end
 
--- A valve, hydrant or router changed what the networks deliver. The stale statuses in reading range
+-- A hydrant, router or the mains changed what the networks deliver. The stale statuses in reading range
 -- expire STATUS_PER_REBUILD per spray rebuild, nearest to the player first, so a small base updates on
 -- the next rebuild. Never spread past STATUS_TTL_MS: that is the rate they already expire at in play,
 -- so a big farm never recomputes more per rebuild than it does every three seconds anyway.
 local STATUS_PER_REBUILD = 8
 local STATUS_REBUILD_MS = 750           -- WaterPipesSprayFX RESCAN_MS
 local STATUS_READ_RADIUS = 30           -- WaterPipesSprayFX DRAW_RADIUS, the widest status reader
+
+local nextRebuildAt = nil
+
+-- The spray says when its next rebuild is due, so the batches can fall between its rebuilds.
+function Registry.noteNextRebuild(atMs)
+    nextRebuildAt = atMs
+end
 
 function Registry.invalidateStatuses()
     local now = nowMs()
@@ -406,14 +413,21 @@ function Registry.invalidateStatuses()
     local player = getPlayer and getPlayer() or nil
     local px = player and player:getX() or nil
     local py = player and player:getY() or nil
-    local order, inRange = {}, 0
+    local pz = player and math.floor(player:getZ()) or nil
+    local order, far = {}, {}
     for key, cached in pairs(statusCache) do
-        local x, y = key:match("^(-?%d+):(-?%d+):")
-        local distance = (px and x) and math.max(math.abs(tonumber(x) - px), math.abs(tonumber(y) - py)) or 0
-        if distance <= STATUS_READ_RADIUS then
-            inRange = inRange + 1
+        local x, y, z = key:match("^(-?%d+):(-?%d+):(-?%d+)$")
+        local distance = 0
+        if px and x then
+            -- Another floor counts as out of range: Registry.near only returns the player's own.
+            distance = tonumber(z) ~= pz and math.huge
+                or math.max(math.abs(tonumber(x) - px), math.abs(tonumber(y) - py))
         end
-        order[#order + 1] = { key = key, cached = cached, distance = distance }
+        if distance <= STATUS_READ_RADIUS then
+            order[#order + 1] = { key = key, cached = cached, distance = distance }
+        else
+            far[#far + 1] = cached
+        end
     end
     table.sort(order, function(a, b)
         if a.distance ~= b.distance then
@@ -421,15 +435,23 @@ function Registry.invalidateStatuses()
         end
         return a.key < b.key
     end)
-    -- Batches land a whole rebuild apart, so each rebuild takes exactly one whatever its phase.
-    local rebuilds = math.max(1, math.min(math.ceil(inRange / STATUS_PER_REBUILD),
+    local rebuilds = math.max(1, math.min(math.ceil(#order / STATUS_PER_REBUILD),
         math.floor(STATUS_TTL_MS / STATUS_REBUILD_MS)))
-    local perBatch = math.max(1, math.ceil(inRange / rebuilds))
+    local perBatch = math.max(1, math.ceil(#order / rebuilds))
+    -- Batches fall due halfway between the spray's rebuilds, a rebuild apart: a late frame then cannot
+    -- pull two into one rebuild.
+    local first = now
+    if nextRebuildAt and nextRebuildAt > now and nextRebuildAt - now <= STATUS_REBUILD_MS then
+        first = nextRebuildAt - STATUS_REBUILD_MS / 2
+    end
+    -- Set, not min: one already due on its own would land on top of an earlier batch.
     for rank, item in ipairs(order) do
-        -- Out of range nothing reads them; they go stale with the last batch.
-        local batch = math.min(math.floor((rank - 1) / perBatch), rebuilds - 1)
-        -- Set, not min: one already due on its own would land on top of an earlier batch.
-        item.cached.stamp = now + batch * STATUS_REBUILD_MS - STATUS_TTL_MS
+        local batch = math.floor((rank - 1) / perBatch)
+        item.cached.stamp = first + batch * STATUS_REBUILD_MS - STATUS_TTL_MS
+    end
+    -- Out of range nothing reads them; they go stale with the last batch.
+    for _, cached in ipairs(far) do
+        cached.stamp = first + (rebuilds - 1) * STATUS_REBUILD_MS - STATUS_TTL_MS
     end
 end
 

@@ -247,6 +247,7 @@ local function onTick()
             return
         end
         nextRescanAtMs = stamp + RESCAN_MS
+        Registry.noteNextRebuild(nextRescanAtMs)
     else
         tickCounter = tickCounter + 1
         if tickCounter < 45 then
