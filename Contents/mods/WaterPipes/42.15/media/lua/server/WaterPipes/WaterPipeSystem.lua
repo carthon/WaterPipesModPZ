@@ -830,14 +830,9 @@ end
 -- Each entry is a CLAIM, settled here: a tile whose square is loaded and holds nothing plumbed is
 -- dropped, while a tile whose square is NOT loaded is left alone -- walking away from your base must
 -- not erase its plumbing.
--- Re-derive the external-water stamp on every plumbed fixture, once per save. A stamp is decided at
--- plumb time and never revisited, so a save carrying a wrong one pays a full network query per endpoint
--- per minute for it -- and holds canBeWaterPiped at false while the network has water, which is the flag
--- that keeps the engine's mains water off.
--- Deliberately on the FIRST pass after loading: the one hazard in clearing a stamp is an external
--- fixture examined while in use, when its temporary container makes it look like it owns one, and
--- nobody has used anything yet on the frame a save comes up. Every change is logged, because a
--- migration that quietly reclassifies another mod's fixture is worse than one that says so.
+-- Drop the old external-water stamp from plumbed fixtures, once per save. Nothing reads it any more (the
+-- classification comes off the sprite, Take A Bath And Shower only), so a save that already ran this
+-- pass for the old re-derivation keeps its stamps harmlessly; plumb and unplumb clear them too.
 function System.reclassifyExternalFixtures()
     if State.externalFixturesReclassified() then
         return 0
@@ -861,9 +856,8 @@ function System.reclassifyExternalFixtures()
     State.markExternalFixturesReclassified()
     if changed > 0 then
         Logger.log(string.format(
-            "Endpoint classification migrated for this save: %d fixture(s) had an external-water stamp "
-            .. "they should not have had. They now cost a modData read per refresh instead of a network "
-            .. "query.", changed))
+            "Endpoint classification migrated for this save: dropped the old external-water stamp from "
+            .. "%d fixture(s).", changed))
     end
     return changed
 end

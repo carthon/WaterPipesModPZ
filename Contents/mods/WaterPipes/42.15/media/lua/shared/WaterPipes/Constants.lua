@@ -51,7 +51,11 @@ Constants.ADAPTER_SOURCE_OBJECT_NAME = "Water Pipes Adapter Source"
 Constants.ADAPTER_SOURCE_MAX_CAPACITY = 600
 -- Endpoint-owned FluidContainer mirror: the plumbed fixture carries its own container mirroring the
 -- connected network, so no phantom world object is needed.
-Constants.ENDPOINT_FLUID_LAST_SYNC_KEY = "waterpipesEndpointLastSync"
+-- What the fixture's tank held after the last write. A new key: 0.10.1 stored the IsoObject getters'
+-- reading under the old one (10000 with town water, the tile's reserve), and charging that against
+-- the tank would drain the network.
+Constants.ENDPOINT_FLUID_LAST_SYNC_KEY = "waterpipesTankLastSync"
+Constants.ENDPOINT_FLUID_LAST_SYNC_LEGACY_KEY = "waterpipesEndpointLastSync"
 Constants.ENDPOINT_FLUID_SYNCING_KEY = "waterpipesEndpointSyncing"
 Constants.PIPE_SURFACE_FLOOR = "floor"
 Constants.PIPE_SURFACE_WALL = "wall"
