@@ -40,13 +40,53 @@ local function describeObject(worldObject)
     return tostring(name) .. " sprite=" .. tostring(spriteName) .. " index=" .. tostring(objectIndex) .. " square=" .. squareText
 end
 
--- "External-water" fixtures (no own FluidContainer, e.g. Take A Bath And Shower) are classified ONCE
--- at plumb time and remembered in modData. We must NOT re-derive it from live capacity per tick:
--- those mods add a TEMPORARY water container while the fixture is in use, which would otherwise flip
--- the classification mid-use and make them report "not connected".
+-- Stamp of the old capacity-based classification. Only cleared now: it marked moved sinks, washers and
+-- the deluxe shower as external too, and missed Take A Bath And Shower's showers.
 -- Declared up here rather than beside its readers because the diagnostics below print it, and a local
 -- used above its declaration is a nil GLOBAL in Lua -- silent, and shipped from this repo three times.
 local EXTERNAL_FIXTURE_KEY = "waterpipesExternalFixture"
+
+-- Take A Bath And Shower reads modData canBeWaterPiped=true as "not piped", the opposite of the engine,
+-- so its baths and showers are the only fixtures handled apart. Asked of TABAS itself, by sprite, the
+-- way its own plumbing patch does; without TABAS, or if its module moves, nothing is treated apart.
+local TABAS_MOD_ID = "TakeABathAndShowerNew"
+local tabasIso = false          -- false: not looked up yet; nil: TABAS not available
+
+local function getTabasIso()
+    if tabasIso == false then
+        tabasIso = nil
+        local okActive, active = pcall(function() return getActivatedMods():contains(TABAS_MOD_ID) end)
+        if okActive and active then
+            local okIso, iso = pcall(require, "TABAS_Iso")
+            if okIso and type(iso) == "table" and iso.isBathObject and iso.isShowerObject then
+                tabasIso = iso
+            end
+        end
+    end
+    return tabasIso
+end
+
+local function isExternalWaterFixture(worldObject)
+    local iso = getTabasIso()
+    if not iso or not worldObject then
+        return false
+    end
+    local ok, yes = pcall(function()
+        return iso.isBathObject(worldObject) or iso.isShowerObject(worldObject, true)
+    end)
+    return ok and yes == true
+end
+
+local function describeTank(worldObject)
+    local ok, text = pcall(function()
+        local tank = worldObject:getFluidContainer()
+        if not tank then
+            return "none"
+        end
+        return ("%.2f of %.2f L"):format(tank:getAmount(), tank:getCapacity())
+    end)
+    return ok and text or "?"
+end
 
 local function describePlumbingDiagnostics(worldObject)
     if not worldObject then
@@ -56,8 +96,12 @@ local function describePlumbingDiagnostics(worldObject)
     local modData = getModData(worldObject)
     local sprite = worldObject.getSprite and worldObject:getSprite() or nil
     local props = sprite and sprite.getProperties and sprite:getProperties() or nil
-    local waterAmountProp = props and props.Val and props:Val("waterAmount") or nil
-    local waterMaxProp = props and props.Val and props:Val("waterMaxAmount") or nil
+    local function prop(name)
+        local ok, value = pcall(function() return props:get(name) end)
+        return ok and value or nil
+    end
+    local waterAmountProp = props and prop("waterAmount") or nil
+    local waterMaxProp = props and prop("waterMaxAmount") or nil
     local waterPipedProp = false
     if props then
         if IsoFlagType and props.has then
@@ -119,12 +163,11 @@ local function describePlumbingDiagnostics(worldObject)
         .. tostring(worldObject.hasFluid and select(2, pcall(worldObject.hasFluid, worldObject)) or nil)
         .. ",hasWater="
         .. tostring(worldObject.hasWater and select(2, pcall(worldObject.hasWater, worldObject)) or nil)
-        -- OUR classification, which the rest of this only implied. A fixture stamped external re-queries
-        -- the network for water on every refresh (see desiredCanBeWaterPiped); one that is not returns a
-        -- constant. It is decided once at plumb time, so a fixture plumbed under different conditions --
-        -- or by an older version -- keeps the stamp, and nothing until now printed it.
+        -- The fixture's own tank: the getters above answer for whatever the engine would serve.
+        .. "} tank{"
+        .. describeTank(worldObject)
         .. "} ours{external="
-        .. tostring(modData ~= nil and modData[EXTERNAL_FIXTURE_KEY] == true)
+        .. tostring(isExternalWaterFixture(worldObject))
         .. ",plumbed="
         .. tostring(modData ~= nil and modData[Constants.PLUMBED_ENDPOINT_MODDATA_KEY] == true)
         .. "}"
@@ -338,61 +381,23 @@ local function setCanBeWaterPiped(worldObject, value)
     end
 end
 
--- Vanilla sinks hold their own FluidContainer (we mirror the network into it). External-water
--- fixtures from other mods (e.g. Take A Bath And Shower) have NO own container (capacity 0) and
--- read/track their water themselves. We use this to decide the canBeWaterPiped flag below.
-local function endpointHasOwnFluidContainer(worldObject)
-    if worldObject and worldObject.getFluidCapacity then
-        local ok, capacity = pcall(worldObject.getFluidCapacity, worldObject)
-        if ok and type(capacity) == "number" and capacity > 0 then
-            return true
-        end
-    end
-    return false
-end
-
-local function isExternalWaterFixture(worldObject)
-    local modData = getModData(worldObject)
-    return modData and modData[EXTERNAL_FIXTURE_KEY] == true or false
-end
-
--- Re-derive the external stamp ONCE, for a save that carries a wrong one. Measured: a vanilla sink
--- stamped external despite a 2100 L container of its own, which made desiredCanBeWaterPiped query the
--- whole network on every refresh -- 437 ms of a 531 ms per-minute pass -- and, worse, held
--- canBeWaterPiped at false whenever the network had water, which is the flag that keeps the engine's
--- mains water off. Unplumbing and replumbing cleared it, which is what proved the stamp stale rather
--- than the classifier wrong.
---
--- ONLY CLEARS, never sets. Setting is plumb-time work and re-deriving it later is what the note above
--- forbids: an external fixture's temporary container disappears between uses, so a later look would
--- stamp one that should not be. Clearing has the mirror-image hazard -- an external fixture examined
--- WHILE in use shows a temporary container and would be cleared wrongly -- which is why the caller
--- runs this on the first pass after loading, before anyone has had a chance to use anything, and logs
--- every fixture it changes.
---
+-- Drops the old stamp from a save. The classification is read off the sprite now, so a fixture the
+-- stamp got wrong (a moved sink, a washer) is no longer kept on the town water by it.
 -- Returns true when it changed this fixture.
 function EndpointPlumbing.reclassifyExternalFixture(worldObject)
-    if not isExternalWaterFixture(worldObject) then
-        return false
-    end
-    if not endpointHasOwnFluidContainer(worldObject) then
-        return false
-    end
-
     local modData = getModData(worldObject)
-    if not modData then
+    if not modData or modData[EXTERNAL_FIXTURE_KEY] == nil then
         return false
     end
-
     modData[EXTERNAL_FIXTURE_KEY] = nil
-    Logger.log("Endpoint re-classified: had the external-water stamp but owns a fluid container -- "
-        .. describeObject(worldObject))
+    Logger.log("Endpoint re-classified: dropped the old external-water stamp (Take A Bath And Shower: "
+        .. tostring(isExternalWaterFixture(worldObject)) .. ") -- " .. describeObject(worldObject))
     return true
 end
 
 -- The canBeWaterPiped modData the fixture should carry right now:
---   vanilla sink (own container) -> true: engine mains off, our mirror serves it.
---   external-water fixture (e.g. Take A Bath And Shower) -> false ONLY while the network actually
+--   any fixture -> true: engine mains off, our mirror serves it.
+--   a Take A Bath And Shower bath or shower -> false ONLY while the network actually
 --   has water (so that mod treats it as connected); true when the network is dry, so it reports
 --   "not connected" instead of handing out free water.
 local function desiredCanBeWaterPiped(worldObject)
@@ -475,9 +480,9 @@ function EndpointPlumbing.refreshEndpointSource(worldObject)
     end
 
     -- canBeWaterPiped=true keeps the engine's infinite city-mains water OFF so the fixture serves our
-    -- network mirror; re-asserted every tick (mains water would creep back otherwise). External-water
-    -- fixtures with no own container (e.g. Take A Bath And Shower) must stay FALSE here too -- that mod
-    -- reads the same modData as "connected". See EndpointPlumbing.plumb for the full rationale.
+    -- network mirror; re-asserted every tick (mains water would creep back otherwise). Take A Bath And
+    -- Shower's baths and showers must stay FALSE here too -- that mod reads the same modData as
+    -- "connected". See EndpointPlumbing.plumb for the full rationale.
     local wantedPiped = desiredCanBeWaterPiped(worldObject)
     local currentData = getModData(worldObject)
     local pipedChanged = currentData ~= nil and currentData.canBeWaterPiped ~= wantedPiped
@@ -511,9 +516,7 @@ function EndpointPlumbing.plumb(worldObject)
     local modData = getModData(worldObject)
     if modData then
         modData[Constants.PLUMBED_ENDPOINT_MODDATA_KEY] = true
-        -- Classify now (a fixture with no own container is external-water), before any external mod
-        -- adds a temporary water container while it's in use.
-        modData[EXTERNAL_FIXTURE_KEY] = (not endpointHasOwnFluidContainer(worldObject)) or nil
+        modData[EXTERNAL_FIXTURE_KEY] = nil
     end
 
     -- Recorded here because this is the moment it becomes true. The per-minute refresh then reads the
@@ -528,8 +531,8 @@ function EndpointPlumbing.plumb(worldObject)
     -- canBeWaterPiped=true DISABLES the engine's infinite city-mains water so our network mirror serves the
     -- fixture. The town water is not lost: while the service runs, Mains.lua reads it back off this same
     -- fixture and feeds it into the network.
-    -- External-water fixtures with NO own container (e.g. Take A Bath And Shower) must stay FALSE: that mod
-    -- reads the same modData as "not connected". We still charge the network on use.
+    -- Take A Bath And Shower's baths and showers must stay FALSE: that mod reads true as "not piped".
+    -- We still charge the network on use.
     setCanBeWaterPiped(worldObject, desiredCanBeWaterPiped(worldObject))
     setUsesExternalWaterSource(worldObject, false)
     EndpointPlumbing.refreshEndpointSource(worldObject)
