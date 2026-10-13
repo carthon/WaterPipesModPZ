@@ -25,24 +25,37 @@ local function load(name)
     return modules[name] or nil
 end
 
-local function ask(fn)
-    local ok, answer = pcall(fn)
-    return ok and answer == true
-end
+-- Per sprite name: TABAS decides by sprite alone and its tables are fixed after startup. Keyed by name,
+-- not by object, so a sprite TABAS swaps in place is asked about again.
+local bySprite = {}
 
-local function isBath(object)
-    local iso = isActive() and load("TABAS_Iso")
-    return iso ~= nil and object ~= nil and ask(function() return iso.isBathObject(object) end)
-end
-
-local function isShower(object)
-    local iso = isActive() and load("TABAS_Iso")
-    return iso ~= nil and object ~= nil and ask(function() return iso.isShowerObject(object, true) end)
+local function spriteName(object)
+    local ok, name = pcall(function() return object:getSprite():getName() end)
+    return ok and name or nil
 end
 
 -- A bath or shower TABAS manages: it reads modData canBeWaterPiped=true as "not piped".
 function TabasCompat.isFixture(object)
-    return isBath(object) or isShower(object)
+    if not object or not isActive() then
+        return false
+    end
+    local iso = load("TABAS_Iso")
+    if not iso then
+        return false
+    end
+    local name = spriteName(object)
+    local known = name and bySprite[name]
+    if known ~= nil then
+        return known
+    end
+    local ok, answer = pcall(function()
+        return iso.isBathObject(object) or iso.isShowerObject(object, true)
+    end)
+    answer = ok and answer == true
+    if name then
+        bySprite[name] = answer
+    end
+    return answer
 end
 
 return TabasCompat
