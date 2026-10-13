@@ -2,6 +2,7 @@ WaterPipes = WaterPipes or {}
 WaterPipes.PipeAutotile = WaterPipes.PipeAutotile or {}
 
 require "WaterPipes/Constants"
+require "WaterPipes/Invalidate"
 require "WaterPipes/Logger"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Profiler"
@@ -9,6 +10,7 @@ require "WaterPipes/Router"
 require "WaterPipes/World"
 
 local Constants = WaterPipes.Constants
+local Invalidate = WaterPipes.Invalidate
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
 local Profiler = WaterPipes.Profiler
@@ -430,16 +432,33 @@ local function onPipeObjectAdded(object)
     end
 end
 
--- On removal the object is still on the square, so defer the neighbour refresh one tick.
+-- On removal the object is still on the square, so the neighbour refresh waits until it has left.
+-- On an MP client that can take more than one tick.
 local pendingRefresh = {}
+local REMOVAL_WAIT_TICKS = 60
 local function onPipeObjectRemoved(object)
     if not isRenderingSide() or not PipeObjectUtils.isPipeObject(object) then
         return
     end
     local square = squareOf(object)
     if square then
-        pendingRefresh[#pendingRefresh + 1] = { x = square:getX(), y = square:getY(), z = square:getZ() }
+        pendingRefresh[#pendingRefresh + 1] = {
+            x = square:getX(), y = square:getY(), z = square:getZ(), object = object, ticks = 0,
+        }
     end
+end
+
+local function stillOnTile(square, object)
+    local objects = square and square:getObjects()
+    if not objects then
+        return false
+    end
+    for index = 0, objects:size() - 1 do
+        if objects:get(index) == object then
+            return true
+        end
+    end
+    return false
 end
 
 -- Chunk streamed in / joined a server: repaint any pipe on the loaded square (floor connection +
@@ -503,8 +522,26 @@ local function onTickProcessPending()
     end
     local list = pendingRefresh
     pendingRefresh = {}
-    for _, coord in ipairs(list) do
-        PipeAutotile.refreshAround(coord.x, coord.y, coord.z)
+    for _, entry in ipairs(list) do
+        local square = getSquare(entry.x, entry.y, entry.z)
+        entry.ticks = entry.ticks + 1
+        local stayed = stillOnTile(square, entry.object)
+        if stayed and entry.ticks < REMOVAL_WAIT_TICKS then
+            pendingRefresh[#pendingRefresh + 1] = entry
+        else
+            if stayed then
+                Logger.log(string.format("autotile: pipe at %d:%d:%d still on its tile %d ticks after its removal event",
+                    entry.x, entry.y, entry.z, entry.ticks))
+            elseif entry.ticks > 1 then
+                Logger.log(string.format("autotile: pipe at %d:%d:%d left its tile %d ticks after its removal event",
+                    entry.x, entry.y, entry.z, entry.ticks))
+            end
+            -- The event dropped the caches while the pipe was still there; anything read since may hold it.
+            if square and not stayed then
+                Invalidate.squareChanged(square)
+            end
+            PipeAutotile.refreshAround(entry.x, entry.y, entry.z)
+        end
     end
 end
 
