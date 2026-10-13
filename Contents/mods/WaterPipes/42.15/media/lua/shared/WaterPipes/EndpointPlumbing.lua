@@ -558,7 +558,9 @@ function EndpointPlumbing.unplumb(worldObject)
     -- Restore the fixture's pre-plumb fluid state AND water-source flags (capacity/contents +
     -- canBeWaterPiped/usesExternalWaterSource). This is what makes a former city-mains tap go back
     -- to infinite water if the water service is still on, instead of staying dry.
-    FluidSource.restoreOriginalState(worldObject)
+    local original = FluidSource.restoreOriginalState(worldObject)
+    -- A barrel it drew from through vanilla plumbing; clients must be told, or they keep serving our tank.
+    setUsesExternalWaterSource(worldObject, original ~= nil and original.usesExternalWaterSource == true)
     AdapterSource.removeForEndpoint(worldObject, "unplumb")
     noteHydraulicChange(worldObject)
 

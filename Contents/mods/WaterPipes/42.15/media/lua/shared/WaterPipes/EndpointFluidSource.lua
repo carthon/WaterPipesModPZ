@@ -538,10 +538,14 @@ function FluidSource.captureOriginalState(endpoint)
 end
 
 -- Give the fixture back as it was before plumbing (used on unplumb), so it no longer shows the network.
+-- Returns the captured state: the caller restores usesExternalWaterSource, which clients must be told.
 function FluidSource.restoreOriginalState(endpoint)
     if not isAuthoritative() or not endpoint then
-        return
+        return nil
     end
+
+    -- What the player took since the last refresh is the network's, like any other draw.
+    reconcileConsumption(endpoint)
 
     local modData = getModData(endpoint)
     local state = modData and modData[Constants.ENDPOINT_ORIGINAL_FLUID_KEY] or nil
@@ -574,15 +578,13 @@ function FluidSource.restoreOriginalState(endpoint)
         modData[Constants.ENDPOINT_FLUID_LAST_SYNC_KEY] = 0
         modData[RESTORED_KEY] = ours and 0 or nil
     end
-    if endpoint.setUsesExternalWaterSource then
-        pcall(endpoint.setUsesExternalWaterSource, endpoint, (state and state.usesExternalWaterSource) and true or false)
-    end
     if endpoint.transmitModData then
         pcall(endpoint.transmitModData, endpoint)
     end
     if endpoint.sync then
         pcall(endpoint.sync, endpoint)
     end
+    return state
 end
 
 -- Empties the mirror and unlocks input (used on unplumb / pipe removal).
