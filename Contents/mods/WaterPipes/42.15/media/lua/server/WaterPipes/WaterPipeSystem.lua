@@ -830,10 +830,9 @@ end
 -- Each entry is a CLAIM, settled here: a tile whose square is loaded and holds nothing plumbed is
 -- dropped, while a tile whose square is NOT loaded is left alone -- walking away from your base must
 -- not erase its plumbing.
--- Drop the old external-water stamp from every plumbed fixture, once per save. The classification is
--- read off the sprite now (Take A Bath And Shower only), so the stamp is dead data. Every change is
--- logged, because a migration that quietly reclassifies another mod's fixture is worse than one that
--- says so.
+-- Drop the old external-water stamp from plumbed fixtures, once per save. Nothing reads it any more (the
+-- classification comes off the sprite, Take A Bath And Shower only), so a save that already ran this
+-- pass for the old re-derivation keeps its stamps harmlessly; plumb and unplumb clear them too.
 function System.reclassifyExternalFixtures()
     if State.externalFixturesReclassified() then
         return 0
