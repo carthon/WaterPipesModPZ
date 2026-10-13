@@ -227,6 +227,7 @@ local function setLastSync(endpoint, amount, mirror)
         moved = true
     end
     modData[Constants.ENDPOINT_FLUID_LAST_SYNC_KEY] = amount
+    modData[Constants.ENDPOINT_FLUID_LAST_SYNC_LEGACY_KEY] = nil
 
     if moved and endpoint.transmitModData then
         pcall(endpoint.transmitModData, endpoint)
