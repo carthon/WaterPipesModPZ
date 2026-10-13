@@ -389,9 +389,21 @@ function Registry.invalidate(x, y, z)
     statusCache[keyOf(x, y, z)] = nil
 end
 
--- Every tile's: a valve, hydrant or router changed what the networks can deliver.
+-- A valve, hydrant or router changed what the networks deliver. Each status expires at its tile's phase
+-- within STATUS_SPREAD_MS, so the recomputes spread over a few rebuilds instead of landing in one.
+local STATUS_SPREAD_MS = 1500
+
 function Registry.invalidateStatuses()
-    statusCache = {}
+    local now = nowMs()
+    if not now then
+        statusCache = {}
+        return
+    end
+    for key, cached in pairs(statusCache) do
+        local x, y, z = key:match("^(-?%d+):(-?%d+):(-?%d+)$")
+        local offset = x and statusPhase(tonumber(x), tonumber(y), tonumber(z)) % STATUS_SPREAD_MS or 0
+        cached.stamp = math.min(cached.stamp, now + offset - STATUS_TTL_MS)
+    end
 end
 
 -- ===== Wiring =====
