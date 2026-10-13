@@ -2,7 +2,7 @@ WaterPipes = WaterPipes or {}
 WaterPipes.TabasCompat = WaterPipes.TabasCompat or {}
 
 -- Take A Bath And Shower, the one mod whose fixtures are handled apart. Everything this mod knows about
--- it lives here, asked of TABAS itself and inside pcall: without TABAS, or if its modules move, nothing
+-- it lives here, asked of TABAS itself and inside pcall: without TABAS, or if TABAS_Iso moves, nothing
 -- here applies and its fixtures are treated like any other.
 local TabasCompat = WaterPipes.TabasCompat
 
@@ -43,22 +43,6 @@ end
 -- A bath or shower TABAS manages: it reads modData canBeWaterPiped=true as "not piped".
 function TabasCompat.isFixture(object)
     return isBath(object) or isShower(object)
-end
-
--- TABAS walls its baths in with hoppable edges, so the vanilla walk to an adjacent tile finds none and
--- the action is silently dropped. Walks the way TABAS's own menus do. nil: not a TABAS fixture.
-function TabasCompat.walkTo(playerObj, object)
-    if isBath(object) then
-        local move = load("TABAS_MoveUtils")
-        if move then
-            local ok, walked = pcall(move.walkToAdjTub, playerObj, object, false, true)
-            return ok and walked == true
-        end
-    elseif isShower(object) then
-        local ok, walked = pcall(luautils.walk, playerObj, object:getSquare(), false)
-        return ok and walked == true
-    end
-    return nil
 end
 
 return TabasCompat

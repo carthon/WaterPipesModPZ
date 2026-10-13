@@ -24,7 +24,6 @@ require "WaterPipes/WaterPipesIrrigationDebug"
 require "WaterPipes/WaterPipesRouterPressureWindow"
 require "WaterPipes/ISRepairWaterDrip"
 require "WaterPipes/Logger"
-require "WaterPipes/TabasCompat"
 -- Client-side: loads PipeAutotile so it registers its OnObjectAdded/LoadGridsquare hooks and each
 -- client recomputes pipe connection sprites locally (the shape is never sent over the network).
 require "WaterPipes/PipeAutotile"
@@ -350,16 +349,23 @@ local function playerHasPipeWrench(playerObj)
     return Constants.hasPipeWrench(playerObj and playerObj:getInventory())
 end
 
--- Next to the fixture, or false. A walk that finds no tile drops the action, so it is said.
+-- Close enough to act from where the player stands: vanilla's own plumb does not walk at all.
+local REACH_TILES = 2
+
+-- Next to the fixture, or false. A fixture walled in by another mod (Take A Bath And Shower's hoppable
+-- bath edges) has no free tile beside it, and the walk returned false: the action was silently dropped.
 local function walkToEndpoint(playerObj, endpointObject)
-    local walked = WaterPipes.TabasCompat.walkTo(playerObj, endpointObject)
-    if walked == nil then
-        walked = luautils.walkAdjObject(playerObj, endpointObject, true)
+    if luautils.walkAdjObject(playerObj, endpointObject, true) then
+        return true
     end
-    if not walked then
-        Logger.warn("No tile to reach the fixture from: " .. tostring(endpointObject))
+    local square = endpointObject.getSquare and endpointObject:getSquare() or nil
+    if square and math.floor(playerObj:getZ()) == square:getZ()
+        and math.abs(square:getX() + 0.5 - playerObj:getX()) <= REACH_TILES
+        and math.abs(square:getY() + 0.5 - playerObj:getY()) <= REACH_TILES then
+        return true
     end
-    return walked
+    Logger.warn("No tile to reach the fixture from: " .. tostring(endpointObject))
+    return false
 end
 
 function ContextMenu.plumbEndpoint(playerObj, endpointObject)
