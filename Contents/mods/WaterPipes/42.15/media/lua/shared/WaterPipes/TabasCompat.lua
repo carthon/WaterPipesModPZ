@@ -25,8 +25,8 @@ local function load(name)
     return modules[name] or nil
 end
 
--- Per sprite name: TABAS decides by sprite alone and its tables are fixed after startup. Keyed by name,
--- not by object, so a sprite TABAS swaps in place is asked about again.
+-- Per sprite name: TABAS_Iso answers from sprite-name tables it builds at startup. Keyed by name, not by
+-- object, so a sprite TABAS swaps in place is asked about again; a lookup that failed is not kept.
 local bySprite = {}
 
 local function spriteName(object)
@@ -48,11 +48,10 @@ function TabasCompat.isFixture(object)
     if known ~= nil then
         return known
     end
-    local ok, answer = pcall(function()
-        return iso.isBathObject(object) or iso.isShowerObject(object, true)
-    end)
-    answer = ok and answer == true
-    if name then
+    local okBath, bath = pcall(iso.isBathObject, object)
+    local okShower, shower = pcall(iso.isShowerObject, object, true)
+    local answer = (okBath and bath == true) or (okShower and shower == true)
+    if name and (answer or (okBath and okShower)) then
         bySprite[name] = answer
     end
     return answer
