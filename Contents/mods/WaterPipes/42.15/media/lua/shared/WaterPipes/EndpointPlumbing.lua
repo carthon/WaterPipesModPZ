@@ -8,6 +8,7 @@ require "WaterPipes/EndpointObjects"
 require "WaterPipes/Logger"
 require "WaterPipes/NetworkAccess"
 require "WaterPipes/PipeObjectUtils"
+require "WaterPipes/TabasCompat"
 
 -- AdapterSource is kept only to clean up the legacy hidden adapter object from older saves.
 local AdapterSource = WaterPipes.EndpointAdapterSource
@@ -47,34 +48,9 @@ end
 local EXTERNAL_FIXTURE_KEY = "waterpipesExternalFixture"
 
 -- Take A Bath And Shower reads modData canBeWaterPiped=true as "not piped", the opposite of the engine,
--- so its baths and showers are the only fixtures handled apart. Asked of TABAS itself, by sprite, the
--- way its own plumbing patch does; without TABAS, or if its module moves, nothing is treated apart.
-local TABAS_MOD_ID = "TakeABathAndShowerNew"
-local tabasIso = false          -- false: not looked up yet; nil: TABAS not available
-
-local function getTabasIso()
-    if tabasIso == false then
-        tabasIso = nil
-        local okActive, active = pcall(function() return getActivatedMods():contains(TABAS_MOD_ID) end)
-        if okActive and active then
-            local okIso, iso = pcall(require, "TABAS_Iso")
-            if okIso and type(iso) == "table" and iso.isBathObject and iso.isShowerObject then
-                tabasIso = iso
-            end
-        end
-    end
-    return tabasIso
-end
-
+-- so its baths and showers are the only fixtures handled apart. See TabasCompat.
 local function isExternalWaterFixture(worldObject)
-    local iso = getTabasIso()
-    if not iso or not worldObject then
-        return false
-    end
-    local ok, yes = pcall(function()
-        return iso.isBathObject(worldObject) or iso.isShowerObject(worldObject, true)
-    end)
-    return ok and yes == true
+    return WaterPipes.TabasCompat.isFixture(worldObject)
 end
 
 local function describeTank(worldObject)

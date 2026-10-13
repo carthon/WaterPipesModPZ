@@ -24,6 +24,7 @@ require "WaterPipes/WaterPipesIrrigationDebug"
 require "WaterPipes/WaterPipesRouterPressureWindow"
 require "WaterPipes/ISRepairWaterDrip"
 require "WaterPipes/Logger"
+require "WaterPipes/TabasCompat"
 -- Client-side: loads PipeAutotile so it registers its OnObjectAdded/LoadGridsquare hooks and each
 -- client recomputes pipe connection sprites locally (the shape is never sent over the network).
 require "WaterPipes/PipeAutotile"
@@ -349,6 +350,18 @@ local function playerHasPipeWrench(playerObj)
     return Constants.hasPipeWrench(playerObj and playerObj:getInventory())
 end
 
+-- Next to the fixture, or false. A walk that finds no tile drops the action, so it is said.
+local function walkToEndpoint(playerObj, endpointObject)
+    local walked = WaterPipes.TabasCompat.walkTo(playerObj, endpointObject)
+    if walked == nil then
+        walked = luautils.walkAdjObject(playerObj, endpointObject, true)
+    end
+    if not walked then
+        Logger.warn("No tile to reach the fixture from: " .. tostring(endpointObject))
+    end
+    return walked
+end
+
 function ContextMenu.plumbEndpoint(playerObj, endpointObject)
     if not playerObj or not endpointObject then
         return
@@ -359,7 +372,7 @@ function ContextMenu.plumbEndpoint(playerObj, endpointObject)
         return
     end
 
-    if luautils.walkAdjObject(playerObj, endpointObject, true) then
+    if walkToEndpoint(playerObj, endpointObject) then
         ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
         ISTimedActionQueue.add(ISPlumbWaterPipeEndpoint:new(playerObj, endpointObject, wrench, true))
     end
@@ -375,7 +388,7 @@ function ContextMenu.unplumbEndpoint(playerObj, endpointObject)
         return
     end
 
-    if luautils.walkAdjObject(playerObj, endpointObject, true) then
+    if walkToEndpoint(playerObj, endpointObject) then
         ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
         ISTimedActionQueue.add(ISPlumbWaterPipeEndpoint:new(playerObj, endpointObject, wrench, false))
     end
@@ -446,7 +459,7 @@ function ContextMenu.onVanillaPlumbItem(worldobjects, player, itemToPipe)
         end
 
         Logger.log("Vanilla plumb intercepted for pipe-network endpoint: " .. tostring(itemToPipe))
-        if luautils.walkAdjObject(playerObj, itemToPipe, true) then
+        if walkToEndpoint(playerObj, itemToPipe) then
             ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
             ISTimedActionQueue.add(ISPlumbWaterPipeEndpoint:new(playerObj, itemToPipe, wrench, true))
         end
