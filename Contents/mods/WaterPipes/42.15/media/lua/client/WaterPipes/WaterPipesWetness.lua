@@ -50,7 +50,7 @@ local function playerIsInSpray(player)
     local r = Constants.SPRINKLER_RADIUS or 1
 
     for _, found in ipairs(Registry.near("hydrants", px, py, pz, r)) do
-        if Hydrant.isFlowing(found.object) then
+        if Hydrant.isGushing(found.object) then
             return true
         end
     end

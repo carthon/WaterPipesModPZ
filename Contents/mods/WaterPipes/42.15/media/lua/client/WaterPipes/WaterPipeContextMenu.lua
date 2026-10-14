@@ -349,6 +349,38 @@ local function playerHasPipeWrench(playerObj)
     return Constants.hasPipeWrench(playerObj and playerObj:getInventory())
 end
 
+-- Close enough to act from where the player stands: vanilla's own plumb does not walk at all.
+local REACH_TILES = 2
+
+-- Next to the fixture, or false. A fixture walled in by another mod (Take A Bath And Shower's hoppable
+-- bath edges) has no free tile beside it, and the walk returned false: the action was silently dropped.
+local function walkToEndpoint(playerObj, endpointObject)
+    if luautils.walkAdjObject(playerObj, endpointObject, true) then
+        return true
+    end
+    -- From the nearest tile of the fixture: a bath spans two.
+    local squares = {}
+    local ok = pcall(function()
+        local parts = ArrayList.new()
+        endpointObject:getSpriteGridObjectsIncludingSelf(parts)
+        for i = 1, parts:size() do
+            squares[#squares + 1] = parts:get(i - 1):getSquare()
+        end
+    end)
+    if not ok or #squares == 0 then
+        squares = { endpointObject.getSquare and endpointObject:getSquare() or nil }
+    end
+    for _, square in ipairs(squares) do
+        if square and math.floor(playerObj:getZ()) == square:getZ()
+            and math.abs(square:getX() + 0.5 - playerObj:getX()) <= REACH_TILES
+            and math.abs(square:getY() + 0.5 - playerObj:getY()) <= REACH_TILES then
+            return true
+        end
+    end
+    Logger.warn("No tile to reach the fixture from: " .. tostring(endpointObject))
+    return false
+end
+
 function ContextMenu.plumbEndpoint(playerObj, endpointObject)
     if not playerObj or not endpointObject then
         return
@@ -359,7 +391,7 @@ function ContextMenu.plumbEndpoint(playerObj, endpointObject)
         return
     end
 
-    if luautils.walkAdjObject(playerObj, endpointObject, true) then
+    if walkToEndpoint(playerObj, endpointObject) then
         ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
         ISTimedActionQueue.add(ISPlumbWaterPipeEndpoint:new(playerObj, endpointObject, wrench, true))
     end
@@ -375,7 +407,7 @@ function ContextMenu.unplumbEndpoint(playerObj, endpointObject)
         return
     end
 
-    if luautils.walkAdjObject(playerObj, endpointObject, true) then
+    if walkToEndpoint(playerObj, endpointObject) then
         ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
         ISTimedActionQueue.add(ISPlumbWaterPipeEndpoint:new(playerObj, endpointObject, wrench, false))
     end
@@ -446,7 +478,7 @@ function ContextMenu.onVanillaPlumbItem(worldobjects, player, itemToPipe)
         end
 
         Logger.log("Vanilla plumb intercepted for pipe-network endpoint: " .. tostring(itemToPipe))
-        if luautils.walkAdjObject(playerObj, itemToPipe, true) then
+        if walkToEndpoint(playerObj, itemToPipe) then
             ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
             ISTimedActionQueue.add(ISPlumbWaterPipeEndpoint:new(playerObj, itemToPipe, wrench, true))
         end

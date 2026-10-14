@@ -178,6 +178,8 @@ end
 function Invalidate.flowPathChanged()
     Invalidate.everythingChanged()
     call(walks(), "invalidateTraversalCache")
+    -- The emitter statuses the spray draws from are priced on the same walks.
+    call(tileRegistry(), "invalidateStatuses")
 end
 
 -- A pump was switched, or lost power. Only the field is priced on that.
