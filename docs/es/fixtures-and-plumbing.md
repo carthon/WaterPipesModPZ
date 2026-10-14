@@ -26,6 +26,6 @@ Quitar la tubería de su casilla también lo desconecta; una rotura más lejos s
 !!! note "Interfaz de la lavadora"
     Una lavadora conectada sigue funcionando desde su ventana de inventario. Build 42 puede ocultar la opción redundante **Encender** del menú de la casilla cuando su depósito contiene agua.
 
-<!-- SCREENSHOT: 19-fixture-plumb-menu.png — Tubería bajo un fregadero con la acción Fontanear visible. -->
+![Tubería en la casilla de un fregadero con la acción Instalar visible](../assets/images/19-fixture-plumb-menu-cropped.png){ .wp-screenshot loading=lazy }
 <!-- SCREENSHOT: 20-supported-fixtures.png — Fregadero, ducha, inodoro y lavadora conectados a una red. -->
 

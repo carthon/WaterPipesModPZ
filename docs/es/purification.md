@@ -14,7 +14,7 @@ Construye y orienta primero un Enrutador de fluidos: verde es la **entrada** de 
 - **4** Salida roja del enrutador.
 - **5** Depósito limpio.
 
-<!-- SCREENSHOT: 13-purifier-placement.png — Fantasma de construcción con el anclaje sobre el enrutador y la huella 2×2. -->
+![Vista previa del purificador mostrando el anclaje sobre el enrutador y su huella de 2×2](../assets/images/13-purifier-placement-cropped.png){ .wp-screenshot loading=lazy }
 
 ## Funcionamiento y filtro
 
@@ -28,4 +28,4 @@ Por defecto el lado limpio recibe el 60 % de la presión entrante: 25 m se convi
 
 Usa un Soplete con combustible y Máscara de soldar. Cada devolución se calcula por separado: 1 Chapa metálica y 2 Tuberías de metal al 80 %, más 1 Resto electrónico y 1 Cable al 60 %. No recuperas batería, carbón ni telas; destruirlo no devuelve nada.
 
-<!-- SCREENSHOT: 15-purifier-status-window.png — Ventana del purificador mientras filtra activamente. -->
+![Ventana de estado del purificador mientras filtra](../assets/images/15-purifier-status-window-cropped.png){ .wp-screenshot loading=lazy }

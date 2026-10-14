@@ -23,5 +23,7 @@ The drip charges only its own tile. The sprinkler pays for all nine tiles whethe
 
 A burst drip still conducts water but no longer irrigates. Repair it with a Pipe Wrench and 1 Duct Tape. Setting the sandbox burst pressure to 0 disables bursting.
 
-<!-- SCREENSHOT: 17-sprinkler-coverage.png — Active sprinkler showing its complete 3×3 coverage. -->
-<!-- SCREENSHOT: 18-emitter-diagnostics.png — Check irrigation emitter result for a pressure problem. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Active sprinkler showing its complete 3×3 coverage](../assets/images/17-sprinkler-coverage-cropped.png){ .wp-screenshot loading=lazy }
+![Irrigation-emitter diagnostic reporting a pressure problem](../assets/images/18-emitter-diagnostics-cropped.png){ .wp-screenshot loading=lazy }
+</div>

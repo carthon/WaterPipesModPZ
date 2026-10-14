@@ -16,7 +16,7 @@ Cuando su depósito baja del umbral configurado (25 % por defecto), extrae hasta
 
 El perímetro discontinuo indica que la línea permanece separada del agua.
 
-<!-- SCREENSHOT: 25-generator-connect-menu.png — Acción Instalar Generador con una tubería en su casilla. -->
+![Acción Instalar Generador con una tubería en la casilla del generador](../assets/images/25-generator-connect-menu-cropped.png){ .wp-screenshot loading=lazy }
 
 Usa **Desinstalar Generador** para desconectarlo sin retirar la tubería.
 

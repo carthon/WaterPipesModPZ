@@ -12,12 +12,17 @@ The green band is **IN** and the red band is **OUT**. Fluid and pressure cross o
 
 Right-click the router and choose **Set pressure limit**. The dialog reports incoming and outgoing pressure. Use no limit for one-way flow only, below 15 m to protect default drip emitters, or at least 20 m when a downstream sprinkler must run. A container or purifier on the router tile creates a hard boundary whose two sides exchange only through that object.
 
-<!-- SCREENSHOT: 10-router-orientation.png — Router with green IN, red OUT and rotation direction clearly visible. -->
-<!-- SCREENSHOT: 11-router-pressure-dialog.png — Pressure-limit dialog with inlet, outlet and configured ceiling. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Fluid Router showing its green input and red output](../assets/images/10-router-orientation-cropped.png){ .wp-screenshot loading=lazy }
+![Router pressure-limit dialog](../assets/images/11-router-pressure-dialog-cropped.png){ .wp-screenshot loading=lazy }
+</div>
 
 ## Shut-off Valve
 
 A valve is built open and does not alter the network until closed. Closed, its tile stops conducting: both sides cease sharing liquid, pressure, and contamination. Use valves to isolate maintenance areas, separate water from petrol, or stop contamination before changing a layout. A valve cannot share a tile with a gauge, router, pump, drip emitter, or sprinkler.
 
-<!-- SCREENSHOT: 12-valve-open-closed.png — Same valve open and closed, including its green/red indicator. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Closed Shut-off Valve](../assets/images/12a-valve-closed-cropped.png){ .wp-screenshot loading=lazy }
+![Open Shut-off Valve](../assets/images/12a-valve-open-cropped.png){ .wp-screenshot loading=lazy }
+</div>
 

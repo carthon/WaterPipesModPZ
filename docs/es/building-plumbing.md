@@ -17,9 +17,11 @@ Al inspeccionarla, el mod crea un árbol de tubería oculta y sin anillos desde 
 
 Una inspección puede revelar como máximo 200 casillas nuevas y examina hasta 8000 casillas del edificio. Si el resultado es parcial, repite desde otro lugar. Cobra los aparatos planificados al empezar y devuelve el coste de los que no alcance. La fontanería ya revelada permanece si se interrumpe. La tubería oculta revelada no devuelve material al desmontarla.
 
-<!-- SCREENSHOT: 21-building-before.png — Casa del mundo con varias estancias antes de inspeccionar su fontanería existente. -->
-<!-- SCREENSHOT: 22-building-plumb-action.png — Acción de inspección Fontanear el edificio y descripción de su coste. -->
-<!-- SCREENSHOT: 23-building-after-overlay.png — Fontanería antes oculta visible en la superposición tras inspeccionarla. -->
+![Casa generada por el mundo antes de inspeccionar su fontanería existente](../assets/images/21-building-before-cropped.png){ .wp-screenshot loading=lazy }
+
+![Acción Fontanear el edificio y descripción de su coste](../assets/images/22-building-plumb-action-cropped.png){ .wp-screenshot loading=lazy }
+
+![Fontanería antes oculta visible después de inspeccionarla](../assets/images/23-building-after-overlay-cropped.png){ .wp-screenshot loading=lazy }
 
 ## Mensajes de resultado
 

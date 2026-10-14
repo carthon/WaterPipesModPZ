@@ -14,8 +14,9 @@ Necesitas una Llave para tubos, una Tubería de metal o un Segmento de tubería 
 6. Haz clic derecho en cualquier tubería y elige **Mostrar red de tuberías**. Las tuberías aparecen rojas, las fuentes y depósitos verdes, los consumidores azules y los enrutadores regulados ámbar.
 7. Prueba el aparato. Si no da agua, comprueba que el recipiente tiene agua y está en la planta del aparato o más arriba; si no, consulta las instalaciones de abajo.
 
-<!-- SCREENSHOT: 01-getting-started-materials.png — Llave, tuberías y recipiente preparados para la red inicial. -->
-<!-- SCREENSHOT: 02-getting-started-small-network.png — Red inicial completa entre recipiente y fregadero, con la superposición visible. -->
+![Llave para tubos, tuberías y almacenador preparados para construir la red inicial](../assets/images/01-getting-started-materials-cropped.png){ .wp-screenshot loading=lazy }
+
+![Red inicial completa entre un almacenador y un fregadero, con la superposición visible](../assets/images/02-getting-started-small-network-cropped.png){ .wp-screenshot loading=lazy }
 
 ## Tres instalaciones de inicio
 

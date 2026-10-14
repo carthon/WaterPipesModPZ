@@ -26,6 +26,6 @@ Removing its own pipe also disconnects it; a break farther along merely cuts its
 !!! note "Washing-machine interface"
     A connected washer remains operable through its inventory window. Build 42 may hide the redundant **Turn On** entry from the tile's right-click menu once the washer's fluid container contains water.
 
-<!-- SCREENSHOT: 19-fixture-plumb-menu.png — Pipe on a sink tile with the Plumb context action visible. -->
+![Pipe on a sink tile with the Plumb action visible](../assets/images/19-fixture-plumb-menu-cropped.png){ .wp-screenshot loading=lazy }
 <!-- SCREENSHOT: 20-supported-fixtures.png — Sink, shower, toilet and washing machine connected to one network. -->
 

@@ -23,5 +23,7 @@ El gotero solo cobra su casilla. El aspersor gasta por las nueve casillas, tenga
 
 Un gotero reventado sigue conduciendo agua, pero deja de regar. Repáralo con Llave para tubos y 1 Cinta americana. Un umbral de rotura 0 en sandbox desactiva las roturas.
 
-<!-- SCREENSHOT: 17-sprinkler-coverage.png — Aspersor activo mostrando toda su cobertura 3×3. -->
-<!-- SCREENSHOT: 18-emitter-diagnostics.png — Resultado de Comprobar emisor para un problema de presión. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Aspersor activo mostrando toda su cobertura de 3×3](../assets/images/17-sprinkler-coverage-cropped.png){ .wp-screenshot loading=lazy }
+![Diagnóstico del emisor indicando un problema de presión](../assets/images/18-emitter-diagnostics-cropped.png){ .wp-screenshot loading=lazy }
+</div>

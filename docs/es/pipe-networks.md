@@ -20,13 +20,14 @@ Las tuberías de suelo forman automáticamente extremos, rectas, esquinas, union
 
 Las variantes ocultas funcionan igual, pero desaparecen al terminar la construcción. Usa **Mostrar red de tuberías** sobre cualquier tubería visible u oculta para revelar temporalmente toda la red; **Ocultar red de tuberías** la limpia antes.
 
-<!-- SCREENSHOT: 03-pipe-shapes.png — Extremo, recta, esquina, unión en T y cruce producidos automáticamente. -->
-<!-- SCREENSHOT: 04-vertical-pipe-floors.png — Tubería vertical enlazando dos plantas por una pared norte u oeste. -->
-<!-- SCREENSHOT: 05-concealed-pipes-overlay.png — Trazado oculto normalmente y revelado con Mostrar red de tuberías. -->
+!!! tip "Encontrar una red oculta"
+    Si no queda ninguna tubería visible desde la que abrir la vista de red, selecciona :material-hammer-screwdriver: **Desmontar** en la barra de acciones de la izquierda. Su cursor de selección permite apuntar a las tuberías ocultas y localizar el recorrido. Cancela la acción cuando lo encuentres, salvo que realmente quieras retirar ese tramo.
+
+![Formas automáticas de las tuberías y conexión vertical entre plantas](../assets/images/03-pipe-shapes-cropped.png){ .wp-screenshot loading=lazy }
 
 ## Desmontaje y recuperación
 
-Usa la acción **Desmontar** del juego, no la herramienta para mover muebles.
+Usa la acción :material-hammer-screwdriver: **Desmontar** del juego, no la herramienta para mover muebles.
 
 - Una tubería metálica construida a mano tiene un 90 % de probabilidad de devolver una Tubería de metal.
 - Una tubería de arcilla no devuelve nada: el segmento cocido se consume al colocarlo.

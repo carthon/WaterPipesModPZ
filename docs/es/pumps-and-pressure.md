@@ -6,8 +6,10 @@ Una **Bomba de agua** exige Electricidad 3, Soldadura 2, Llave para tubos, 2 uso
 
 Necesita corriente y tener encendido su interruptor manual. En una línea con suministro actúa como grupo de presión; junto a un pozo o agua abierta también introduce agua en la red. Colócala abajo: la aspiración predeterminada alcanza 7 m (unas dos plantas), mientras que añade 25 m de presión de salida. Las bombas alimentadas en serie suman su presión.
 
-<!-- SCREENSHOT: 08-pump-source-placement.png — Colocación correcta de una bomba junto a un pozo o casilla de agua abierta. -->
-<!-- SCREENSHOT: 09-pump-status-window.png — Ventana Comprobar bomba con energía, fuente y presión de entrada/salida. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Bomba con corriente extrayendo agua de un río o lago](../assets/images/08-pump-source-placement-river-cropped.png){ .wp-screenshot loading=lazy }
+![Bomba con corriente extrayendo agua de un pozo y su ventana de estado](../assets/images/08-pump-source-placement-well-cropped.png){ .wp-screenshot loading=lazy }
+</div>
 
 ## Cómo se calcula la presión
 

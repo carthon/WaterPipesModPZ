@@ -71,4 +71,7 @@ These settings are under **Options → Mods → Water Pipes** and affect the cur
 | Machine sound volume (%) | Sets that audio from 0 to 100 |
 | Water spray effects | Shows animated spray on running sprinklers and open hydrants |
 
-<!-- SCREENSHOT: 26-sandbox-options.png — Water Pipes sandbox page showing the complete option group. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Upper section of the Water Pipes sandbox settings](../assets/images/26a-sandbox-options-top.png){ .wp-screenshot loading=lazy }
+![Remaining Water Pipes sandbox settings](../assets/images/26b-sandbox-options-middle.png){ .wp-screenshot loading=lazy }
+</div>

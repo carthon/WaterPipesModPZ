@@ -19,7 +19,11 @@ El almacenamiento se asienta cada dos minutos de juego: primero se llenan las pl
 | Red municipal | Agua limpia | 60 L/min a 25 m de presión | Fontanea un aparato interior antes del corte del agua |
 | Boca de incendios | Agua limpia | 60 L/min; reserva de 1000 L tras el corte | Coloca una tubería en su casilla y ábrela con una Llave para tubos |
 
-<!-- SCREENSHOT: 06-source-types.png — Ejemplos de barril, bomba en pozo, bomba en agua abierta, aparato municipal e hidrante. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Almacenadores compatibles](../assets/images/06-source-types-cropped.png){ .wp-screenshot loading=lazy }
+![Fuentes de una bomba: pozo y agua abierta](../assets/images/06b-source-well-river-cropped.png){ .wp-screenshot loading=lazy }
+![Aparato conectado a la red municipal y boca de incendios](../assets/images/06c-source-mains-hydrant.png){ .wp-screenshot loading=lazy }
+</div>
 
 ## Compatibilidad de fluidos y calidad del agua
 

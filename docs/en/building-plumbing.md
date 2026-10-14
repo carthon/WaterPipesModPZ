@@ -17,9 +17,11 @@ When inspected, the mod creates a concealed, loop-free pipe tree from the tile y
 
 One inspection can reveal at most 200 new pipe tiles and scans at most 8,000 building tiles. If the result is partial, repeat from another location. The action charges for the planned fixtures at the start and refunds the cost of any fixture it fails to reach. Plumbing already revealed remains if the action is interrupted. Revealed concealed pipe gives no material back when dismantled.
 
-<!-- SCREENSHOT: 21-building-before.png — World-generated multi-room house before its existing plumbing is inspected. -->
-<!-- SCREENSHOT: 22-building-plumb-action.png — Plumb this building inspection action and its cost description. -->
-<!-- SCREENSHOT: 23-building-after-overlay.png — Previously hidden plumbing visible in the network overlay after inspection. -->
+![World-generated house before its existing plumbing is inspected](../assets/images/21-building-before-cropped.png){ .wp-screenshot loading=lazy }
+
+![Plumb this building inspection action and its cost](../assets/images/22-building-plumb-action-cropped.png){ .wp-screenshot loading=lazy }
+
+![Previously hidden building plumbing visible after inspection](../assets/images/23-building-after-overlay-cropped.png){ .wp-screenshot loading=lazy }
 
 ## Result messages
 

@@ -71,4 +71,7 @@ Estos ajustes están en **Opciones → Mods → Water Pipes** y afectan al clien
 | Volumen de sonido de las máquinas (%) | Ajusta ese audio entre 0 y 100 |
 | Efectos de agua | Muestra el chorro animado de aspersores activos y bocas abiertas |
 
-<!-- SCREENSHOT: 26-sandbox-options.png — Página de sandbox con el grupo completo de Water Pipes. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Parte superior de las opciones de sandbox de Water Pipes](../assets/images/26a-sandbox-options-top.png){ .wp-screenshot loading=lazy }
+![Resto de las opciones de sandbox de Water Pipes](../assets/images/26b-sandbox-options-middle.png){ .wp-screenshot loading=lazy }
+</div>

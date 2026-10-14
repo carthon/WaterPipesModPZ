@@ -14,8 +14,9 @@ This first network needs one Pipe Wrench, one Metal Pipe or fired Clay Pipe Segm
 6. Right-click any pipe and choose **Show pipe network**. Pipes appear red, sources and storage green, consumers blue, and pressure-regulated routers amber.
 7. Test the fixture. If it gives no water, check that the container holds water and stands on the fixture's floor or higher; otherwise read the installations below.
 
-<!-- SCREENSHOT: 01-getting-started-materials.png — Pipe Wrench, pipes and a container ready for the starter build. -->
-<!-- SCREENSHOT: 02-getting-started-small-network.png — Complete container-to-sink starter network with the overlay visible. -->
+![Pipe Wrench, pipes and a storage vessel ready for the starter build](../assets/images/01-getting-started-materials-cropped.png){ .wp-screenshot loading=lazy }
+
+![Complete starter network between storage and a sink, with the overlay visible](../assets/images/02-getting-started-small-network-cropped.png){ .wp-screenshot loading=lazy }
 
 ## Three starter installations
 
