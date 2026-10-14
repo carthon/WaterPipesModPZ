@@ -2172,6 +2172,11 @@ local function onClientCommand(module, command, player, args)
             return
         end
         Router.setPressureCeiling(router, args and args.pressure)
+        -- The replicated modData raises nothing on a client, so its caches would keep the old limit.
+        sendServerCommand("WaterPipes", "routerPressureChanged", {
+            x = square:getX(), y = square:getY(), z = square:getZ(),
+            pressure = Router.getPressureCeiling(router) or Constants.ROUTER_PRESSURE_UNSET,
+        })
         return
     end
 
@@ -2185,6 +2190,10 @@ local function onClientCommand(module, command, player, args)
             return
         end
         Hydrant.setOpen(hydrant, args and args.open)
+        -- The replicated modData raises nothing on a client, so its caches would keep the old position.
+        sendServerCommand("WaterPipes", "hydrantOpenChanged", {
+            x = square:getX(), y = square:getY(), z = square:getZ(), open = Hydrant.isOpen(hydrant),
+        })
         return
     end
 

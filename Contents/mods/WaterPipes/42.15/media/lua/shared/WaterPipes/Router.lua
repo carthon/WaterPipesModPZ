@@ -138,6 +138,25 @@ function Router.setPressureCeiling(worldObject, value)
     Invalidate.flowPathChanged()
 end
 
+-- Client: the server changed a limit. Written here too, since the modData may arrive after this.
+function Router.onServerCommand(module, command, args)
+    if module ~= "WaterPipes" or command ~= "routerPressureChanged" or not args then
+        return
+    end
+    local square = World.squareAt(args.x, args.y, args.z)
+    local modData = getModData(square and Router.findOnSquare(square))
+    if modData then
+        local value = args.pressure
+        modData[Constants.ROUTER_PRESSURE_KEY] =
+            (type(value) == "number" and value >= 0) and value or Constants.ROUTER_PRESSURE_UNSET
+    end
+    Invalidate.flowPathChanged()
+end
+
+if Events and Events.OnServerCommand then
+    Events.OnServerCommand.Add(Router.onServerCommand)
+end
+
 -- ===== The per-tick step =====
 -- Moved here from WaterPipeSystem, where the behaviour of a router lived while the module that knows
 -- what a router IS held only its direction and its ceiling. The tick still decides WHICH routers run
