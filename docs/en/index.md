@@ -52,7 +52,7 @@ Lay floor, vertical, and concealed pipes, or [inspect the hidden plumbing of a w
 <div markdown>
 ### :material-water: Supply and store
 
-Connect containers, rain collectors, wells, rivers, municipal water, and hydrants. See [sources and storage](sources-and-storage.md).
+Connect rain collectors and other containers, wells, rivers, municipal water, and hydrants. See [sources and storage](sources-and-storage.md).
 </div>
 <div markdown>
 ### :material-valve: Control

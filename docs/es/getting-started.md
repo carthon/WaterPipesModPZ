@@ -8,7 +8,7 @@ Si no conoces el juego o algún término, consulta el [glosario](glossary.md).
 
 Necesitas una Llave para tubos, un Tubo metálico o un Segmento de tubería de arcilla (ya cocido) por cada [casilla](glossary.md#casilla) de tubería, un [depósito](glossary.md#deposito) con agua y un [aparato](glossary.md#aparato) compatible, por ejemplo un fregadero.
 
-1. Coloca un barril, un recolector de lluvia, un ánfora u otro depósito donde quieras guardar el agua.
+1. Coloca un Barril recolector de lluvia, un Ánfora u otro depósito donde quieras guardar el agua. Los barriles que hay por el mapa solo guardan líquido con el mod [Useful Barrels](glossary.md#barril).
 2. Construye una **Tubería de fluidos** en la misma casilla que el depósito.
 3. Sigue poniendo tuberías hasta el aparato. Se unen solas formando rectas, esquinas, uniones en T y cruces.
 4. Construye la última tubería en la misma casilla del aparato; en la casilla de al lado no sirve.
@@ -36,7 +36,7 @@ Para hacerte una idea: todos los depósitos dan el mismo 1 m, sean del tipo que 
 
 ![Instalaciones solo con depósitos](../assets/images/diagram-install-storage-es.svg){ .wp-diagram }
 
-- **1** Barril en la misma planta que **2**, un fregadero: 1 m de base = **1 m**. Poco, pero suficiente para un aparato.
+- **1** [Barril](glossary.md#barril) en la misma planta que **2**, un fregadero: 1 m de base = **1 m**. Poco, pero suficiente para un aparato.
 - **3** Barril una planta más arriba, con la tubería bajando hasta **4**, un fregadero en la planta baja: 1 m + 1 planta × 3 m = **4 m**.
 
 El propio depósito es el que da la presión, así que subirlo es la forma más barata de ganarla. Al revés no funciona: un fregadero una planta por encima de su único barril recibe 1 m − 1 planta × 3 m = −2 m, y no sale agua. Sube el barril o añade una bomba.

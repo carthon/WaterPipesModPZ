@@ -32,7 +32,7 @@ The pipe must be on the object's **own tile**. Adjacent is not enough. Between f
 
 ### How do I connect a barrel to the network?
 
-If it has a cap or lid, uncap it with a Pipe Wrench first. Then build a Fluid Pipe on the **same tile**. Containers join automatically; they do not need an additional installation action.
+Build a Fluid Pipe on the **same tile**. Containers join automatically; they do not need an additional installation action. In the base game, the barrel that holds water is the Rain Collector Barrel; the barrels found around the map only work with the [Useful Barrels](glossary.md#barrel) mod, and you open one first by unscrewing its plug with a Pipe Wrench.
 
 ### How can I see concealed pipes?
 
@@ -70,7 +70,7 @@ The purifier occupies a 2 × 2 area. Its top/back corner must sit directly on th
 
 ### Why is the purifier working but no water reaches my fixtures?
 
-The purifier has its own 50 L clean-water output tank, so an extra container is not strictly required. A downstream amphora, barrel, or tank adds useful capacity. If fixtures still receive nothing, check the output tank, available pressure, and red-side connection.
+The purifier has its own 50 L clean-water output tank, so an extra container is not strictly required. A downstream amphora or rain collector barrel adds useful capacity. If fixtures still receive nothing, check the output tank, available pressure, and red-side connection.
 
 ### How do I use a fire hydrant?
 

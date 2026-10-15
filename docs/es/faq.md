@@ -32,7 +32,7 @@ La tubería tiene que estar en la **propia casilla** del objeto; al lado no bast
 
 ### ¿Cómo conecto un barril a la red?
 
-Si tiene tapa, quítasela primero con una Llave para tubos. Después construye una Tubería de fluidos en la **misma casilla**. Los depósitos se unen a la red solos; no hace falta ninguna acción más.
+Construye una Tubería de fluidos en la **misma casilla**. Los depósitos se unen a la red solos; no hace falta ninguna acción más. En el juego sin mods, el barril que guarda agua es el Barril recolector de lluvia; los barriles del mapa solo sirven con el mod [Useful Barrels](glossary.md#barril), y hay que abrirlos antes desenroscando el tapón con una Llave para tubos.
 
 ### ¿Cómo veo las tuberías ocultas?
 
@@ -70,7 +70,7 @@ El purificador ocupa 2 × 2 casillas. Su esquina superior (la del fondo) tiene q
 
 ### El purificador funciona, pero no llega agua a los aparatos. ¿Por qué?
 
-El purificador tiene un depósito interno de 50 L para el agua limpia, así que no es obligatorio añadir otro. Un ánfora, un barril o un tanque después del purificador te da más capacidad. Si los aparatos siguen sin recibir agua, revisa ese depósito de salida, la presión disponible y la conexión del lado rojo.
+El purificador tiene un depósito interno de 50 L para el agua limpia, así que no es obligatorio añadir otro. Un ánfora o un barril recolector de lluvia después del purificador te da más capacidad. Si los aparatos siguen sin recibir agua, revisa ese depósito de salida, la presión disponible y la conexión del lado rojo.
 
 ### ¿Cómo se usa una boca de incendios?
 

@@ -73,7 +73,10 @@ A world object that uses water: sink, washbasin, shower, bathtub, toilet or wash
 A base-game action (not one added by the mod) that connects a fixture or a generator to the pipe underneath it. It appears as **Plumb** followed by the object's name, for example "Plumb Generator". **Unplumb** disconnects it without removing the pipe. You need a Pipe Wrench.
 
 ### Container { #container }
-Any object that stores liquid on a network: barrel, rain collector barrel, amphora, tank, or compatible modded containers. A container joins the network as soon as a pipe sits on its own tile.
+Any object that stores liquid on a network. In the base game these are the Rain Collector Barrel, the Rain Collector Crate and the Amphora; other mods can add more, such as [Useful Barrels' barrels](#barrel). A container joins the network as soon as a pipe sits on its own tile.
+
+### Barrel (Useful Barrels) { #barrel }
+In the base game, the barrels found around the map (Light Green Barrel, Dark Green Barrel, Orange Barrel and Metal Drum) are scenery: they hold no liquid. **Useful Barrels**, a separate mod, turns them into containers: you open one by unscrewing its plug with a Pipe Wrench (or cutting its lid off with a Welding Torch), and from then on Water Pipes connects it like any other container. In this manual's examples, "barrel" stands for any container; without Useful Barrels, use a Rain Collector Barrel.
 
 ### Source { #source }
 Where water entering a network comes from: a container with water, a well or river (through a pump), town mains, or a fire hydrant.
