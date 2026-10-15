@@ -66,7 +66,7 @@ Use this page to diagnose a network that is already built. For general how-to qu
 ## One connected network contains water and petrol
 
 **Symptom:** Fixtures or generators receive no usable fluid even though their own storage is not empty.
-**Possible cause:** Separate vessels containing incompatible fluids are attached to the same pipe component. The liquids do not blend or contaminate one another, but delivery is refused while the component exposes more than one incompatible type.
+**Possible cause:** Separate vessels containing incompatible fluids are attached to the same network. The liquids do not blend or contaminate one another, but delivery is refused while the network holds more than one incompatible liquid.
 **Checks:** Reveal the network and locate the connection between the water and petrol routes.
 **Resolution:** Close a valve or separate the routes. No draining or decontamination procedure is needed; the fluids remain in their original vessels.
 

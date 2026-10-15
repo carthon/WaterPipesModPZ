@@ -1,31 +1,30 @@
 # Aparatos y fontanería
 
-## Objetos compatibles
+## Qué objetos se pueden conectar
 
-Water Pipes reconoce objetos que el juego marca como aparatos fontaneables, objetos que declaran una fuente de agua externa y las tres clases de lavadora de Build 42. En la práctica cubre:
+Water Pipes reconoce como [aparato](glossary.md#aparato) cualquier objeto que el propio juego marque como conectable a una tubería o como alimentado por agua externa, además de las tres lavadoras de Build 42. En la práctica:
 
-| Grupo | Ejemplos | Papel en la red |
+| Tipo | Ejemplos | Qué hace con la red |
 |---|---|---|
-| Grifos y lavabos | Fregaderos y lavabos | Beber, lavar, llenar y transferir desde la red |
-| Aparatos de baño | Duchas, bañeras e inodoros | Consumidor de agua |
-| Electrodomésticos | Lavadora, lavadora-secadora y torre de lavado | Alimenta el depósito interno del aparato |
-| Aparatos de otros mods | Por ejemplo, Take A Bath And Shower | Consumidor externo si el mod expone las propiedades esperadas |
+| Grifos y lavabos | Fregaderos y lavabos | Beber, lavarse, llenar recipientes y trasvasar agua desde la red |
+| Baño | Duchas, bañeras e inodoros | Consumen agua |
+| Electrodomésticos | Lavadora, lavadora-secadora y lavadora-secadora apilada | Llenan su propio depósito interno |
+| Aparatos de otros mods | Por ejemplo, Take A Bath And Shower | Consumen agua si el mod los marca como el juego espera |
 
-La detección se basa en capacidades y no en una lista fija de sprites, por lo que un aparato de otro mod puede funcionar sin estar nombrado individualmente.
+El mod no usa una lista cerrada de objetos: reconoce cualquier aparato que el juego marque de esa forma, así que muchos aparatos de otros mods funcionan sin estar nombrados aquí.
 
 ## Conectar un aparato
 
 1. Construye una tubería de suelo en la **misma casilla** del aparato.
 2. Lleva una Llave para tubos utilizable.
-3. Haz clic derecho y elige **Fontanear**.
-4. Prueba la acción normal y usa **Mostrar red de tuberías** si no recibe suministro.
-5. Elige **Desinstalar** para restaurar exactamente el estado previo del fluido y del agua municipal.
+3. Haz [clic derecho](glossary.md#clic-derecho) en el aparato y elige **[Instalar](glossary.md#instalar)** (aparece seguido de su nombre, por ejemplo «Instalar Fregadero»).
+4. Úsalo como siempre. Si no le llega agua, usa **Mostrar red de tuberías** para ver qué falla.
+5. Para desconectarlo, elige **Desinstalar**: el aparato vuelve a quedar como estaba, con su agua y su conexión a la red municipal originales.
 
-Quitar la tubería de su casilla también lo desconecta; una rotura más lejos solo corta el suministro. Mientras siga el agua municipal y esté habilitada su opción de sandbox, un aparato interior fontaneado puede alimentar la red con agua limpia y presión de acometida.
+Si quitas la tubería de su casilla, el aparato también se desconecta; un corte más lejos en la tubería solo lo deja sin agua. Mientras la ciudad siga teniendo agua corriente y la opción de sandbox correspondiente esté activada, un aparato instalado dentro de una casa mete en tu red agua limpia y la presión de la [red municipal](glossary.md#red-municipal).
 
-!!! note "Interfaz de la lavadora"
-    Una lavadora conectada sigue funcionando desde su ventana de inventario. Build 42 puede ocultar la opción redundante **Encender** del menú de la casilla cuando su depósito contiene agua.
+!!! note "La lavadora"
+    Una lavadora conectada se sigue usando desde su ventana de inventario. Cuando su depósito tiene agua, Build 42 puede quitar del menú de clic derecho la opción **Encender**, que ya está repetida en esa ventana.
 
-![Tubería en la casilla de un fregadero con la acción Instalar visible](../assets/images/19-fixture-plumb-menu-cropped.png){ .wp-screenshot loading=lazy }
-<!-- SCREENSHOT: 20-supported-fixtures.png — Fregadero, ducha, inodoro y lavadora conectados a una red. -->
-
+![Tubería en la casilla de un fregadero con la opción Instalar visible](../assets/images/19-fixture-plumb-menu-cropped.png){ .wp-screenshot loading=lazy }
+<!-- SCREENSHOT: 20-supported-fixtures.png — Fregadero, ducha, inodoro y lavadora conectados a la misma red. -->

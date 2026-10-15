@@ -10,7 +10,7 @@ When inspected, the mod creates a concealed, loop-free pipe tree from the tile y
 ## Walkthrough
 
 1. Stand inside the building with a usable Pipe Wrench.
-2. Carry the required Metal Pipes: by default, one per fixture to be connected, regardless of route length.
+2. Carry the required Iron Pipes: by default, one per fixture to be connected, regardless of route length.
 3. Right-click a suitable floored tile and choose **Plumb this building**.
 4. Review the description and start the timed action. The nearest fixtures are planned first.
 5. When complete, connect the revealed tree to storage or a source and inspect it with **Show pipe network**.

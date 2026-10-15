@@ -19,7 +19,7 @@ Build connected networks that transport and distribute water, petrol, and other 
 </section>
 
 !!! note "Made for Project Zomboid"
-    Water Pipes is an unofficial **Project Zomboid Build 42.15+ mod**. It expands base building with liquid transport, storage, pressure control, purification, irrigation, and generator refuelling.
+    Water Pipes is an unofficial **Project Zomboid Build 42.15+ mod**. It expands base building with liquid transport, storage, pressure control, purification, irrigation, and generator refuelling. New to the game? The [glossary](glossary.md) explains every term.
 
 ## What do you want to do?
 

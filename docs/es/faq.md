@@ -1,112 +1,112 @@
 # Preguntas frecuentes
 
-Esta sección también recoge dudas planteadas por jugadores en los [comentarios y discusiones de Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3739595559).
+Aquí también se responden dudas que han planteado los jugadores en los [comentarios y debates de Steam Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3739595559). Si no conoces algún término, consulta el [glosario](glossary.md).
 
 ## Instalación y requisitos
 
-### ¿Qué versión del juego es compatible?
+### ¿Con qué versión del juego funciona?
 
-Water Pipes v0.10.x requiere **Project Zomboid Build 42.15 o posterior**. Consulta [Compatibilidad](compatibility.md).
+Water Pipes v0.10.x necesita **Project Zomboid Build 42.15 o posterior**. Consulta [Compatibilidad](compatibility.md).
 
-### ¿Water Pipes tiene dependencias?
+### ¿Water Pipes necesita otros mods?
 
-No declara dependencias de otros mods. Instala Water Pipes en el servidor y en todos los clientes multijugador.
+No, no depende de ningún otro mod. En multijugador, instálalo en el servidor y en todos los jugadores.
 
-### ¿Puedo añadirlo a una partida existente?
+### ¿Puedo añadirlo a una partida que ya tengo empezada?
 
-El mod no exige un mundo nuevo, pero este caso no está cubierto por una prueba automatizada dentro del juego. Haz una copia, prueba primero una red pequeña y después compromete recursos importantes.
+No hace falta empezar un mundo nuevo, pero añadirlo a una partida avanzada no se ha probado de forma automática. Haz antes una copia de seguridad y prueba primero con una red pequeña, antes de confiarle tus reservas de agua importantes.
 
-### ¿Puedo retirarlo sin problemas?
+### ¿Puedo quitarlo sin problemas?
 
-Haz primero una copia. Retirar mods de Build 42 con objetos construibles registrados puede provocar un error `WorldDictionary`. Desmonta los objetos cuando sea posible y sigue [Retirar el mod](compatibility.md#retirar-el-mod).
+Haz antes una copia de seguridad. En Build 42, quitar un mod que añade objetos construibles puede provocar un error de carga `WorldDictionary`. Desmonta los objetos de Water Pipes que puedas y sigue los pasos de [Retirar el mod](compatibility.md#retirar-el-mod).
 
 ### ¿Se gastan las herramientas?
 
-La llave para tubos se necesita para muchas acciones, pero no se consume. Las piezas y consumibles dependen de cada receta.
+La Llave para tubos hace falta para muchas acciones, pero no se gasta. Lo que se gasta depende de cada [receta](glossary.md#receta).
 
 ## Construcción y conexiones
 
-### ¿Por qué no se conecta un barril o fregadero cercano?
+### ¿Por qué no se conecta un barril o un fregadero que está al lado de la tubería?
 
-La tubería debe estar en la **propia casilla** del objeto; al lado no basta. Entre plantas, añade una Tubería vertical de fluidos.
+La tubería tiene que estar en la **propia casilla** del objeto; al lado no basta. Para cambiar de planta, añade una Tubería vertical de fluidos.
 
 ### ¿Cómo conecto un barril a la red?
 
-Si tiene tapón o tapa, destápalo primero con una Llave para tubos. Después construye una Tubería de fluidos en la **misma casilla**. Los recipientes se incorporan automáticamente: no necesitan una acción adicional de instalación.
+Si tiene tapa, quítasela primero con una Llave para tubos. Después construye una Tubería de fluidos en la **misma casilla**. Los depósitos se unen a la red solos; no hace falta ninguna acción más.
 
-### ¿Cómo puedo ver tuberías ocultas?
+### ¿Cómo veo las tuberías ocultas?
 
-Haz clic derecho en una tubería y elige **Mostrar red de tuberías**. La superposición permanece unos segundos.
+Haz clic derecho en cualquier tubería y elige **Mostrar red de tuberías**. La red se queda resaltada unos segundos.
 
 ## Almacenamiento y líquidos
 
-### ¿Una bomba almacena agua?
+### ¿Una bomba guarda agua?
 
-No. Conecta al menos un recipiente; las fuentes aportan líquido, pero no sustituyen al almacenamiento.
+No. Conecta al menos un depósito: las fuentes dan agua, pero no sustituyen a un sitio donde guardarla.
 
-### ¿Puede una red llevar agua y gasolina?
+### ¿Puede una misma red llevar agua y gasolina?
 
-El agua y la gasolina nunca se mezclan: se rechaza una transferencia incompatible. Aun así, mantenlas en redes aisladas porque los aparatos y generadores necesitan el fluido correcto. El agua limpia sí puede combinarse con contaminada, y el resultado queda contaminado.
+El agua y la gasolina nunca se mezclan: el mod rechaza el trasvase. Aun así, mantenlas en redes separadas, porque los aparatos y los generadores necesitan cada uno su líquido. El agua limpia sí se puede juntar con la contaminada, pero el resultado queda contaminado.
 
 ## Bombas y presión
 
 ### ¿Por qué llega agua a un aparato y a otro no?
 
-La altura, distancia, demanda compartida y presión disponible varían por el recorrido. Usa **Ver estado de la bomba**, un manómetro y [Bombas y presión](pumps-and-pressure.md).
+La altura, la distancia, el consumo de otros puntos de la línea y la presión disponible cambian a lo largo del recorrido. Usa **Ver estado de la bomba**, un manómetro y la página [Bombas y presión](pumps-and-pressure.md).
 
 ## Purificación
 
-### ¿Los fregaderos limpian agua contaminada?
+### ¿Los fregaderos limpian el agua contaminada?
 
-Con la purificación realista, activada por defecto, no. Usa un **Purificador de agua (eléctrico)**.
+Con la purificación realista, que viene activada por defecto, no. Usa un **Purificador de agua (eléctrico)**.
 
 ### ¿Por qué se ha parado el purificador?
 
-Necesita corriente, agua contaminada en la entrada, espacio de salida y un filtro utilizable. Abre su ventana de estado.
+Necesita corriente, agua contaminada en la entrada, sitio en la salida y un filtro en buen estado. Abre su ventana con **Abrir purificador** para ver qué le falta.
 
-### ¿Cómo se coloca el purificador sobre el enrutador?
+### ¿Cómo coloco el purificador sobre el enrutador?
 
-El purificador ocupa 2 × 2 casillas. Su esquina superior/trasera debe quedar directamente sobre la casilla del Enrutador de fluidos. El lado verde del enrutador es la entrada y el rojo es la salida.
+El purificador ocupa 2 × 2 casillas. Su esquina superior (la del fondo) tiene que quedar justo encima de la casilla del Enrutador de fluidos. El lado verde del enrutador es la entrada y el rojo, la salida.
 
-### ¿Por qué el purificador funciona pero no llega agua a los aparatos?
+### El purificador funciona, pero no llega agua a los aparatos. ¿Por qué?
 
-El purificador tiene un búfer interno de 50 unidades de agua limpia, por lo que no es obligatorio añadir otro recipiente. Un ánfora, barril o tanque posterior aporta capacidad adicional. Si los aparatos siguen sin recibir agua, revisa el búfer de salida, la presión disponible y la conexión del lado rojo.
+El purificador tiene un depósito interno de 50 L para el agua limpia, así que no es obligatorio añadir otro. Un ánfora, un barril o un tanque después del purificador te da más capacidad. Si los aparatos siguen sin recibir agua, revisa ese depósito de salida, la presión disponible y la conexión del lado rojo.
 
-### ¿Cómo se utiliza una boca de incendios?
+### ¿Cómo se usa una boca de incendios?
 
-Construye una Tubería de fluidos en su propia casilla, equipa una Llave para tubos y ábrela. Utiliza la red municipal antes del corte y después su reserva configurada. Consulta [Fuentes y almacenamiento](sources-and-storage.md).
+Construye una Tubería de fluidos en su misma casilla, equípate una Llave para tubos y elige **Abrir boca de incendios**. Mientras la ciudad tenga agua, da agua municipal; después del corte, da la reserva que se haya configurado. Consulta [Fuentes y almacenamiento](sources-and-storage.md).
 
 ## Riego
 
-### ¿Por qué se ha roto el gotero?
+### ¿Por qué se ha roto mi gotero?
 
-Por defecto revienta al superar 15 m de presión. Coloca antes un enrutador con un límite adecuado.
+Por defecto, revienta si la presión pasa de 15 m. Pon antes de él un Enrutador de fluidos con el límite de presión adecuado.
 
-### ¿Por qué no funciona el aspersor?
+### ¿Por qué no riega el aspersor?
 
-Por defecto necesita 20 m de presión, agua en la red y un cultivo vivo que necesite riego. Usa **Comprobar emisor de riego**.
+Por defecto necesita 20 m de presión, agua en la red y una planta viva que necesite riego. Usa **Comprobar emisor de riego**.
 
 ## Combustible y generadores
 
-### ¿Cuándo reposta un generador instalado?
+### ¿Cuándo se rellena un generador instalado?
 
-Una vez por minuto al bajar del umbral configurado (25 % por defecto), hasta el objetivo (100 %), desde una red exclusiva de gasolina.
+Una vez por minuto de juego, si está por debajo del umbral configurado (25 % por defecto), hasta llegar al objetivo (100 % por defecto), y siempre desde una red que solo tenga gasolina.
 
-### ¿Por qué el generador no toma gasolina aunque haya una tubería debajo?
+### ¿Por qué el generador no recibe gasolina aunque tenga una tubería debajo?
 
-Además de colocar la tubería en su casilla, equipa una Llave para tubos y usa **Instalar Generador**. La red debe contener solo gasolina y disponer de presión suficiente. Sigue el [ejemplo completo](practical-examples.md#abastecer-un-generador-con-gasolina).
+Además de poner la tubería en su casilla, equípate una Llave para tubos y elige **Instalar Generador**. La red tiene que tener solo gasolina y presión suficiente para la altura y la distancia. Sigue el [ejemplo completo](practical-examples.md#abastecer-un-generador-con-gasolina).
 
-### ¿Cómo se utiliza una Válvula de corte?
+### ¿Cómo se usa una Válvula de corte?
 
-Constrúyela sobre una tubería de suelo normal. **Cerrar válvula** separa ambos lados y **Abrir válvula** vuelve a unirlos. Nunca la abras entre gasolina y agua. Consulta el [ejemplo de control](practical-examples.md#separar-y-controlar-ramales).
+Constrúyela sobre una tubería de suelo normal. **Cerrar válvula** separa los dos lados en redes independientes y **Abrir válvula** los vuelve a unir. Nunca la abras si a un lado hay gasolina y al otro agua. Consulta el [ejemplo de control](practical-examples.md#separar-y-controlar-ramales).
 
 ### ¿Qué hace realmente «Fontanear el edificio»?
 
-En un edificio generado por el mundo, inspecciona y revela una fontanería que se considera preexistente. El mod solo materializa el árbol oculto cuando se solicita para no generar redes en todos los edificios del mapa. **No** fontanea automáticamente construcciones del jugador; tiende esas redes a mano. Consulta el [procedimiento completo](practical-examples.md#inspeccionar-la-fontaneria-de-una-casa-del-mundo).
+En un edificio que ya venía en el mapa, revisa y saca a la luz la fontanería que se considera que ya tenía. El mod solo crea esas tuberías ocultas cuando se lo pides, para no tener que crearlas en todos los edificios del mapa. **No** pone tuberías en edificios construidos por jugadores; en esos se ponen a mano. Consulta el [paso a paso completo](practical-examples.md#inspeccionar-la-fontaneria-de-una-casa-del-mapa).
 
 ## Movimiento y colisiones
 
-### ¿Las tuberías colocadas en el suelo bloquean personajes o vehículos?
+### ¿Las tuberías del suelo bloquean el paso a personajes o vehículos?
 
 No. Las tuberías no bloquean el movimiento.
 
@@ -114,8 +114,8 @@ No. Las tuberías no bloquean el movimiento.
 
 ### ¿Funciona en multijugador?
 
-Sí. Las acciones que cambian estados importantes son validadas por el servidor.
+Sí. Las acciones que cambian algo importante las comprueba el servidor antes de aplicarlas.
 
-### ¿Qué integraciones están confirmadas?
+### ¿Con qué mods está comprobado que funciona?
 
-Los aparatos de Take A Bath And Shower y los recipientes de Useful Barrels. Consulta [Compatibilidad](compatibility.md).
+Con los aparatos de Take A Bath And Shower y los barriles de Useful Barrels. Consulta [Compatibilidad](compatibility.md).

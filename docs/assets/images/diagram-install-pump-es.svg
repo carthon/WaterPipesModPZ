@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" role="img" aria-label="Depósito con bomba de agua a 2 casillas del barril: 1 m más 25 m da 26 m; 22 m en un fregadero una planta más arriba, con la subida a 6 casillas; 24 m en un aspersor a 10 casillas">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 420" role="img" aria-label="Depósito con bomba de agua a 2 casillas del barril: 1 m más 25 m da 26 m; 22 m en un fregadero una planta más arriba, con su tubería vertical a 6 casillas; 24 m en un aspersor a 10 casillas">
   <defs>
     <linearGradient id="bg" x2="0" y2="1"><stop stop-color="#202b26"/><stop offset="1" stop-color="#121815"/></linearGradient>
     <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0v24" fill="none" stroke="#d7c79d" stroke-opacity=".045"/></pattern>

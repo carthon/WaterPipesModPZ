@@ -1,10 +1,12 @@
 # Getting started
 
-Water Pipes is a **Project Zomboid Build 42.15+** mod. Its parts are built from **Build menu → Piping**. Keep a usable Pipe Wrench in your inventory: it is required for most construction and plumbing actions but is not consumed.
+Water Pipes is a **Project Zomboid Build 42.15+** mod. Its parts are built from the **Building** menu, **Piping** category. Keep a usable Pipe Wrench in your inventory: it is required for most construction and plumbing actions but is not consumed.
+
+If a game or plumbing term is unfamiliar, see the [glossary](glossary.md).
 
 ## Small-base starter network
 
-This first network needs one Pipe Wrench, one Metal Pipe or fired Clay Pipe Segment for each pipe tile, one water container, and one supported fixture such as a sink.
+This first network needs one Pipe Wrench, one Iron Pipe or fired Clay Pipe Segment for each pipe tile, one water container, and one supported fixture such as a sink.
 
 1. Put a barrel, rain collector, amphora, or other fluid container where the network will store water.
 2. Build a **Fluid Pipe** on the container's own tile.
@@ -69,7 +71,7 @@ A router needs no power and never adds pressure: with the pump off, the drips ge
 | I want to… | Read… |
 |---|---|
 | See every construction recipe | [Pipe networks](pipe-networks.md), [Pumps and pressure](pumps-and-pressure.md), [Routers and valves](routers-and-valves.md), [Purification](purification.md), and [Irrigation](irrigation.md) |
-| Compare every buildable component | [Component reference](component-reference.md) |
+| Compare every pipe and [component](glossary.md#component) | [Pipes and components reference](component-reference.md) |
 | Follow complete example installations | [Practical examples](practical-examples.md) |
 | Draw from a well, river, town mains, or hydrant | [Sources and storage](sources-and-storage.md) |
 | Connect a sink, shower, toilet, or washing machine | [Fixtures and plumbing](fixtures-and-plumbing.md) |
@@ -77,6 +79,7 @@ A router needs no power and never adds pressure: with the pump off, the drips ge
 | Move petrol and refuel a generator | [Fuel transport](fuel-transport.md) |
 | Change difficulty or simulation values | [Sandbox settings](sandbox-settings.md) |
 | Diagnose something that does not work | [Troubleshooting](troubleshooting.md) and the [FAQ](faq.md) |
+| Understand a term | [Glossary](glossary.md) |
 
 ## Where to go next
 

@@ -1,12 +1,12 @@
 # Practical Water Pipes installations
 
-These Project Zomboid plumbing examples use the v0.10.x mechanics. Recipe details are in the [component reference](component-reference.md); use [Troubleshooting](troubleshooting.md) if a final check fails.
+These Project Zomboid plumbing examples use the v0.10.x mechanics. Recipe details are in the [pipes and components reference](component-reference.md); use [Troubleshooting](troubleshooting.md) if a final check fails.
 
 ## First water network
 
 **Goal:** supply one sink from a finite water container.
 
-**Materials:** Pipe Wrench, one container, and one Metal Pipe or fired Clay Pipe Segment per pipe tile.
+**Materials:** Pipe Wrench, one container, and one Iron Pipe or fired Clay Pipe Segment per pipe tile.
 
 1. Place the container and, if its design requires it, open or uncap it.
 2. Build a **Fluid Pipe** on the container's own tile.
@@ -22,7 +22,7 @@ These Project Zomboid plumbing examples use the v0.10.x mechanics. Recipe detail
 
 This action materializes the network on demand so the mod does not have to generate plumbing for every building on the map. It cannot auto-plumb a player-built house; build that network manually instead.
 
-**Materials:** usable Pipe Wrench and, by default, one Metal Pipe per fixture that will be connected.
+**Materials:** usable Pipe Wrench and, by default, one Iron Pipe per fixture that will be connected.
 
 1. Stand inside the building and choose a floored root tile near the intended supply.
 2. Right-click and select **Plumb this building**; review the reported price.
@@ -54,10 +54,10 @@ This action materializes the network on demand so the mod does not have to gener
 1. Orient the router so green **IN** faces the tainted network and red **OUT** faces the clean network.
 2. Place the purifier's top/back anchor on the router tile and keep the floor above clear.
 3. Power it and open **Open Purifier**.
-4. Confirm tainted intake, filter condition, and free room in its 50-unit output buffer.
+4. Confirm tainted intake, filter condition, and free room in its 50 L output tank.
 5. Add clean-side storage for more capacity; add downstream pressure if required.
 
-**Check:** the window says **Filtering** and clean output increases, up to 10 units/min. **Common errors:** reversed router, clean or non-water input, no power, clogged filter, or full output. See [Water purification](purification.md).
+**Check:** the window says **Filtering** and clean output increases, up to 10 L/min. **Common errors:** reversed router, clean or non-water input, no power, clogged filter, or full output. See [Water purification](purification.md).
 
 ## Install irrigation
 

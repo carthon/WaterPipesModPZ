@@ -4,12 +4,12 @@
 
 | Build entry | Requirements | Consumed |
 |---|---|---|
-| Fluid Pipe | Pipe Wrench | 1 Metal Pipe **or** 1 fired Clay Pipe Segment |
-| Vertical Fluid Pipe | Pipe Wrench | 1 Metal Pipe **or** 1 fired Clay Pipe Segment |
+| Fluid Pipe | Pipe Wrench | 1 Iron Pipe **or** 1 fired Clay Pipe Segment |
+| Vertical Fluid Pipe | Pipe Wrench | 1 Iron Pipe **or** 1 fired Clay Pipe Segment |
 | Concealed Fluid Pipe | Pipe Wrench | 1 pipe plus 1 full supported bucket of prepared clay cement or concrete |
 | Concealed Vertical Fluid Pipe | Pipe Wrench | 1 pipe plus 1 full supported bucket of prepared clay cement or concrete |
 
-The wrench is kept. Ordinary builds have no skill requirement. A Metal Pipe can also be forged from charcoal plus half and quarter iron-bar stock using a hammer, tongs or pliers, and a suitable punch at a primitive forge.
+The wrench is kept. Ordinary builds have no skill requirement. An Iron Pipe can also be forged at a Primitive Forge from Charcoal, an Iron Bar Half, and an Iron Bar Quarter, using a hammer, tongs or pliers, and a punch (see the [reference](component-reference.md#related-recipe)).
 
 !!! note "Cement consumption"
     Each concealed pipe consumes one complete prepared bucket, so one bucket builds one pipe tile. The accepted variants are Clay Cement and Concrete in standard or carved buckets.
@@ -29,7 +29,7 @@ Concealed variants have the same network behavior but become invisible after con
 
 Use the game's :material-hammer-screwdriver: **Disassemble** action rather than the moveable-object tool.
 
-- A hand-built metal pipe has a 90% chance to return one Metal Pipe.
+- A pipe you built from an Iron Pipe has a 90% chance to return it.
 - A clay pipe returns nothing: the fired segment is spent when laid.
 - Concealed pipe revealed by **Plumb this building** returns nothing because that inspection is priced per fixture.
 - Destroying a pipe with a sledgehammer, fire, or damage returns nothing.

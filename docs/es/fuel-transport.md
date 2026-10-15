@@ -1,24 +1,24 @@
 # Transporte de combustible
 
-1. Usa un recipiente dedicado con **Gasolina** y coloca una tubería de suelo en su propia casilla.
-2. Construye una ruta aislada hasta el generador. Añade una bomba con corriente si la altura, distancia o demanda dejan poca presión.
-3. Coloca la última tubería en la misma casilla del generador.
-4. Lleva una Llave para tubos, haz clic derecho en el generador y elige **Instalar Generador**.
-5. Mantén la red exclusiva de gasolina. El generador la comprueba una vez por minuto de juego.
+1. Usa un depósito solo para **Gasolina** y pon una tubería de suelo en su casilla.
+2. Lleva las tuberías hasta el [generador](glossary.md#generador) por un recorrido que no toque ninguna red de agua. Si la altura, la distancia o el consumo dejan poca presión, añade una bomba con corriente.
+3. Pon la última tubería en la misma casilla que el generador.
+4. Con una Llave para tubos en el inventario, haz clic derecho en el generador y elige **Instalar Generador**.
+5. Que en esa red solo haya gasolina. El generador la revisa una vez por minuto de juego.
 
-Cuando su depósito baja del umbral configurado (25 % por defecto), extrae hasta el objetivo (100 % por defecto). Un umbral de 0 desactiva el repostaje automático. Solo extrae Gasolina: una red vacía o que ofrezca agua no suministra nada. Los líquidos incompatibles se rechazan en vez de mezclarse.
+Cuando su depósito de combustible baja del umbral configurado (25 % por defecto), el generador toma gasolina de la red hasta llegar al objetivo (100 % por defecto). Con el umbral a 0 no se rellena solo. Solo toma Gasolina: si la red está vacía o tiene agua, no recibe nada. Los líquidos incompatibles se rechazan; nunca se mezclan.
 
-![Red aislada de gasolina](../assets/images/diagram-fuel-network.svg){ .wp-diagram }
+![Red de gasolina aislada](../assets/images/diagram-fuel-network.svg){ .wp-diagram }
 
-- **1** Depósito exclusivo de gasolina.
-- **2** Bomba, cuando hace falta presión.
+- **1** Depósito solo para gasolina.
+- **2** Bomba, si hace falta presión.
 - **3** Generador conectado.
 
-El perímetro discontinuo indica que la línea permanece separada del agua.
+La línea discontinua indica que esta red no toca ninguna red de agua.
 
-![Acción Instalar Generador con una tubería en la casilla del generador](../assets/images/25-generator-connect-menu-cropped.png){ .wp-screenshot loading=lazy }
+![Opción Instalar Generador con una tubería en la casilla del generador](../assets/images/25-generator-connect-menu-cropped.png){ .wp-screenshot loading=lazy }
 
-Usa **Desinstalar Generador** para desconectarlo sin retirar la tubería.
+Para desconectarlo sin quitar la tubería, elige **Desinstalar Generador**.
 
 !!! danger
-    Mantén separadas las rutas de gasolina y agua potable. No pueden mezclarse, pero una instalación compartida es más difícil de revisar y no permite que un generador extraiga agua ni que un aparato extraiga gasolina. Usa un hueco físico, una válvula cerrada o un enrutador bien orientado.
+    Mantén separadas las tuberías de gasolina y las de agua potable. Nunca se mezclan, pero una instalación compartida es más difícil de revisar y no hace que el generador pueda tomar agua ni que un grifo dé gasolina. Sepáralas con un hueco sin tubería, una válvula cerrada o un enrutador bien orientado.

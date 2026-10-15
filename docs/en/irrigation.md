@@ -2,10 +2,10 @@
 
 | Emitter | Recipe | Coverage | Default pressure | Network use |
 |---|---|---|---:|---:|
-| Drip Emitter | Farming 1, Pipe Wrench, 1 Metal Pipe | Its own tile | No minimum; bursts above 15 m | 0.2 L/hour |
-| Sprinkler | Farming 2, Pipe Wrench, 1 Metal Pipe, 1 Sheet Metal | Full 3×3 | Needs 20 m | 1.8 L/hour |
+| Drip Emitter | Agriculture 1, Pipe Wrench, 1 Iron Pipe | Its own tile | No minimum; bursts above 15 m | 0.2 L/hour |
+| Sprinkler | Agriculture 2, Pipe Wrench, 1 Iron Pipe, 1 Steel Sheet | Full 3×3 | Needs 20 m | 1.8 L/hour |
 
-Construction awards 10 Farming XP for a drip and 20 for a sprinkler. Both are pipe segments: they carry fluid onward and may be laid over crops. They add 10 crop-water points per in-game hour while a living crop needs water. Tainted water irrigates as effectively as clean water.
+Construction awards 10 Agriculture XP for a drip and 20 for a sprinkler. Both are pipe segments: they carry fluid onward and may be laid over crops. They add 10 crop-water points per in-game hour while a living crop needs water. Tainted water irrigates as effectively as clean water.
 
 The drip charges only its own tile. The sprinkler pays for all nine tiles whether crops occupy them or not and, when enabled in sandbox settings, makes noise within a 12-tile radius. Its spray also wets characters standing in the 3×3.
 

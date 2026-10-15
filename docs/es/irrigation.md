@@ -1,29 +1,29 @@
 # Riego
 
-| Emisor | Receta | Cobertura | Presión predeterminada | Consumo de red |
+| Componente | Receta | Qué riega | Presión por defecto | Agua que gasta |
 |---|---|---|---:|---:|
-| Gotero | Agricultura 1, Llave para tubos, 1 Tubería de metal | Su propia casilla | Sin mínimo; revienta por encima de 15 m | 0,2 L/hora |
-| Aspersor | Agricultura 2, Llave para tubos, 1 Tubería de metal, 1 Chapa metálica | 3×3 completo | Necesita 20 m | 1,8 L/hora |
+| Gotero | Agricultura 1, Llave para tubos, 1 Tubo metálico | Su propia casilla | Sin mínimo; revienta por encima de 15 m | 0,2 L/hora |
+| Aspersor | Agricultura 2, Llave para tubos, 1 Tubo metálico, 1 Chapa metálica | Un cuadrado de 3×3 casillas | Necesita 20 m | 1,8 L/hora |
 
-Construirlos concede 10 XP de Agricultura para el gotero y 20 para el aspersor. Ambos son segmentos de tubería: conducen fluido y se pueden colocar sobre cultivos. Añaden 10 puntos de agua al cultivo por hora de juego cuando una planta viva necesita riego. El agua contaminada riega igual que la limpia.
+Construir un gotero da 10 XP de Agricultura, y un aspersor, 20. Los dos funcionan también como tubería: dejan pasar el agua hacia las siguientes y se pueden poner encima de los cultivos. Mientras una planta viva necesite agua, le suman 10 puntos de riego por cada hora de juego. El [agua contaminada](glossary.md#agua-contaminada) riega igual de bien que la limpia.
 
-El gotero solo cobra su casilla. El aspersor gasta por las nueve casillas, tengan cultivo o no, y, si está habilitado en sandbox, hace ruido en un radio de 12 casillas. Su spray también moja a los personajes dentro del 3×3.
+El gotero solo gasta agua en su casilla. El aspersor gasta agua por las nueve casillas, haya cultivos o no, y, si está activado en las opciones de sandbox, hace ruido que se oye a 12 casillas (y atrae zombis). Su chorro también moja a los personajes que estén dentro del cuadrado.
 
-## Diseños seguros
+## Instalaciones seguras
 
-- **Línea de goteo:** fuente o bomba → Enrutador limitado por debajo del umbral de rotura → fila de goteros.
-- **Zona de aspersión:** fuente → bomba o red municipal → enrutador → rama corta de aspersores. Divide grandes granjas en zonas porque la demanda compartida deja sin presión el extremo.
-- Usa **Comprobar emisor de riego** para ver falta de agua, ausencia o insuficiencia de presión, riesgo de rotura o estado reventado.
+- **Línea de goteros:** fuente o bomba → enrutador con un límite por debajo de la presión que revienta los goteros → fila de goteros.
+- **Zona de aspersores:** fuente → bomba o red municipal → enrutador → ramal corto de aspersores. Divide las granjas grandes en varias zonas: si todos los aspersores comparten la misma línea, los del final se quedan sin presión (es la [demanda compartida](glossary.md#demanda-compartida)).
+- Haz clic derecho en un gotero o aspersor y elige **Comprobar emisor de riego** para saber si no tiene agua, si le falta presión, si está a punto de reventar o si ya ha reventado.
 
-![Línea de goteo con presión segura](../assets/images/diagram-irrigation-safe.svg){ .wp-diagram }
+![Línea de goteros con presión segura](../assets/images/diagram-irrigation-safe.svg){ .wp-diagram }
 
 - **1–2** Barril y bomba con corriente: 1 m + 25 m = **26 m**.
 - **3** Enrutador con **Fijar límite de presión** en 12 m, por debajo de los 15 m que revientan un gotero.
-- **4** Cuatro goteros de 0,2 L/h en casillas seguidas: **12 m**. Entre los cuatro pierden menos de 0,1 m por casilla.
+- **4** Cuatro goteros de 0,2 L/hora en casillas seguidas: **12 m**. Entre los cuatro pierden menos de 0,1 m por casilla.
 
-Un gotero reventado sigue conduciendo agua, pero deja de regar. Repáralo con Llave para tubos y 1 Cinta americana. Un umbral de rotura 0 en sandbox desactiva las roturas.
+Un gotero reventado sigue dejando pasar el agua, pero deja de regar. Se repara con **Reparar gotero**, una Llave para tubos y 1 Cinta americana. Si pones la presión de rotura a 0 en las opciones de sandbox, los goteros no revientan nunca.
 
 <div class="wp-gallery wp-gallery--2" markdown>
-![Aspersor activo mostrando toda su cobertura de 3×3](../assets/images/17-sprinkler-coverage-cropped.png){ .wp-screenshot loading=lazy }
-![Diagnóstico del emisor indicando un problema de presión](../assets/images/18-emitter-diagnostics-cropped.png){ .wp-screenshot loading=lazy }
+![Aspersor en marcha regando toda su zona de 3×3](../assets/images/17-sprinkler-coverage-cropped.png){ .wp-screenshot loading=lazy }
+![Comprobar emisor de riego avisando de un problema de presión](../assets/images/18-emitter-diagnostics-cropped.png){ .wp-screenshot loading=lazy }
 </div>
