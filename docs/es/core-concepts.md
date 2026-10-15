@@ -1,30 +1,30 @@
 # Conceptos básicos
 
-## Un componente conectado, un suministro compartido
+## Una red comparte toda su agua
 
-Una red incluye todas las tuberías y recipientes alcanzables sin cruzar una frontera cerrada. Los depósitos del componente comparten el resumen de fluidos; los aparatos y generadores extraen de él. Debe haber una tubería en la propia casilla del objeto para que participe.
+Una [red](glossary.md#red) es el conjunto de tuberías y de todo lo que está conectado a ellas sin que nada lo corte. Los [depósitos](glossary.md#deposito) de una misma red funcionan como si fueran uno solo: los [aparatos](glossary.md#aparato) y los generadores sacan el agua de ese conjunto, esté donde esté. Para que un objeto forme parte de la red tiene que haber una tubería en su propia [casilla](glossary.md#casilla); al lado no basta.
 
 ```text
 fuente/depósito ── tubería ── bomba ── consumidor
                               │
-                              └── rama ── consumidor
+                              └── ramal ── consumidor
 ```
 
-Los líquidos incompatibles no se mezclan: se rechaza cualquier transferencia que intentase combinar gasolina con agua u otro par incompatible. El agua limpia y la contaminada sí son compatibles, pero al juntarlas el resultado queda contaminado. Aun así, conviene usar redes independientes para que cada consumidor reciba el fluido previsto.
+Los líquidos incompatibles nunca se mezclan: el mod rechaza cualquier trasvase que juntaría gasolina con agua o cualquier otra pareja incompatible. El agua limpia y la [contaminada](glossary.md#agua-contaminada) sí pueden juntarse, pero el resultado queda contaminado. Aun así, es mejor usar una red distinta para cada líquido, para que cada aparato reciba el que necesita.
 
-## Fronteras
+## Qué divide una red en dos
 
-| Elemento | Estado abierto o normal | Estado de frontera |
+| Elemento | En estado normal | Cuando separa |
 |---|---|---|
-| Hueco físico | Siempre separado | No existe conexión |
-| Válvula de corte | Abierta: una red | Cerrada: dos redes; no cruzan fluido, presión ni contaminación |
-| Enrutador de fluidos | Siempre separa entrada y salida | Transfiere en una dirección y puede limitar presión |
-| Enrutador con recipiente/purificador | Frontera completa | Solo se intercambia a través del objeto |
+| Hueco (una casilla sin tubería) | Siempre separa | No hay conexión |
+| [Válvula de corte](glossary.md#valvula-de-corte) | Abierta: una sola red | Cerrada: dos redes; no pasa ni líquido, ni presión, ni contaminación |
+| [Enrutador de fluidos](glossary.md#enrutador) | Siempre separa su entrada de su salida | Deja pasar el agua en un solo sentido y, si quieres, limita la presión |
+| Enrutador con un depósito o un purificador encima | Separación total | Los dos lados solo intercambian a través de ese objeto |
 
-Las tuberías verticales conectan plantas por bordes de pared norte u oeste. La presión decide si un consumidor alcanzable puede extraer: la altura ayuda, la distancia y demanda compartida cuestan presión, las bombas la añaden y los enrutadores solo la reducen.
+Las [tuberías verticales](glossary.md#tuberia-vertical) unen plantas por las paredes norte u oeste. Que un consumidor esté conectado no garantiza que reciba agua: decide la [presión](glossary.md#presion). La altura la aumenta, la distancia y el consumo de otros puntos de la línea la reducen, las bombas la suman y los enrutadores solo pueden bajarla.
 
-![Tres fronteras de red](../assets/images/diagram-network-boundaries.svg){ .wp-diagram }
+![Tres formas de dividir una red](../assets/images/diagram-network-boundaries.svg){ .wp-diagram }
 
-- **1** Hueco físico.
+- **1** Hueco sin tubería.
 - **2** Válvula de corte cerrada.
-- **3** Enrutador unidireccional, de la entrada verde a la salida roja.
+- **3** Enrutador de fluidos: el agua solo pasa de la entrada verde a la salida roja.

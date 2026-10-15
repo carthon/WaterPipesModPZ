@@ -33,8 +33,8 @@ The shared global `WaterPipesAPI` is available from game/server start. Pass an `
 |---|---|
 | `VERSION` | API version; currently `1` |
 | `hasNetwork(square)` | Whether a network is reachable |
-| `getWaterAmount(square)` | Usable amount, or `0` when none is available or the component exposes incompatible types |
-| `getWaterSummary(square)` | `{ amount, capacity, fluidType, isMixed }` or `nil`; `isMixed` flags multiple types in one component, not liquids blended in a vessel |
+| `getWaterAmount(square)` | Usable amount, or `0` when none is available or the network holds incompatible liquids at once |
+| `getWaterSummary(square)` | `{ amount, capacity, fluidType, isMixed }` or `nil`; `isMixed` flags vessels holding different liquids on one network, not liquids blended inside a vessel |
 | `drawWater(square, fluidType, amount)` | Amount actually removed |
 | `fillWater(square, fluidType, amount)` | Amount actually added; never creates a mixture |
 

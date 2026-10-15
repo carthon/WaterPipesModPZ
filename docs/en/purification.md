@@ -2,7 +2,7 @@
 
 ## Construction
 
-The **Water Purifier (Electric)** requires Electricity 4, Metal Welding 3, a Pipe Wrench, 3 Blow Torch uses, 2 Welding Rod uses, 3 Metal Pipes, 2 Sheet Metal, 1 Electronics Scrap, 1 Wire, 1 Lighter Battery, 1 charcoal item, and 2 Ripped Sheets. Building it awards 40 Electricity XP and 30 Metal Welding XP.
+The **Water Purifier (Electric)** requires Electrical 4, Welding 3, a Pipe Wrench, 3 Welding Torch uses, 2 Welding Rods uses, 3 Iron Pipes, 2 Steel Sheets, 1 Scrap Electronics, 1 Wire, 1 Lighter - Improvised Battery, 1 Charcoal, and 2 Rags. Building it awards 40 Electrical XP and 30 Welding XP.
 
 First build and orient a Fluid Router: green is tainted-water **IN**, red is clean-water **OUT**. The purifier occupies 2×2 tiles; place its top/back corner on the router tile and leave the floor above that anchor clear. It will not place over another purifier or without the router.
 
@@ -18,14 +18,14 @@ First build and orient a Fluid Router: green is tainted-water **IN**, red is cle
 
 ## Operation and filter
 
-While powered, it draws tainted water at up to 20 units/min and converts up to 10 units/min. Its internal input and output buffers each hold 50 units. It does not process clean water or incompatible non-water liquids. External clean-side storage is optional, but recommended: without it, processing pauses when the 50-unit output buffer fills.
+While powered, it draws tainted water at up to 20 L/min and converts up to 10 L/min (its window shows "u", units; one unit is one litre). Its internal input and output tanks hold 50 L each. It does not process clean water or incompatible non-water liquids. External clean-side storage is optional, but recommended: without it, processing pauses when the 50 L output tank fills.
 
-The filter starts at 100%. At the default wear rate it cleans about 5,000 units before clogging. Right-click **Repair filter** with 1 charcoal item and 2 Ripped Sheets; repair returns it to 100%. **Open Purifier** reports power, input, output, rate, and filter condition. Ambient machine sound can be disabled under **Options → Mods → Water Pipes**.
+The filter starts at 100%. At the default wear rate it cleans about 5,000 L before clogging. Right-click **Repair filter** with 1 Charcoal and 2 Rags; repair returns it to 100%. **Open Purifier** reports power, input, output, rate, and filter condition. Ambient machine sound can be disabled under **Options → Mods → Water Pipes**.
 
 By default the clean side receives 60% of incoming pressure: 25 m becomes 15 m, enough for taps and drip irrigation but below a sprinkler's 20 m requirement. Add a pump after the purifier or change the sandbox transfer percentage when necessary.
 
 ## Dismantling
 
-Use a fueled Blow Torch and Welding Mask. Each return is rolled separately: 1 Sheet Metal and 2 Metal Pipes at 80%, plus 1 Electronics Scrap and 1 Wire at 60%. Battery, charcoal, and sheets are not returned; destruction returns nothing.
+Use a fueled Welding Torch and Welder Mask. Each return is rolled separately: 1 Steel Sheet and 2 Iron Pipes at 80%, plus 1 Scrap Electronics and 1 Wire at 60%. Battery, charcoal, and rags are not returned; destruction returns nothing.
 
 <!-- SCREENSHOT: 15-purifier-status-window.png — Purifier window while actively filtering. -->

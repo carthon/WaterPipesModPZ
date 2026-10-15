@@ -1,8 +1,8 @@
 # Core concepts
 
-## One connected component, one shared supply
+## One network, one shared supply
 
-A network is every pipe and vessel reachable without crossing a closed boundary. Containers in that component share a fluid summary; fixtures and generators draw from it. A pipe must occupy an object's own tile for that object to participate.
+A [network](glossary.md#network) is every pipe and vessel reachable without crossing a closed boundary. Its containers behave as one shared store; fixtures and generators draw from it wherever they are. A pipe must occupy an object's own tile for that object to participate.
 
 ```text
 source/storage ── pipe ── pump ── consumer

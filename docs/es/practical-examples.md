@@ -1,100 +1,99 @@
 # Instalaciones prácticas con Water Pipes
 
-Estos ejemplos de fontanería para Project Zomboid utilizan las mecánicas de la serie v0.10.x. Consulta las recetas en el [catálogo de componentes](component-reference.md) y usa [Resolución de problemas](troubleshooting.md) si falla la comprobación final.
+Estos ejemplos de fontanería para Project Zomboid funcionan con la serie v0.10.x. Las recetas completas están en el [catálogo de tuberías y componentes](component-reference.md); si la comprobación final falla, consulta [Resolución de problemas](troubleshooting.md).
 
 ## Primera red de agua
 
-**Objetivo:** abastecer un fregadero desde un recipiente finito.
+**Objetivo:** dar agua a un fregadero desde un barril u otro [depósito](glossary.md#deposito).
 
-**Materiales:** Llave para tubos, un recipiente y una Tubería de metal o Segmento de arcilla cocida por casilla.
+**Materiales:** Llave para tubos, un depósito y un Tubo metálico o un Segmento de tubería de arcilla (cocido) por cada casilla de tubería.
 
-1. Coloca el recipiente y, si su diseño lo exige, ábrelo o destápalo.
-2. Construye una **Tubería de fluidos** en la propia casilla del recipiente.
-3. Extiende la ruta y coloca la última tubería en la propia casilla del fregadero.
-4. Con la llave en el inventario, haz clic derecho en el fregadero y elige **Instalar**.
-5. Usa **Mostrar red de tuberías** y prueba el fregadero.
+1. Coloca el depósito y, si tiene tapa, quítasela.
+2. Construye una **Tubería de fluidos** en la casilla del depósito.
+3. Sigue con tuberías hasta el fregadero y pon la última en su misma casilla.
+4. Con la Llave para tubos en el inventario, haz clic derecho en el fregadero y elige **[Instalar](glossary.md#instalar) Fregadero** (es una acción del propio juego).
+5. Elige **Mostrar red de tuberías** y prueba el fregadero.
 
-**Comprobación:** recipiente/fuente verde, fregadero azul y ruta roja completa. **Errores habituales:** tubería adyacente, falta de vertical o esperar que la bomba almacene agua. Consulta [Redes de tuberías](pipe-networks.md) y [Aparatos](fixtures-and-plumbing.md).
+**Comprobación:** el depósito aparece en verde, el fregadero en azul y toda la tubería en rojo. **Errores habituales:** poner la última tubería al lado del fregadero en vez de debajo, olvidar la tubería vertical al cambiar de planta, o creer que una bomba guarda agua por sí sola. Consulta [Redes de tuberías](pipe-networks.md) y [Aparatos y fontanería](fixtures-and-plumbing.md).
 
-## Inspeccionar la fontanería de una casa del mundo
+## Inspeccionar la fontanería de una casa del mapa
 
-**Objetivo:** inspeccionar una casa generada por el mundo y revelar la fontanería oculta que se considera preexistente.
+**Objetivo:** revisar una casa que ya venía en el mapa y sacar a la luz la fontanería oculta que se considera que ya tenía.
 
-La acción materializa la red solo cuando se solicita para que el mod no tenga que generar la fontanería de todos los edificios del mapa. No puede fontanear automáticamente una casa construida por el jugador; esa red debe tenderse a mano.
+El mod crea esas tuberías solo cuando se lo pides, para no tener que crearlas en todos los edificios del mapa. No sirve para casas construidas por ti: en esas tienes que poner las tuberías a mano.
 
-**Materiales:** Llave utilizable y, por defecto, una Tubería de metal por aparato que vaya a conectarse.
+**Materiales:** una Llave para tubos utilizable y, por defecto, un Tubo metálico por cada aparato que se vaya a conectar.
 
-1. Sitúate dentro y elige una casilla con suelo próxima al suministro previsto.
-2. Haz clic derecho y selecciona **Fontanear el edificio**; revisa el coste.
-3. Deja terminar la inspección. Si se interrumpe, la fontanería ya revelada permanece.
-4. Une la raíz al almacenamiento o fuente y muestra la red revelada.
-5. Si el resultado es parcial, lee el motivo y repite desde un lugar mejor.
+1. Entra en el edificio y elige una casilla con suelo cerca de donde quieras poner el depósito o la fuente; desde ahí saldrán las tuberías.
+2. Haz clic derecho y elige **[Fontanear el edificio](glossary.md#fontanear-el-edificio)**; mira el coste en la descripción.
+3. Deja que termine la acción. Si se interrumpe, las tuberías ya creadas se quedan.
+4. Conecta la casilla de partida a un depósito o una fuente y usa **Mostrar red de tuberías** para ver la red.
+5. Si se ha quedado a medias, lee el motivo que indica el juego y repite desde un punto mejor.
 
-**Comprobación:** cada aparato alcanzado aparece azul y el árbol oculto se muestra en la superposición. **Errores habituales:** intentarlo en una construcción del jugador, edificio del mundo no reconocido, tuberías insuficientes, ausencia de pared norte/oeste o límite de 200 tramos nuevos. Consulta [Inspeccionar la fontanería de un edificio](building-plumbing.md).
+**Comprobación:** cada aparato al que se ha llegado aparece en azul y las tuberías ocultas se ven al resaltar la red. **Errores habituales:** intentarlo en un edificio construido por ti, hacer clic fuera de un edificio del mapa, no llevar tubos suficientes, que no haya pared norte u oeste para cambiar de planta, o llegar al límite de 200 casillas nuevas. Consulta [Inspeccionar la fontanería de un edificio](building-plumbing.md).
 
-## Extraer agua de un pozo o río
+## Sacar agua de un pozo o de un río
 
-**Objetivo:** llenar almacenamiento desde una fuente natural.
+**Objetivo:** llenar tus depósitos desde un pozo, un río o un lago.
 
-**Materiales:** receta de Bomba de agua, electricidad, tuberías y un recipiente finito.
+**Materiales:** lo necesario para la Bomba de agua, electricidad, tuberías y un depósito.
 
-1. Construye la bomba sobre o junto al pozo/agua abierta, dentro de los 7 m de aspiración predeterminados.
-2. Conecta su eje a la red de almacenamiento y alimenta eléctricamente su casilla.
-3. Haz clic derecho y elige **Encender**.
-4. Usa **Ver estado de la bomba** para confirmar corriente y fuente.
+1. Construye la bomba sobre el pozo o la orilla, o justo al lado, a no más de 7 m por encima del agua (el límite de [aspiración](glossary.md#aspiracion) por defecto).
+2. Une con tuberías los dos lados por los que conecta la bomba con la red del depósito, y dale electricidad.
+3. Haz clic derecho en la bomba y elige **Encender**.
+4. Usa **Ver estado de la bomba** para confirmar que tiene corriente y que ha encontrado la fuente.
 
-**Comprobación:** informa de pozo o agua abierta y el depósito sube hasta 20 L/min por defecto. **Errores habituales:** apagada, sin corriente, fuente fuera de alcance, destino lleno o extracción de ríos desactivada. El agua abierta está contaminada; el pozo es limpio. Consulta [Fuentes y almacenamiento](sources-and-storage.md).
+**Comprobación:** la ventana indica que está sacando agua (de un pozo, o de un río o lago), y el depósito se llena a hasta 20 L/min por defecto. **Errores habituales:** bomba apagada, sin electricidad, fuente demasiado lejos o demasiado abajo, depósito lleno, o la opción de sacar agua de ríos y lagos desactivada. El agua de ríos y lagos está contaminada; la de los pozos, limpia. Consulta [Fuentes y almacenamiento](sources-and-storage.md).
 
 ## Purificar agua contaminada
 
-**Objetivo:** separar entrada contaminada y salida limpia.
+**Objetivo:** que el agua contaminada entre por un lado y salga limpia por el otro.
 
-**Materiales:** Enrutador de fluidos, Purificador de agua (eléctrico), suministro contaminado, electricidad y almacenamiento limpio opcional.
+**Materiales:** Enrutador de fluidos, Purificador de agua (eléctrico), una red con agua contaminada, electricidad y, si quieres, un depósito para el agua limpia.
 
 1. Orienta el enrutador con la entrada verde hacia la red contaminada y la salida roja hacia la limpia.
-2. Coloca el anclaje superior/trasero del purificador sobre el enrutador y deja libre el suelo superior.
-3. Dale corriente y usa **Abrir purificador**.
-4. Comprueba entrada contaminada, filtro y espacio en el búfer OUT de 50 unidades.
-5. Añade almacenamiento limpio para ampliar capacidad y presión posterior si hace falta.
+2. Coloca la esquina superior (la del fondo) del purificador sobre la casilla del enrutador y deja libre el suelo de la planta de arriba.
+3. Dale corriente y elige **Abrir purificador**.
+4. Comprueba que le entra agua contaminada, que el filtro está bien y que su depósito interno de salida (50 L) tiene sitio.
+5. Añade un depósito en el lado limpio si quieres guardar más agua, y una bomba después del purificador si necesitas más presión.
 
-**Comprobación:** la ventana muestra **Filtrando** y aumenta la salida limpia, hasta 10 unidades/min. **Errores habituales:** enrutador invertido, entrada limpia o sin agua, falta de corriente, filtro saturado o salida llena. Consulta [Purificación](purification.md).
+**Comprobación:** la ventana dice **Filtrando** y el agua limpia va subiendo, a hasta 10 L/min. **Errores habituales:** enrutador al revés, agua que ya está limpia o que no es agua, falta de corriente, filtro atascado o salida llena. Consulta [Purificación](purification.md).
 
 ## Instalar riego
 
-**Objetivo:** regar automáticamente sin reventar emisores de baja presión.
+**Objetivo:** regar los cultivos solos sin reventar los goteros.
 
-**Materiales:** Goteros o Aspersores, almacenamiento y dispositivos de presión/control necesarios.
+**Materiales:** goteros o aspersores, un depósito con agua y, según el caso, bomba y enrutador.
 
-1. Usa un gotero por cultivo para baja presión o un aspersor central para un 3×3.
-2. Para goteros tras una bomba de +25 m, añade un enrutador y limita por debajo de 15 m.
-3. Para aspersores, aporta al menos 20 m en el emisor por defecto.
-4. Usa **Comprobar emisor de riego** y corrige la condición indicada.
+1. Pon un gotero en cada planta si la línea tiene poca presión, o un aspersor en el centro de un cuadrado de 3×3.
+2. Si los goteros van detrás de una bomba (que da +25 m por defecto), pon antes un enrutador y fija su límite por debajo de 15 m.
+3. Para los aspersores, asegúrate de que llegan al menos 20 m (valor por defecto).
+4. Elige **Comprobar emisor de riego** y corrige lo que indique.
 
-**Comprobación:** los cultivos vivos que necesitan agua la reciben. **Errores habituales:** red seca, poca presión para aspersor, exceso para gotero, cultivo muerto/ausente o demanda compartida. Consulta [Riego automático](irrigation.md).
+**Comprobación:** las plantas vivas que necesitan agua la reciben. **Errores habituales:** red sin agua, poca presión para los aspersores, demasiada para los goteros, plantas muertas o casillas sin plantar, o demasiados emisores en la misma línea, que dejan sin presión a los del final. Consulta [Riego](irrigation.md).
 
 ## Abastecer un generador con gasolina
 
-**Objetivo:** auto-repostar un generador desde una red aislada de gasolina.
+**Objetivo:** que un generador se rellene solo desde una red de gasolina separada.
 
-**Materiales:** recipiente exclusivo de gasolina, tuberías, Llave para tubos y, opcionalmente, bomba con corriente.
+**Materiales:** un depósito solo para gasolina, tuberías, una Llave para tubos y, si hace falta, una bomba con corriente.
 
-1. Pon una **Tubería de fluidos** en la casilla del recipiente y construye una ruta aislada.
-2. Coloca la última tubería en la casilla del generador.
-3. Haz clic derecho con la llave y elige **Instalar Generador**.
-4. Mantén todos los recipientes conectados solo con gasolina. Añade presión si la distancia o altura lo exige.
-5. Deja que baje del 25 % predeterminado; comprueba cada minuto y extrae hacia el 100 %.
+1. Pon una **Tubería de fluidos** en la casilla del depósito de gasolina y lleva las tuberías por un camino separado del agua.
+2. Pon la última tubería en la casilla del generador.
+3. Con la Llave para tubos, haz clic derecho en el generador y elige **Instalar Generador**.
+4. Asegúrate de que todos los depósitos de esa red solo tienen gasolina. Añade presión si la distancia o la altura lo piden.
+5. Cuando el generador baje del 25 % (valor por defecto), lo comprobará en el siguiente minuto de juego y se rellenará hasta el 100 %.
 
-**Comprobación:** sale gasolina del depósito y entra en el generador. **Errores habituales:** solo hay agua disponible, el depósito de gasolina está vacío, hay poca presión, el umbral está en 0 o el generador no está instalado. Consulta [Transporte de combustible](fuel-transport.md).
+**Comprobación:** baja la gasolina del depósito y sube la del generador. **Errores habituales:** la red solo tiene agua, el depósito de gasolina está vacío, falta presión, el umbral está a 0 o el generador no está instalado. Consulta [Transporte de combustible](fuel-transport.md).
 
 ## Separar y controlar ramales
 
-**Objetivo:** aislar zonas con válvula o imponer flujo unidireccional con enrutador.
+**Objetivo:** aislar una zona con una válvula o hacer que el agua vaya en un solo sentido con un enrutador.
 
-1. Monta una **Válvula de corte** sobre una tubería normal para una frontera reversible en ambos sentidos.
-2. Ciérrala antes de mantener la red o de que puedan encontrarse dos líquidos distintos; ábrela tras comprobar ambos lados.
-3. Usa un **Enrutador de fluidos** para flujo unidireccional: entrada verde a la fuente y salida roja aguas abajo.
-4. Fija un techo de presión para proteger goteros o dividir consumidores.
-5. Revela ambos lados para confirmar la frontera.
+1. Monta una **Válvula de corte** sobre una tubería normal si quieres poder separar y volver a unir dos partes de la red.
+2. Ciérrala antes de hacer reparaciones o antes de que dos líquidos distintos puedan encontrarse; vuelve a abrirla solo después de revisar los dos lados.
+3. Usa un **Enrutador de fluidos** donde el agua tenga que ir en un solo sentido: la entrada verde hacia la fuente y la salida roja hacia donde va el agua.
+4. Fija un límite de presión si quieres proteger goteros o repartir los consumidores en zonas.
+5. Resalta cada lado con **Mostrar red de tuberías** para comprobar que la separación está donde querías.
 
-**Comprobación:** la válvula cerrada crea dos redes; el enrutador solo transfiere IN→OUT. **Errores habituales:** enrutador invertido, abrir entre gasolina y agua o límite inferior al mínimo del consumidor. Consulta [Enrutadores y válvulas](routers-and-valves.md).
-
+**Comprobación:** con la válvula cerrada aparecen dos redes independientes; el enrutador solo deja pasar agua de la entrada a la salida. **Errores habituales:** enrutador al revés, abrir una válvula entre gasolina y agua, o poner un límite por debajo de lo que necesita el consumidor. Consulta [Enrutadores y válvulas](routers-and-valves.md).

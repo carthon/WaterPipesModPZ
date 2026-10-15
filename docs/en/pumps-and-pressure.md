@@ -2,7 +2,7 @@
 
 ## Building a pump
 
-A **Water Pump** requires Electricity 3, Metal Welding 2, a Pipe Wrench, 2 Blow Torch uses, 1 Welding Rod use, 2 Metal Pipes, 4 Sheet Metal, 2 Electronics Scrap, and 1 Wire. Construction awards 30 Electricity XP and 20 Metal Welding XP. Rotate before placement to choose its north–south or east–west axis.
+A **Water Pump** requires Electrical 3, Welding 2, a Pipe Wrench, 2 Welding Torch uses, 1 Welding Rods use, 2 Iron Pipes, 4 Steel Sheets, 2 Scrap Electronics, and 1 Wire. Construction awards 30 Electrical XP and 20 Welding XP. Rotate before placement to choose its north–south or east–west axis.
 
 A pump needs electrical power and its manual switch must be on. On an existing supply line it acts as a booster; beside a well or open water it also draws water into the network. Put it low: the default suction limit is 7 m (about two floors), while it can add 25 m of output pressure. Powered pumps in series add their pressure.
 
@@ -32,6 +32,6 @@ Shared demand is what makes distance expensive: every irrigation consumer downst
 
 ## Diagnosis
 
-Use **Check pump** to distinguish switched off, no power, no source, and pressure-only operation. Build a **Pressure Gauge** over an existing plain pipe with 1 Metal Pipe and 1 Electronics Scrap; right-click it to see the local value and whether a sprinkler can run there.
+Use **Check pump** to distinguish switched off, no power, no source, and pressure-only operation. Build a **Pressure Gauge** over an existing plain pipe with 1 Iron Pipe and 1 Scrap Electronics; right-click it to see the local value and whether a sprinkler can run there.
 
 For a starved branch, shorten it, reduce simultaneous demand, divide consumers into router-controlled zones, raise the source, or add a powered pump. Check [Sandbox settings](sandbox-settings.md) because every default above is configurable.

@@ -54,7 +54,8 @@ plugins:
             Introduction: Introducción
             Getting started: Primeros pasos
             Core concepts: Conceptos básicos
-            Component reference: Catálogo de componentes
+            Pipes and components: Catálogo de tuberías y componentes
+            Glossary: Glosario
             Practical examples: Ejemplos prácticos
             Construction and networks: Construcción y redes
             Pipe networks: Redes de tuberías
@@ -68,7 +69,7 @@ plugins:
             Irrigation: Riego
             Fuel transport: Transporte de combustible
             Configuration and help: Configuración y ayuda
-            Sandbox settings: Opciones de Sandbox
+            Sandbox settings: Opciones de sandbox
             Compatibility: Compatibilidad
             FAQ: Preguntas frecuentes
             Troubleshooting: Resolución de problemas
@@ -78,7 +79,8 @@ nav:
   - Introduction:
       - Getting started: getting-started.md
       - Core concepts: core-concepts.md
-      - Component reference: component-reference.md
+      - Glossary: glossary.md
+      - Pipes and components: component-reference.md
       - Practical examples: practical-examples.md
   - Construction and networks:
       - Pipe networks: pipe-networks.md

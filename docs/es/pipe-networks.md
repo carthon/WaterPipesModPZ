@@ -2,36 +2,36 @@
 
 ## Recetas de tuberías
 
-| Construcción | Requisitos | Se consume |
+| Construcción | Herramienta | Materiales que se gastan |
 |---|---|---|
-| Tubería de fluidos | Llave para tubos | 1 Tubería de metal **o** 1 Segmento de tubería de arcilla cocida |
-| Tubería vertical de fluidos | Llave para tubos | 1 Tubería de metal **o** 1 Segmento de tubería de arcilla cocida |
-| Tubería de fluidos oculta | Llave para tubos | 1 tubería y 1 cubo compatible completo de cemento de arcilla u hormigón preparado |
-| Tubería vertical de fluidos oculta | Llave para tubos | 1 tubería y 1 cubo compatible completo de cemento de arcilla u hormigón preparado |
+| Tubería de fluidos | Llave para tubos | 1 Tubo metálico **o** 1 Segmento de tubería de arcilla (cocido) |
+| Tubería vertical de fluidos | Llave para tubos | 1 Tubo metálico **o** 1 Segmento de tubería de arcilla (cocido) |
+| Tubería de fluidos oculta | Llave para tubos | 1 tubo o segmento y 1 cubo lleno de cemento de arcilla o de hormigón |
+| Tubería vertical de fluidos oculta | Llave para tubos | 1 tubo o segmento y 1 cubo lleno de cemento de arcilla o de hormigón |
 
-La llave se conserva. Estas construcciones no exigen nivel de habilidad. También puedes forjar una Tubería de metal con carbón, media barra y un cuarto de barra de hierro, usando martillo, tenazas o alicates y un punzón adecuado en una forja primitiva.
+La Llave para tubos no se gasta. Ninguna de estas tuberías pide nivel de [habilidad](glossary.md#habilidad). Si te faltan tubos metálicos, puedes forjarlos en una Forja Primitiva con Carbón vegetal, una Barra de hierro - Media y una Barra de hierro - Cuarto, usando un martillo, unas tenazas o unos alicates y un punzón (consulta el [catálogo](component-reference.md#receta-relacionada)).
 
 !!! note "Consumo de cemento"
-    Cada tubería oculta consume un cubo preparado completo: un cubo permite construir un tramo. Se admite cemento de arcilla u hormigón en cubos normales o tallados.
+    Cada tubería oculta gasta un cubo entero, así que cada cubo da para una sola casilla de tubería. Sirven el Cubo de cemento de arcilla y el Cubo con hormigón, tanto en cubo normal como en cubo tallado.
 
 ## Colocación y conexiones
 
-Las tuberías de suelo forman automáticamente extremos, rectas, esquinas, uniones en T y cruces. Solo puede haber una tubería de suelo por casilla. Gira con **R** los dispositivos de eje fijo antes de colocarlos. Las tuberías verticales se montan en paredes norte u oeste y enlazan plantas; una casilla puede contener una tubería de suelo y ambos montantes de pared.
+Las tuberías de suelo se unen solas con las vecinas y forman extremos, rectas, esquinas, uniones en T y cruces. En cada [casilla](glossary.md#casilla) solo cabe una tubería de suelo. Los componentes que solo conectan en una dirección (bomba, enrutador) se giran con **R** antes de colocarlos. Las [tuberías verticales](glossary.md#tuberia-vertical) se montan en paredes norte u oeste y unen las tuberías de dos plantas; en una misma casilla caben una tubería de suelo y las dos verticales (la de la pared norte y la de la oeste).
 
-Las variantes ocultas funcionan igual, pero desaparecen al terminar la construcción. Usa **Mostrar red de tuberías** sobre cualquier tubería visible u oculta para revelar temporalmente toda la red; **Ocultar red de tuberías** la limpia antes.
+Las [tuberías ocultas](glossary.md#tuberia-oculta) funcionan exactamente igual, pero desaparecen de la vista al terminar de construirlas. Para verlas, usa **[Mostrar red de tuberías](glossary.md#mostrar-red)** sobre cualquier tubería, visible u oculta: toda la red se resalta durante un rato. **Ocultar red de tuberías** la vuelve a ocultar antes de que desaparezca sola.
 
-<!-- SCREENSHOT: 03-pipe-shapes.png — Extremo, recta, esquina, unión en T y cruce producidos automáticamente. -->
-<!-- SCREENSHOT: 04-vertical-pipe-floors.png — Tubería vertical enlazando dos plantas por una pared norte u oeste. -->
-<!-- SCREENSHOT: 05-concealed-pipes-overlay.png — Trazado oculto normalmente y revelado con Mostrar red de tuberías. -->
+<!-- SCREENSHOT: 03-pipe-shapes.png — Extremo, recta, esquina, unión en T y cruce formados automáticamente. -->
+<!-- SCREENSHOT: 04-vertical-pipe-floors.png — Tubería vertical uniendo dos plantas por una pared norte u oeste. -->
+<!-- SCREENSHOT: 05-concealed-pipes-overlay.png — Tramo oculto, invisible normalmente y resaltado con Mostrar red de tuberías. -->
 
 ## Desmontaje y recuperación
 
-Usa la acción **Desmontar** del juego, no la herramienta para mover muebles.
+Usa la acción **Desmontar** del juego, no la herramienta para recoger y mover objetos.
 
-- Una tubería metálica construida a mano tiene un 90 % de probabilidad de devolver una Tubería de metal.
-- Una tubería de arcilla no devuelve nada: el segmento cocido se consume al colocarlo.
-- Las tuberías ocultas reveladas por **Fontanear el edificio** no devuelven material porque esa inspección cobra por aparato.
-- Destruir con maza, fuego o daño no devuelve nada.
-- Si una válvula o manómetro baja junto con su tubería, cada ingrediente se recupera de forma independiente con un 90 % de probabilidad.
+- Una tubería metálica construida por ti tiene un 90 % de probabilidades de devolver un Tubo metálico.
+- Una tubería de arcilla no devuelve nada: el segmento se gasta al colocarlo.
+- Las tuberías ocultas que aparecen con **Fontanear el edificio** no devuelven nada, porque esa acción se paga por aparato conectado, no por tubería.
+- Si la tubería se destruye (con una Almádena, por el fuego o por daños), no devuelve nada.
+- Si desmontas una tubería que tiene encima una válvula o un manómetro, cada material de ese componente se recupera por separado, con un 90 % de probabilidades cada uno.
 
-Quitar la tubería de la propia casilla de un aparato o generador conectado lo desconecta automáticamente.
+Si quitas la tubería de la casilla de un aparato o un generador instalado, se desconecta automáticamente.

@@ -1,39 +1,38 @@
 # Inspeccionar la fontanería de un edificio
 
-Los edificios generados por el mundo se tratan como si su instalación de fontanería ya existiera. Para no generar redes en todos los edificios del mapa, Water Pipes solo materializa esa instalación oculta cuando eliges **Fontanear el edificio**. Para el jugador, la acción **inspecciona y revela la fontanería existente del edificio**; no es una herramienta para instalar tuberías automáticamente en una construcción hecha por el jugador.
+Las casas y edificios que ya vienen en el mapa se consideran con la fontanería ya instalada: en la vida real tendrían tuberías dentro de suelos y paredes. Para no tener que crear esas tuberías en todos los edificios del mapa, Water Pipes solo las crea cuando tú lo pides con la opción **[Fontanear el edificio](glossary.md#fontanear-el-edificio)**. Pese a su nombre, lo que hace en la práctica es **inspeccionar el edificio y sacar a la luz la fontanería que ya tenía**. No sirve para poner tuberías automáticamente en algo que hayas construido tú.
 
-Al inspeccionarla, el mod crea un árbol de tubería oculta y sin anillos desde la casilla elegida hasta cada aparato sin conectar que pueda alcanzar en el mismo edificio. Reutiliza las tuberías compatibles que ya haya, solo cambia de planta donde una pared norte u oeste admite un montante y nunca coloca un tramo oculto encima de otra tubería.
+Al inspeccionarlo, el mod crea [tuberías ocultas](glossary.md#tuberia-oculta) desde la casilla en la que hiciste clic hasta cada [aparato](glossary.md#aparato) sin conectar que pueda alcanzar dentro del mismo edificio. Las tuberías se ramifican como las de una casa real, sin formar circuitos cerrados. Aprovecha las tuberías compatibles que ya hubiera, solo cambia de planta por paredes norte u oeste (donde puede ir una tubería vertical) y nunca coloca una tubería oculta encima de otra.
 
-!!! warning "Solo edificios del mundo"
-    **Fontanear el edificio no instala automáticamente una red en edificios construidos por jugadores.** En ellos debes tender a mano tuberías de suelo, ocultas y verticales, y después conectar cada aparato de la forma habitual.
+!!! warning "Solo edificios del mapa"
+    **Fontanear el edificio no pone tuberías en los edificios que construyen los jugadores.** En esos tienes que tender a mano las tuberías de suelo, ocultas y verticales, y después instalar cada aparato de la forma habitual.
 
-## Procedimiento
+## Paso a paso
 
-1. Sitúate dentro del edificio con una Llave para tubos utilizable.
-2. Lleva las Tuberías de metal necesarias: por defecto, una por aparato conectado, sin importar la longitud del recorrido.
-3. Haz clic derecho en una casilla con suelo adecuada y elige **Fontanear el edificio**.
-4. Revisa la descripción y comienza la acción. Se planifican primero los aparatos más cercanos.
-5. Al terminar, conecta el árbol revelado a un depósito o fuente y revísalo con **Mostrar red de tuberías**.
+1. Entra en el edificio con una Llave para tubos utilizable.
+2. Lleva los Tubos metálicos necesarios: por defecto, uno por cada aparato que se vaya a conectar, sin importar lo larga que sea la tubería.
+3. Haz [clic derecho](glossary.md#clic-derecho) en una casilla con suelo y elige **Fontanear el edificio**.
+4. Lee la descripción, que indica el coste, y empieza la acción. Tarda un rato; los aparatos más cercanos se conectan primero.
+5. Cuando termine, conecta la tubería que ha salido a un [depósito](glossary.md#deposito) o a una [fuente](glossary.md#fuente) y compruébala con **Mostrar red de tuberías**.
 
-Una inspección puede revelar como máximo 200 casillas nuevas y examina hasta 8000 casillas del edificio. Si el resultado es parcial, repite desde otro lugar. Cobra los aparatos planificados al empezar y devuelve el coste de los que no alcance. La fontanería ya revelada permanece si se interrumpe. La tubería oculta revelada no devuelve material al desmontarla.
+Una sola inspección puede crear como máximo 200 casillas de tubería nueva y revisar hasta 8000 casillas del edificio. Si se queda a medias, repítela desde otro punto. Los tubos se cobran al empezar, y se te devuelven los de los aparatos a los que no consigue llegar. Si la acción se interrumpe, las tuberías ya creadas se quedan. Las tuberías creadas así no devuelven material al desmontarlas.
 
-<!-- SCREENSHOT: 21-building-before.png — Casa del mundo con varias estancias antes de inspeccionar su fontanería existente. -->
-<!-- SCREENSHOT: 22-building-plumb-action.png — Acción de inspección Fontanear el edificio y descripción de su coste. -->
-<!-- SCREENSHOT: 23-building-after-overlay.png — Fontanería antes oculta visible en la superposición tras inspeccionarla. -->
+<!-- SCREENSHOT: 21-building-before.png — Casa del mapa con varias habitaciones antes de inspeccionar su fontanería. -->
+<!-- SCREENSHOT: 22-building-plumb-action.png — Opción Fontanear el edificio con la descripción de su coste. -->
+<!-- SCREENSHOT: 23-building-after-overlay.png — Fontanería antes oculta, resaltada con Mostrar red de tuberías tras la inspección. -->
 
-## Mensajes de resultado
+## Mensajes del juego
 
-| Mensaje o motivo | Significado y respuesta |
+| Mensaje o motivo | Qué significa y qué hacer |
 |---|---|
-| No estás dentro de un edificio | Elige una casilla con suelo reconocida como parte de un `IsoBuilding` |
-| Aquí no hay nada que fontanear | No se encontró ningún aparato compatible sin conectar |
-| Ya está fontaneado | Todos los aparatos detectados están conectados |
-| Edificio demasiado grande | Solo se inspeccionó la zona examinada más cercana; repite en otra parte |
-| No hay ruta | La distribución sólida o la red existente impiden un camino seguro |
-| No hay pared para llegar a su planta | Añade o elige una ruta con montante en pared norte/oeste |
-| Cerraría un anillo | Se omite deliberadamente para no crear un bucle |
-| Supera el límite | Se alcanzaron las 200 casillas nuevas; repite desde otro punto |
-| El servidor detuvo el trabajo | En multijugador rechazó trabajo obsoleto, inválido o sin materiales |
+| No estás dentro de un edificio | La casilla elegida no pertenece a un edificio del mapa. Haz clic en una casilla con suelo dentro del edificio |
+| Aquí no hay nada que fontanear | No se ha encontrado ningún aparato compatible sin conectar |
+| Este edificio ya está fontaneado | Todos los aparatos que ha encontrado ya están conectados |
+| Edificio demasiado grande | Solo se ha revisado la parte más cercana a ti; repite desde otra zona |
+| No hay ruta desde aquí | Las paredes o una red que ya existe impiden llegar sin peligro |
+| No hay pared para llegar a su planta | Hace falta una pared norte u oeste para subir o bajar; prueba desde otro punto |
+| Conectarlo cerraría un anillo | Se ha saltado a propósito para no crear un circuito cerrado de tuberías |
+| Supera el límite de distancia | Se han alcanzado las 200 casillas nuevas; repite desde otro punto |
+| El servidor ha detenido el trabajo | En [multijugador](glossary.md#multijugador), el servidor ha rechazado la petición porque estaba desfasada, no era válida o faltaban tubos |
 
-En multijugador la inspección es autoritativa en el servidor. El cliente espera aprobación antes de conectar aparatos y se reembolsa el coste de las conexiones que no puedan completarse al cerrar la pasada.
-
+En multijugador, la inspección la hace y la comprueba el servidor. Tu juego espera su permiso antes de conectar cada aparato, y al terminar se te devuelve el coste de las conexiones que no se hayan podido completar.

@@ -1,83 +1,82 @@
 # Resolución de problemas
 
-Usa esta página para diagnosticar una red ya construida. Para dudas generales, empieza por [Preguntas frecuentes](faq.md) o [Ejemplos prácticos](practical-examples.md).
+Esta página sirve para averiguar qué falla en una red que ya está construida. Para dudas generales, empieza por las [Preguntas frecuentes](faq.md) o los [Ejemplos prácticos](practical-examples.md).
 
-## Diagnóstico general paso a paso
+## Revisión general, paso a paso
 
-1. Confirma Project Zomboid 42.15+, Water Pipes v0.10.x y la misma versión en servidor/clientes.
-2. Usa **Mostrar red de tuberías** y sigue toda la ruta.
-3. Comprueba una tubería en la propia casilla de cada extremo y una vertical en cada cambio de planta.
-4. Revisa válvulas cerradas, orientación del Enrutador y límites de presión.
-5. Comprueba que los depósitos contengan el fluido que necesita el consumidor y no estén vacíos.
-6. Lee la presión con **Ver estado de la bomba**, un Manómetro o **Comprobar emisor de riego**.
-7. Revisa electricidad e interruptor manual de bombas y purificadores.
-8. Revisa las opciones de Sandbox de Water Pipes en esa partida.
-9. En multijugador, reconecta, repite una vez y confirma versiones idénticas.
-10. Si continúa, guarda una captura de la red/estado y las líneas relevantes de `console.txt`.
+1. Comprueba que usas Project Zomboid 42.15 o posterior, Water Pipes v0.10.x y, en multijugador, la misma versión del mod en el servidor y en los jugadores.
+2. Elige **Mostrar red de tuberías** y sigue todo el recorrido.
+3. Comprueba que hay una tubería en la propia casilla de cada depósito, aparato o generador, y una Tubería vertical de fluidos en cada cambio de planta.
+4. Revisa las válvulas cerradas, hacia dónde mira cada Enrutador de fluidos y los límites de presión que tengan.
+5. Comprueba que los depósitos conectados no están vacíos y tienen el líquido que necesita el consumidor.
+6. Mide la presión con **Ver estado de la bomba**, un Manómetro o **Comprobar emisor de riego**.
+7. Revisa que las bombas y los purificadores tengan electricidad y estén encendidos.
+8. Revisa las opciones de sandbox de **Tuberías de Agua** de esa partida.
+9. En multijugador, vuelve a conectarte, repite la acción una vez y confirma que todos tenéis la misma versión.
+10. Si sigue sin funcionar, haz una captura de la red resaltada o de la ventana de estado y guarda las líneas importantes del archivo `console.txt` (el registro del juego).
 
 ## La red no conecta
 
-**Síntoma:** El extremo no aparece en la superposición o se comporta como otra red.  
-**Posibles causas:** Tubería adyacente, falta una vertical, válvula cerrada o hueco.  
-**Comprobaciones:** Revela toda la ruta y revisa las piezas verticales de pared.  
-**Solución:** Corrige la casilla o transición ausente, o abre la válvula aislante.  
-**Relacionado:** [Redes de tuberías](pipe-networks.md)
+**Síntoma:** un depósito o un aparato no aparece al resaltar la red, o funciona como si fuera de otra red.  
+**Causas posibles:** la tubería está al lado y no en su misma casilla; falta una tubería vertical en un cambio de planta; hay una válvula cerrada; falta una casilla de tubería.  
+**Qué revisar:** resalta la red y repasa todo el recorrido, incluidas las tuberías verticales de las paredes.  
+**Solución:** pon la tubería que falta o la tubería vertical, o abre la válvula.  
+**Más información:** [Redes de tuberías](pipe-networks.md)
 
-## Un aparato no tiene suministro
+## Un aparato no recibe agua
 
-**Síntoma:** Un aparato instalado aparece vacío.  
-**Posibles causas:** No hay almacenamiento conectado; está vacío, contiene el fluido incorrecto o está debajo sin presión suficiente; rotura lejana.
-**Comprobaciones:** Revisa recipientes, superposición, válvulas y presión local.  
-**Solución:** Restaura una ruta válida y un suministro de agua compatible. Las transferencias incompatibles se rechazan en vez de mezclarse.
-**Relacionado:** [Fuentes y almacenamiento](sources-and-storage.md), [Aparatos](fixtures-and-plumbing.md)
+**Síntoma:** un aparato instalado está vacío.  
+**Causas posibles:** no hay ningún depósito conectado; el depósito está vacío, tiene otro líquido o está más bajo que el aparato sin presión suficiente; un corte en algún punto lejano de la tubería lo ha dejado aislado.  
+**Qué revisar:** los depósitos, la red resaltada, las válvulas y la presión en ese punto.  
+**Solución:** rehaz el recorrido y conéctalo a un depósito con agua. Si hay líquidos incompatibles, el mod no los mezcla: simplemente rechaza el trasvase.  
+**Más información:** [Fuentes y almacenamiento](sources-and-storage.md), [Aparatos y fontanería](fixtures-and-plumbing.md)
 
 ## La bomba no mueve agua
 
-**Síntoma:** No llena recipientes o no hay presión.  
-**Posibles causas:** Apagada; sin electricidad; fuente fuera del límite de aspiración; destino lleno; fuente natural no válida.  
-**Comprobaciones:** Usa **Ver estado de la bomba**.  
-**Solución:** Corrige la condición indicada. Sin fuente, una bomba puede dar presión al agua almacenada, pero no crear agua.  
-**Relacionado:** [Bombas y presión](pumps-and-pressure.md)
+**Síntoma:** los depósitos no se llenan o no hay presión.  
+**Causas posibles:** bomba apagada; sin electricidad; la fuente está demasiado lejos o demasiado abajo; el depósito de destino está lleno; no hay ningún pozo, río ni lago válido cerca.  
+**Qué revisar:** usa **Ver estado de la bomba**, que muestra la corriente, la fuente, la presión de entrada y de salida y lo que aporta.  
+**Solución:** corrige lo que indique. Sin fuente, una bomba puede dar presión al agua que ya está guardada, pero no puede crear agua.  
+**Más información:** [Bombas y presión](pumps-and-pressure.md)
 
-## La presión es baja o irregular
+## La presión es baja o desigual
 
-**Síntoma:** Funcionan consumidores cercanos, pero no lejanos o superiores.  
-**Posibles causas:** Distancia, altura, demanda compartida, límite del enrutador o pérdida del purificador.  
-**Comprobaciones:** Compara manómetros y revisa las opciones de Sandbox.  
-**Solución:** Reduce demanda o distancia, divide ramales con enrutadores o añade una bomba correctamente alimentada donde lo permita el diseño.  
-**Relacionado:** [Bombas y presión](pumps-and-pressure.md), [Enrutadores y válvulas](routers-and-valves.md)
+**Síntoma:** los consumidores cercanos funcionan, pero los lejanos o los de plantas superiores no.  
+**Causas posibles:** la distancia, la altura, demasiados consumidores en la misma línea, el límite de un enrutador o la presión que se pierde al pasar por un purificador.  
+**Qué revisar:** compara lo que marcan varios manómetros a lo largo del recorrido y revisa si has cambiado alguna opción de sandbox.  
+**Solución:** reduce el consumo o la distancia, divide la instalación en ramales separados por enrutadores o añade una bomba con corriente donde se pueda.  
+**Más información:** [Bombas y presión](pumps-and-pressure.md), [Enrutadores y válvulas](routers-and-valves.md)
 
-## El purificador no procesa agua
+## El purificador no limpia el agua
 
-**Síntoma:** No llega agua limpia a la salida.  
-**Posibles causas:** Sin corriente; filtro saturado; entrada limpia o que no contiene agua; salida llena; orientación incorrecta.
-**Comprobaciones:** Abre su ventana y revisa la entrada verde y salida roja.  
-**Solución:** Restaura corriente o capacidad, repara el filtro o corrige la red de entrada.  
-**Relacionado:** [Purificación](purification.md)
+**Síntoma:** no sale agua limpia.  
+**Causas posibles:** sin corriente; filtro atascado; el agua que entra ya está limpia o no es agua; el depósito de salida está lleno; el enrutador está al revés.  
+**Qué revisar:** abre la ventana del purificador y comprueba que la entrada verde da a la red contaminada y la salida roja a la limpia.  
+**Solución:** dale corriente o sitio donde dejar el agua, repara el filtro o corrige la red de entrada.  
+**Más información:** [Purificación](purification.md)
 
-## El aspersor o gotero no riega
+## El aspersor o el gotero no riega
 
-**Síntoma:** Los cultivos siguen secos.  
-**Posibles causas:** Red vacía; poca presión para el aspersor; gotero reventado; ningún cultivo vivo necesita agua.  
-**Comprobaciones:** Usa **Comprobar emisor de riego**.  
-**Solución:** Sigue la condición indicada; repara el gotero y limita la presión anterior.  
-**Relacionado:** [Riego](irrigation.md)
+**Síntoma:** los cultivos siguen secos.  
+**Causas posibles:** red sin agua; poca presión para el aspersor; gotero reventado; ninguna planta viva necesita agua ahora mismo.  
+**Qué revisar:** usa **Comprobar emisor de riego**.  
+**Solución:** haz lo que indique; si el gotero ha reventado, repáralo y limita la presión antes de él con un enrutador.  
+**Más información:** [Riego](irrigation.md)
 
-## Una red conectada contiene agua y gasolina
+## Una misma red tiene agua y gasolina
 
-**Síntoma:** Los aparatos o generadores no reciben un fluido utilizable aunque sus depósitos correspondientes no estén vacíos.
-**Posible causa:** Hay recipientes con fluidos incompatibles conectados al mismo componente de tuberías. Los líquidos no se combinan ni se contaminan entre sí, pero el suministro se rechaza mientras el componente exponga más de un tipo incompatible.
-**Comprobaciones:** Revela la red y localiza la unión entre las rutas de agua y gasolina.
-**Solución:** Cierra una válvula o separa las rutas. No hace falta vaciar ni descontaminar nada: los fluidos permanecen en sus recipientes originales.
+**Síntoma:** los aparatos o generadores no reciben nada, aunque los depósitos de su líquido no están vacíos.  
+**Causa posible:** hay depósitos con líquidos incompatibles conectados a la misma red. Los líquidos no se mezclan ni se contaminan entre sí, pero el mod no entrega nada mientras la red tenga a la vez más de un líquido incompatible.  
+**Qué revisar:** resalta la red y busca el punto donde se unen la parte del agua y la de la gasolina.  
+**Solución:** cierra una válvula o separa las tuberías. No hay que vaciar ni limpiar nada: cada líquido sigue en su depósito.  
+**Más información:** [Transporte de combustible](fuel-transport.md), [Fuentes y almacenamiento](sources-and-storage.md)
 
-**Relacionado:** [Transporte de combustible](fuel-transport.md), [Fuentes y almacenamiento](sources-and-storage.md)
+## Los jugadores ven cosas distintas
 
-## El estado difiere entre jugadores
+**Síntoma:** una acción tarda, se rechaza o no se ve igual para todos.  
+**Causas posibles:** el servidor ha rechazado la acción; un jugador se desconectó mientras se revisaba la fontanería de un edificio del mapa; no todos tenéis la misma versión del mod.  
+**Qué revisar:** confirma que todos tenéis la misma versión y lee el mensaje que haya mostrado el servidor.  
+**Solución:** vuelve a conectarte y repite la acción después de corregir lo que indique el mensaje. Si una revisión de edificio se interrumpió, el servidor la cierra y devuelve lo que corresponda la próxima vez que se ejecute.  
+**Más información:** [Compatibilidad](compatibility.md), [Inspeccionar la fontanería de un edificio](building-plumbing.md)
 
-**Síntoma:** Una acción tarda, se rechaza o parece incoherente.  
-**Posibles causas:** Rechazo del servidor, desconexión mientras se inspeccionaba la fontanería de un edificio del mundo o versiones distintas.
-**Comprobaciones:** Confirma versiones idénticas y revisa la respuesta visible del servidor.  
-**Solución:** Reconecta y repite tras corregir la condición. El servidor liquida una inspección interrumpida en la siguiente pasada.
-**Relacionado:** [Compatibilidad](compatibility.md), [Inspeccionar fontanería](building-plumbing.md)
-
-Si estas comprobaciones no explican el problema, notifícalo en [GitHub Issues](https://github.com/carthon/WaterPipesModPZ/issues) con versiones, estado multijugador, ajustes, pasos, registros y capturas.
+Si nada de esto explica el problema, avísanos en [GitHub Issues](https://github.com/carthon/WaterPipesModPZ/issues) e incluye la versión del juego y del mod, si juegas en multijugador, las opciones que hayas cambiado, los pasos para reproducirlo, los registros y las capturas.

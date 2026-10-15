@@ -70,7 +70,7 @@ The purifier occupies a 2 × 2 area. Its top/back corner must sit directly on th
 
 ### Why is the purifier working but no water reaches my fixtures?
 
-The purifier has its own 50-unit clean-water output buffer, so an extra container is not strictly required. A downstream amphora, barrel, or tank adds useful capacity. If fixtures still receive nothing, check the output buffer, available pressure, and red-side connection.
+The purifier has its own 50 L clean-water output tank, so an extra container is not strictly required. A downstream amphora, barrel, or tank adds useful capacity. If fixtures still receive nothing, check the output tank, available pressure, and red-side connection.
 
 ### How do I use a fire hydrant?
 

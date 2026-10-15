@@ -51,7 +51,7 @@ Water Pipes v0.10.x exposes 26 per-save options. Values described as **tenths** 
 
 | Setting | Default | Range | Effect |
 |---|---:|---:|---|
-| Metal pipes per fixture | 1 | 0–10 | Cost per fixture revealed and connected by **Plumb this building** in a world building |
+| Metal pipe per fixture | 1 | 0–10 | Cost per fixture revealed and connected by **Plumb this building** in a world building |
 
 ## Suggested starting profiles
 
