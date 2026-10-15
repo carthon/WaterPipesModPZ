@@ -11,7 +11,7 @@
 | Languages in the mod | English, Spanish, Simplified Chinese |
 | Languages in this guide | English, Spanish |
 
-Confirmed integrations are **Take A Bath And Shower** fixtures and **Useful Barrels** containers. Container support is capability-based and sends fluid-change notifications so compatible barrel mods can refresh their fill sprites, but an untested mod is not guaranteed compatible.
+Confirmed integrations are **Take A Bath And Shower** fixtures and **Useful Barrels** containers; that mod turns the map's [barrels](glossary.md#barrel), scenery in the base game, into containers. Container support is capability-based and sends fluid-change notifications so compatible barrel mods can refresh their fill sprites, but an untested mod is not guaranteed compatible.
 
 ## Dedicated-server checklist
 

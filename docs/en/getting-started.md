@@ -8,7 +8,7 @@ If a game or plumbing term is unfamiliar, see the [glossary](glossary.md).
 
 This first network needs one Pipe Wrench, one Iron Pipe or fired Clay Pipe Segment for each pipe tile, one water container, and one supported fixture such as a sink.
 
-1. Put a barrel, rain collector, amphora, or other fluid container where the network will store water.
+1. Put a Rain Collector Barrel, an Amphora, or another container where the network will store water. The barrels found around the map only hold liquid with the [Useful Barrels](glossary.md#barrel) mod.
 2. Build a **Fluid Pipe** on the container's own tile.
 3. Extend the run to the fixture. Pipes connect automatically into straights, corners, junctions, and crosses.
 4. Build the final pipe on the fixture's own tile; adjacency is not enough.
@@ -36,7 +36,7 @@ For reference: every container gives the same 1 m, whatever its type, so a barre
 
 ![Storage-only installations](../assets/images/diagram-install-storage-en.svg){ .wp-diagram }
 
-- **1** Barrel on the same floor as **2**, a sink: 1 m base = **1 m**. Low, but enough for a fixture.
+- **1** [Barrel](glossary.md#barrel) on the same floor as **2**, a sink: 1 m base = **1 m**. Low, but enough for a fixture.
 - **3** Barrel one floor up, piped down to **4**, a sink on the ground floor: 1 m + 1 floor × 3 m = **4 m**.
 
 The storage itself is the pressure source: raising it is the cheapest way to gain pressure. The reverse does not work: a sink one floor above its only barrel gets 1 m − 1 floor × 3 m = −2 m and no water. Raise the barrel or add a pump.

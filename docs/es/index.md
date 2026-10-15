@@ -27,7 +27,7 @@ Construye redes de tuberías que lleven agua, gasolina y otros líquidos compati
 <div markdown>
 ### :material-pipe-wrench: [Construir mi primera red](getting-started.md)
 
-Lleva agua de un barril a un fregadero con una instalación pequeña que funcione a la primera.
+Lleva agua de un depósito a un fregadero con una instalación pequeña que funcione a la primera.
 </div>
 <div markdown>
 ### :material-sprinkler-variant: [Automatizar el riego](practical-examples.md#instalar-riego)
@@ -52,7 +52,7 @@ Tiende tuberías por el suelo, por las paredes o escondidas, o [descubre la font
 <div markdown>
 ### :material-water: Abastece y almacena
 
-Conecta barriles, recolectores de lluvia, pozos, ríos, el agua municipal y bocas de incendios. Consulta [Fuentes y almacenamiento](sources-and-storage.md).
+Conecta recolectores de lluvia y otros depósitos, pozos, ríos, el agua municipal y bocas de incendios. Consulta [Fuentes y almacenamiento](sources-and-storage.md).
 </div>
 <div markdown>
 ### :material-valve: Controla

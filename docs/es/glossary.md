@@ -73,7 +73,10 @@ Un objeto del mundo que usa agua: fregadero, lavabo, ducha, bañera, inodoro o l
 Acción del juego (no del mod) que conecta un aparato o un generador a la tubería que tiene debajo. En el menú aparece como **Instalar** seguido del nombre del objeto, por ejemplo «Instalar Generador». **Desinstalar** lo desconecta sin quitar la tubería. Hace falta llevar una Llave para tubos.
 
 ### Depósito { #deposito }
-Cualquier objeto que guarda líquido dentro de una red: barril, barril recolector de lluvia, ánfora, tanque o los de otros mods compatibles. Un depósito se une a la red en cuanto hay una tubería en su propia casilla.
+Cualquier objeto que guarda líquido dentro de una red. En el juego sin mods son el Barril recolector de lluvia, la Caja recolectora de lluvia y el Ánfora; otros mods pueden añadir más, como los [barriles de Useful Barrels](#barril). Un depósito se une a la red en cuanto hay una tubería en su propia casilla.
+
+### Barril (Useful Barrels) { #barril }
+En el juego sin mods, los barriles que se encuentran por el mapa (Barril verde claro, Barril verde oscuro, Barril naranja y Bidón de metal) son decoración: no guardan líquido. **Useful Barrels**, un mod aparte, los convierte en depósitos: se abren desenroscando el tapón con una Llave para tubos (o cortándoles la tapa con un Soplete), y desde ese momento Water Pipes los conecta como cualquier otro depósito. En los ejemplos de este manual, «barril» vale por cualquier depósito; si juegas sin Useful Barrels, usa un Barril recolector de lluvia.
 
 ### Fuente { #fuente }
 De donde sale el agua que entra en la red: un depósito con agua, un pozo o un río (a través de una bomba), la red municipal o una boca de incendios.

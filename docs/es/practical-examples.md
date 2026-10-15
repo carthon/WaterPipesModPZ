@@ -4,7 +4,7 @@ Estos ejemplos de fontanería para Project Zomboid funcionan con la serie v0.10.
 
 ## Primera red de agua
 
-**Objetivo:** dar agua a un fregadero desde un barril u otro [depósito](glossary.md#deposito).
+**Objetivo:** dar agua a un fregadero desde un recolector de lluvia u otro [depósito](glossary.md#deposito).
 
 **Materiales:** Llave para tubos, un depósito y un Tubo metálico o un Segmento de tubería de arcilla (cocido) por cada casilla de tubería.
 

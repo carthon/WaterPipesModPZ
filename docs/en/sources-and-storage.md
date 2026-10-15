@@ -2,7 +2,7 @@
 
 ## What joins a network
 
-A finite world fluid container joins when a floor pipe occupies its **own tile**. This covers vanilla barrels and rain collectors, amphorae and tanks, plus modded containers that expose a normal fluid capacity. Washing machines and other fixtures are treated as consumers, not storage. Objects with a capacity of 9,999 or more are excluded from ordinary finite-container balancing; they only act as sources when specific source logic recognizes them.
+A finite world fluid container joins when a floor pipe occupies its **own tile**. This covers the base game's rain collectors (barrel or crate) and amphorae, plus modded containers that expose a normal fluid capacity, such as [Useful Barrels' barrels](glossary.md#barrel). Washing machines and other fixtures are treated as consumers, not storage. Objects with a capacity of 9,999 or more are excluded from ordinary finite-container balancing; they only act as sources when specific source logic recognizes them.
 
 Network storage settles every two in-game minutes: lower floors fill first, while containers on the same floor equalize by capacity. A pump is not storage; always include a vessel where incoming water can remain.
 
@@ -13,7 +13,7 @@ Network storage settles every two in-game minutes: lower floors fill first, whil
 
 | Source | Fluid | Default rate or reserve | Setup |
 |---|---|---:|---|
-| Barrel, collector, amphora, tank | Existing contents | Container capacity | Put a floor pipe on its tile; uncap containers that only expose fluid storage when open |
+| Rain collector, amphora, [Useful Barrels barrel](glossary.md#barrel) | Existing contents | Container capacity | Put a floor pipe on its tile; open a Useful Barrels barrel first, since a closed one holds no liquid |
 | Well | Clean water | Pump: 20 L/min | Put a powered pump within suction reach |
 | River or lake | Tainted water | Pump: 20 L/min, unlimited source | Put a powered pump beside open water; enabled by sandbox setting |
 | Town mains | Clean water | 60 L/min at 25 m head | Plumb an indoor fixture before the water shuts off |

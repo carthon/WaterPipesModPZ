@@ -11,7 +11,7 @@
 | Idiomas del mod | Inglés, español y chino simplificado |
 | Idiomas de esta guía | Inglés y español |
 
-Está comprobado que funciona con los aparatos de **Take A Bath And Shower** y con los barriles de **Useful Barrels**. El mod reconoce los depósitos por cómo se comportan, no por una lista de nombres, y avisa cada vez que cambia su nivel para que los mods de barriles puedan actualizar su dibujo. Aun así, un mod que no se ha probado no tiene la compatibilidad garantizada.
+Está comprobado que funciona con los aparatos de **Take A Bath And Shower** y con los barriles de **Useful Barrels**, que convierte en [depósitos](glossary.md#barril) los barriles del mapa (en el juego sin mods son solo decoración). El mod reconoce los depósitos por cómo se comportan, no por una lista de nombres, y avisa cada vez que cambia su nivel para que los mods de barriles puedan actualizar su dibujo. Aun así, un mod que no se ha probado no tiene la compatibilidad garantizada.
 
 ## Servidores dedicados: lista de comprobación
 
