@@ -43,7 +43,7 @@ The `Documentation` workflow validates both language trees, builds the site, che
 
 1. Open **Settings → Pages** in GitHub.
 2. Under **Build and deployment**, select **GitHub Actions** as the source.
-3. Merge or push the documentation to `main`, or run the workflow manually.
+3. Merge the documentation into `develop`, or run the workflow manually.
 
 Pull requests build and validate the site but never deploy it. This change does not deploy to production.
 
