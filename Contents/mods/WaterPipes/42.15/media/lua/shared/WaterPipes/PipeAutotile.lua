@@ -114,19 +114,26 @@ end
 
 -- Emitters are a HEAD that sits ON the pipe, not a replacement for it: the pipe below keeps autotiling
 -- and the head rides on top as the engine's overlay sprite, the same route vanilla paints a sign onto a
--- wall. Two cells per emitter so a later art drop can give each facing its own head.
+-- wall. Two cells per emitter so a later art drop can give each facing its own head. The drip also has
+-- one head per pipe shape (byShape), picked from the floor sprite the pipe autotiled to.
 local EMITTER_OVERLAYS = {
-    [Constants.DRIP_MODDATA_KEY] = { ew = Constants.DRIP_SPRITE_EW, ns = Constants.DRIP_SPRITE_NS },
-    [Constants.SPRINKLER_MODDATA_KEY] = { ew = Constants.SPRINKLER_SPRITE_EW, ns = Constants.SPRINKLER_SPRITE_NS },
+    [Constants.DRIP_MODDATA_KEY] = { ew = Constants.DRIP_SPRITE_EW, ns = Constants.DRIP_SPRITE_NS,
+                                     byShape = Constants.DRIP_SPRITES },
+    [Constants.SPRINKLER_MODDATA_KEY] = { ew = Constants.SPRINKLER_SPRITE_EW, ns = Constants.SPRINKLER_SPRITE_NS,
+                                          byShape = Constants.SPRINKLER_SPRITES },
 }
 
-local function emitterOverlay(worldObject)
+local function emitterOverlay(worldObject, shape)
     local modData = modDataOf(worldObject)
     if not modData then
         return nil
     end
     for key, sprites in pairs(EMITTER_OVERLAYS) do
         if modData[key] == true then
+            local byShape = sprites.byShape and shape and sprites.byShape[shape]
+            if byShape then
+                return byShape
+            end
             return modData[Constants.PIPE_AXIS_MODDATA_KEY] == Constants.PIPE_AXIS_NS
                 and sprites.ns or sprites.ew
         end
@@ -257,10 +264,7 @@ end
 local function floorConnectionSprite(pipe, x, y, z)
     local mask = PipeAutotile.computeMask(x, y, z)
     if mask == 0 then
-        local placement = PipeObjectUtils.getPipePlacement(pipe)
-        return placement.axis == Constants.PIPE_AXIS_NS
-            and Constants.PIPE_FLOOR_NORTH_SPRITE
-            or Constants.PIPE_FLOOR_WEST_SPRITE
+        return Constants.PIPE_FLOOR_SINGLE_SPRITE
     end
     return MASK_SPRITE[mask]
 end
@@ -335,8 +339,9 @@ function PipeAutotile.refreshFloorPipeAt(x, y, z)
 
     -- Ordinary pipe, or a pipe carrying an emitter: either way the pipe autotiles to its neighbours,
     -- and the emitter head (if any) is painted on top of that shape instead of replacing it.
-    setSpriteIfChanged(pipe, floorConnectionSprite(pipe, x, y, z))
-    setOverlayIfChanged(pipe, emitterOverlay(pipe))
+    local shape = floorConnectionSprite(pipe, x, y, z)
+    setSpriteIfChanged(pipe, shape)
+    setOverlayIfChanged(pipe, emitterOverlay(pipe, shape))
 end
 
 -- Refresh a square, its 4 cardinal neighbours, and the floors above/below (a wall cover can
@@ -396,8 +401,9 @@ function PipeAutotile.revealPipe(pipe)
     if isRiser(pipe) then
         setSpriteIfChanged(pipe, riserSprite(pipe))
     else
-        setSpriteIfChanged(pipe, floorConnectionSprite(pipe, square:getX(), square:getY(), square:getZ()))
-        setOverlayIfChanged(pipe, emitterOverlay(pipe))
+        local shape = floorConnectionSprite(pipe, square:getX(), square:getY(), square:getZ())
+        setSpriteIfChanged(pipe, shape)
+        setOverlayIfChanged(pipe, emitterOverlay(pipe, shape))
     end
 end
 

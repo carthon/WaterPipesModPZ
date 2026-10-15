@@ -11,7 +11,7 @@ module WaterPipes
             {
                 layer
                 {
-                    row = waterpipes_01_18,
+                    row = waterpipes_01_26,
                 }
             }
         }

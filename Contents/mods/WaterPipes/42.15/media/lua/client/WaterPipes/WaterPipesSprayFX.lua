@@ -46,13 +46,13 @@ local MAX_ALPHA = 0.92
 -- Per-kind art anchor. origin (ox, oy) is the emitter/ground point INSIDE the frame and matches the
 -- generator's own origin, so it is structural -- leave it alone. headLift is the one to nudge: it raises
 -- the sprite so the spray leaves the NOZZLE instead of the floor, and is measured off the atlas (ground
--- anchor at y=224 in a 128x256 cell; heads top out at y=189 sprinkler, y=187 drip).
+-- anchor at y=224 in a 128x256 cell; heads top out at y=194 sprinkler, y=195 drip).
 -- cell is the frame's pixel size, matching tools/fx/gen_spray_fx.py. The sprinkler and the hydrant both
 -- blanket a 3x3 and use the bigger canvas; only the drip stays on its own tile.
 local KIND = {
-    sprinkler = { folder = "sprinkler", cell = 224, ox = 112, oy = 168, headLift = 35 },
+    sprinkler = { folder = "sprinkler", cell = 224, ox = 112, oy = 168, headLift = 30 },
     hydrant   = { folder = "hydrant",   cell = 224, ox = 112, oy = 168, headLift = 12 },
-    drip      = { folder = "drip",      cell = 128, ox = 64,  oy = 70,  headLift = 37 },
+    drip      = { folder = "drip",      cell = 128, ox = 64,  oy = 70,  headLift = 29 },
 }
 
 -- ===== Options =====
