@@ -19,7 +19,11 @@ Network storage settles every two in-game minutes: lower floors fill first, whil
 | Town mains | Clean water | 60 L/min at 25 m head | Plumb an indoor fixture before the water shuts off |
 | Fire hydrant | Clean water | 60 L/min; 1,000 L reserve after shutoff | Put a pipe on its tile and open it with a Pipe Wrench |
 
-<!-- SCREENSHOT: 06-source-types.png — Barrel, well pump, open-water pump, mains fixture and hydrant examples. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Supported storage vessels](../assets/images/06-source-types-cropped.png){ .wp-screenshot loading=lazy }
+![Pump sources: a well and open water](../assets/images/06b-source-well-river-cropped.png){ .wp-screenshot loading=lazy }
+![Town-mains fixture and fire hydrant](../assets/images/06c-source-mains-hydrant.png){ .wp-screenshot loading=lazy }
+</div>
 
 ## Fluid compatibility and water quality
 

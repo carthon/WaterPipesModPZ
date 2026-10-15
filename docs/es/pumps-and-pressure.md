@@ -6,8 +6,10 @@ La **Bomba de agua** necesita Electrónica 3, Metalistería 2, una Llave para tu
 
 Para funcionar necesita electricidad y tener su interruptor encendido. En una línea que ya tiene agua, solo aumenta la presión. Junto a un pozo, un río o un lago, además saca agua de ellos y la mete en la red. Colócala abajo: puede [aspirar](glossary.md#aspiracion) agua como mucho 7 m por debajo de ella (unas dos plantas), mientras que empujando hacia arriba suma 25 m. Si pones varias bombas encendidas en la misma línea, sus presiones se suman.
 
-<!-- SCREENSHOT: 08-pump-source-placement.png — Bomba bien colocada junto a un pozo o a la orilla de un río. -->
-<!-- SCREENSHOT: 09-pump-status-window.png — Ventana de Ver estado de la bomba con corriente, fuente y presión de entrada y salida. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Bomba con corriente sacando agua de un río o lago](../assets/images/08-pump-source-placement-river-cropped.png){ .wp-screenshot loading=lazy }
+![Bomba con corriente sacando agua de un pozo, con la ventana Ver estado de la bomba abierta](../assets/images/08-pump-source-placement-well-cropped.png){ .wp-screenshot loading=lazy }
+</div>
 
 ## Cómo se calcula la presión
 

@@ -16,8 +16,9 @@ Necesitas una Llave para tubos, un Tubo metálico o un Segmento de tubería de a
 6. Haz clic derecho en cualquier tubería y elige **[Mostrar red de tuberías](glossary.md#mostrar-red)**. Las tuberías se ven en rojo, los depósitos y fuentes en verde, los aparatos en azul y los enrutadores con límite de presión en ámbar.
 7. Prueba el aparato. Si no sale agua, comprueba que el depósito tiene agua y está en la misma planta que el aparato o más arriba. Si sigue sin funcionar, lee las instalaciones de abajo.
 
-<!-- SCREENSHOT: 01-getting-started-materials.png — Llave para tubos, tuberías y un depósito preparados para la primera red. -->
-<!-- SCREENSHOT: 02-getting-started-small-network.png — Primera red completa del depósito al fregadero, con la red resaltada. -->
+![Llave para tubos, tuberías y un depósito preparados para la primera red](../assets/images/01-getting-started-materials-cropped.png){ .wp-screenshot loading=lazy }
+
+![Primera red completa entre un depósito y un fregadero, con la red resaltada](../assets/images/02-getting-started-small-network-cropped.png){ .wp-screenshot loading=lazy }
 
 ## Tres instalaciones para empezar
 

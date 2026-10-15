@@ -6,8 +6,10 @@ A **Water Pump** requires Electrical 3, Welding 2, a Pipe Wrench, 2 Welding Torc
 
 A pump needs electrical power and its manual switch must be on. On an existing supply line it acts as a booster; beside a well or open water it also draws water into the network. Put it low: the default suction limit is 7 m (about two floors), while it can add 25 m of output pressure. Powered pumps in series add their pressure.
 
-<!-- SCREENSHOT: 08-pump-source-placement.png — Correct pump placement beside a well or open-water tile. -->
-<!-- SCREENSHOT: 09-pump-status-window.png — Check pump window showing power, source and inlet/outlet pressure. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Powered pump drawing from a river or lake](../assets/images/08-pump-source-placement-river-cropped.png){ .wp-screenshot loading=lazy }
+![Powered pump drawing from a well, with its status window open](../assets/images/08-pump-source-placement-well-cropped.png){ .wp-screenshot loading=lazy }
+</div>
 
 ## How pressure is calculated
 

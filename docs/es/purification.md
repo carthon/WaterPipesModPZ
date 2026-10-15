@@ -14,7 +14,7 @@ Primero construye y orienta un [Enrutador de fluidos](glossary.md#enrutador): la
 - **4** Salida roja del enrutador.
 - **5** Depósito de agua limpia.
 
-<!-- SCREENSHOT: 13-purifier-placement.png — Vista previa del purificador, con su esquina sobre el enrutador y sus 2×2 casillas. -->
+![Vista previa del purificador, con su esquina sobre el enrutador y sus 2×2 casillas](../assets/images/13-purifier-placement-cropped.png){ .wp-screenshot loading=lazy }
 
 ## Funcionamiento y filtro
 
@@ -28,4 +28,4 @@ Por defecto, al lado limpio solo le llega el 60 % de la [presión](glossary.md#p
 
 Necesitas un Soplete con combustible y una Máscara de soldador. Cada material se recupera por separado: 1 Chapa metálica y 2 Tubos metálicos con un 80 % de probabilidades, y 1 Chatarra electrónica y 1 Alambre con un 60 %. La batería, el carbón y los retales no se recuperan; si el purificador se destruye, no devuelve nada.
 
-<!-- SCREENSHOT: 15-purifier-status-window.png — Ventana del purificador mientras filtra. -->
+![Ventana del purificador mientras filtra](../assets/images/15-purifier-status-window-cropped.png){ .wp-screenshot loading=lazy }

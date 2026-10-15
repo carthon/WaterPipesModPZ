@@ -604,6 +604,44 @@
   box-shadow: 0 0.25rem 0.8rem rgba(0, 0, 0, 0.18);
 }
 
+.md-typeset .wp-screenshot {
+  background: #111714;
+  border: 1px solid color-mix(in srgb, var(--md-default-fg-color) 18%, transparent);
+  border-radius: 0.45rem;
+  box-shadow: 0 0.35rem 1rem rgba(18, 26, 22, 0.14);
+  box-sizing: border-box;
+  display: block;
+  height: auto;
+  margin: 1.2rem auto;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.md-typeset .wp-gallery {
+  margin: 1.2rem 0;
+}
+
+.md-typeset .wp-gallery > p {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0;
+}
+
+.md-typeset .wp-gallery .wp-screenshot {
+  align-self: start;
+  height: auto;
+  margin: 0;
+  min-width: 0;
+  object-fit: contain;
+  width: 100%;
+}
+
+[data-md-color-scheme="slate"] .md-typeset .wp-screenshot {
+  border-color: rgba(121, 184, 178, 0.3);
+  box-shadow: 0 0.3rem 0.9rem rgba(0, 0, 0, 0.22);
+}
+
 .md-nav__title,
 .md-nav__item--section > .md-nav__link {
   font-weight: 750;

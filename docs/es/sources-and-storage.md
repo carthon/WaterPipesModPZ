@@ -19,7 +19,11 @@ Cada dos minutos de juego, el agua de la red se reparte entre los depósitos: pr
 | [Red municipal](glossary.md#red-municipal) | Agua limpia | 60 L/min a 25 m de presión | [Instala](glossary.md#instalar) un aparato dentro de una casa antes del [corte del agua](glossary.md#corte-de-suministros) |
 | [Boca de incendios](glossary.md#boca-de-incendios) | Agua limpia | 60 L/min; después del corte, una reserva de 1000 L | Pon una tubería en su casilla y ábrela con una Llave para tubos |
 
-<!-- SCREENSHOT: 06-source-types.png — Ejemplos de barril, bomba en un pozo, bomba en un río, aparato con agua municipal y boca de incendios. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Depósitos compatibles](../assets/images/06-source-types-cropped.png){ .wp-screenshot loading=lazy }
+![Fuentes para una bomba: un pozo y un río](../assets/images/06b-source-well-river-cropped.png){ .wp-screenshot loading=lazy }
+![Aparato conectado a la red municipal y boca de incendios](../assets/images/06c-source-mains-hydrant.png){ .wp-screenshot loading=lazy }
+</div>
 
 ## Líquidos compatibles y calidad del agua
 

@@ -16,7 +16,7 @@ When its tank falls below the configured threshold (25% by default), it draws to
 
 The dashed perimeter means this line stays isolated from water.
 
-<!-- SCREENSHOT: 25-generator-connect-menu.png — Plumb Generator action with a pipe on the same tile. -->
+![Plumb Generator action with a pipe on the generator tile](../assets/images/25-generator-connect-menu-cropped.png){ .wp-screenshot loading=lazy }
 
 Use **Unplumb Generator** to disconnect it without removing the pipe.
 

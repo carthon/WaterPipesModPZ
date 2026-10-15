@@ -14,7 +14,7 @@ First build and orient a Fluid Router: green is tainted-water **IN**, red is cle
 - **4** Red router OUT.
 - **5** Clean storage.
 
-<!-- SCREENSHOT: 13-purifier-placement.png — Build ghost showing the purifier anchor over the router and its 2×2 footprint. -->
+![Purifier placement preview showing its router anchor and 2×2 footprint](../assets/images/13-purifier-placement-cropped.png){ .wp-screenshot loading=lazy }
 
 ## Operation and filter
 
@@ -28,4 +28,4 @@ By default the clean side receives 60% of incoming pressure: 25 m becomes 15 m, 
 
 Use a fueled Welding Torch and Welder Mask. Each return is rolled separately: 1 Steel Sheet and 2 Iron Pipes at 80%, plus 1 Scrap Electronics and 1 Wire at 60%. Battery, charcoal, and rags are not returned; destruction returns nothing.
 
-<!-- SCREENSHOT: 15-purifier-status-window.png — Purifier window while actively filtering. -->
+![Purifier status window while actively filtering](../assets/images/15-purifier-status-window-cropped.png){ .wp-screenshot loading=lazy }

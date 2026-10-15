@@ -17,9 +17,11 @@ Al inspeccionarlo, el mod crea [tuberías ocultas](glossary.md#tuberia-oculta) d
 
 Una sola inspección puede crear como máximo 200 casillas de tubería nueva y revisar hasta 8000 casillas del edificio. Si se queda a medias, repítela desde otro punto. Los tubos se cobran al empezar, y se te devuelven los de los aparatos a los que no consigue llegar. Si la acción se interrumpe, las tuberías ya creadas se quedan. Las tuberías creadas así no devuelven material al desmontarlas.
 
-<!-- SCREENSHOT: 21-building-before.png — Casa del mapa con varias habitaciones antes de inspeccionar su fontanería. -->
-<!-- SCREENSHOT: 22-building-plumb-action.png — Opción Fontanear el edificio con la descripción de su coste. -->
-<!-- SCREENSHOT: 23-building-after-overlay.png — Fontanería antes oculta, resaltada con Mostrar red de tuberías tras la inspección. -->
+![Casa del mapa antes de inspeccionar su fontanería](../assets/images/21-building-before-cropped.png){ .wp-screenshot loading=lazy }
+
+![Opción Fontanear el edificio con la descripción de su coste](../assets/images/22-building-plumb-action-cropped.png){ .wp-screenshot loading=lazy }
+
+![Fontanería que estaba oculta, ya visible tras la inspección](../assets/images/23-building-after-overlay-cropped.png){ .wp-screenshot loading=lazy }
 
 ## Mensajes del juego
 

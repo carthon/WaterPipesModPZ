@@ -71,4 +71,7 @@ Estas opciones están en **Opciones → Mods → Tuberías de Agua**. Solo afect
 | Volumen de sonido de las máquinas (%) | Ajusta ese sonido de 0 a 100 |
 | Efectos de agua | Muestra el chorro animado de los aspersores en marcha y de las bocas de incendios abiertas |
 
-<!-- SCREENSHOT: 26-sandbox-options.png — Página de opciones de sandbox con el grupo Tuberías de Agua completo. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Parte superior de las opciones de sandbox de Tuberías de Agua](../assets/images/26a-sandbox-options-top.png){ .wp-screenshot loading=lazy }
+![Resto de las opciones de sandbox de Tuberías de Agua](../assets/images/26b-sandbox-options-middle.png){ .wp-screenshot loading=lazy }
+</div>

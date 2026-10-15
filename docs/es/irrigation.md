@@ -23,5 +23,7 @@ El gotero solo gasta agua en su casilla. El aspersor gasta agua por las nueve ca
 
 Un gotero reventado sigue dejando pasar el agua, pero deja de regar. Se repara con **Reparar gotero**, una Llave para tubos y 1 Cinta americana. Si pones la presión de rotura a 0 en las opciones de sandbox, los goteros no revientan nunca.
 
-<!-- SCREENSHOT: 17-sprinkler-coverage.png — Aspersor regando toda su zona de 3×3. -->
-<!-- SCREENSHOT: 18-emitter-diagnostics.png — Resultado de Comprobar emisor de riego con un problema de presión. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Aspersor en marcha regando toda su zona de 3×3](../assets/images/17-sprinkler-coverage-cropped.png){ .wp-screenshot loading=lazy }
+![Comprobar emisor de riego avisando de un problema de presión](../assets/images/18-emitter-diagnostics-cropped.png){ .wp-screenshot loading=lazy }
+</div>

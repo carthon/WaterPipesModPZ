@@ -20,13 +20,14 @@ Las tuberías de suelo se unen solas con las vecinas y forman extremos, rectas, 
 
 Las [tuberías ocultas](glossary.md#tuberia-oculta) funcionan exactamente igual, pero desaparecen de la vista al terminar de construirlas. Para verlas, usa **[Mostrar red de tuberías](glossary.md#mostrar-red)** sobre cualquier tubería, visible u oculta: toda la red se resalta durante un rato. **Ocultar red de tuberías** la vuelve a ocultar antes de que desaparezca sola.
 
-<!-- SCREENSHOT: 03-pipe-shapes.png — Extremo, recta, esquina, unión en T y cruce formados automáticamente. -->
-<!-- SCREENSHOT: 04-vertical-pipe-floors.png — Tubería vertical uniendo dos plantas por una pared norte u oeste. -->
-<!-- SCREENSHOT: 05-concealed-pipes-overlay.png — Tramo oculto, invisible normalmente y resaltado con Mostrar red de tuberías. -->
+!!! tip "Encontrar una red oculta"
+    Si no queda ninguna tubería visible sobre la que usar **Mostrar red de tuberías**, elige :material-hammer-screwdriver: **Desmontar** en la barra de acciones de la izquierda. Con su cursor puedes señalar las tuberías ocultas y ver por dónde van. Cancela la acción cuando las encuentres, salvo que de verdad quieras quitar ese tramo.
+
+![Formas que toman las tuberías solas y una tubería vertical entre dos plantas](../assets/images/03-pipe-shapes-cropped.png){ .wp-screenshot loading=lazy }
 
 ## Desmontaje y recuperación
 
-Usa la acción **Desmontar** del juego, no la herramienta para recoger y mover objetos.
+Usa la acción :material-hammer-screwdriver: **Desmontar** del juego, no la herramienta para recoger y mover objetos.
 
 - Una tubería metálica construida por ti tiene un 90 % de probabilidades de devolver un Tubo metálico.
 - Una tubería de arcilla no devuelve nada: el segmento se gasta al colocarlo.

@@ -12,11 +12,16 @@ El [enrutador](glossary.md#enrutador) tiene una franja verde, que es la **entrad
 
 Haz clic derecho en el enrutador y elige **Fijar límite de presión...**. La ventana muestra la presión que entra y la que sale. Déjalo sin límite si solo quieres que el agua no vuelva hacia atrás; ponlo por debajo de 15 m para proteger goteros con los valores por defecto, o en 20 m como mínimo si detrás hay un aspersor que tiene que funcionar. Si colocas un depósito o un purificador en la casilla del enrutador, los dos lados quedan totalmente separados y solo intercambian agua a través de ese objeto.
 
-<!-- SCREENSHOT: 10-router-orientation.png — Enrutador con la entrada verde, la salida roja y el sentido de giro bien visibles. -->
-<!-- SCREENSHOT: 11-router-pressure-dialog.png — Ventana de límite de presión con la entrada, la salida y el tope elegido. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Enrutador de fluidos con su entrada verde y su salida roja](../assets/images/10-router-orientation-cropped.png){ .wp-screenshot loading=lazy }
+![Ventana Fijar límite de presión del enrutador](../assets/images/11-router-pressure-dialog-cropped.png){ .wp-screenshot loading=lazy }
+</div>
 
 ## Válvula de corte
 
 La [válvula](glossary.md#valvula-de-corte) se construye abierta y no cambia nada mientras siga abierta. Al cerrarla, su casilla deja de conducir: los dos lados dejan de compartir líquido, presión y contaminación. Sirve para aislar una zona mientras la reparas, para mantener la gasolina separada del agua o para que una contaminación no se extienda mientras cambias la instalación. No puede compartir casilla con un manómetro, un enrutador, una bomba, un gotero ni un aspersor.
 
-<!-- SCREENSHOT: 12-valve-open-closed.png — La misma válvula abierta y cerrada, con su indicador verde o rojo. -->
+<div class="wp-gallery wp-gallery--2" markdown>
+![Válvula de corte cerrada](../assets/images/12a-valve-closed-cropped.png){ .wp-screenshot loading=lazy }
+![Válvula de corte abierta](../assets/images/12a-valve-open-cropped.png){ .wp-screenshot loading=lazy }
+</div>

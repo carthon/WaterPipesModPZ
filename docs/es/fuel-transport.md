@@ -16,7 +16,7 @@ Cuando su depósito de combustible baja del umbral configurado (25 % por defecto
 
 La línea discontinua indica que esta red no toca ninguna red de agua.
 
-<!-- SCREENSHOT: 25-generator-connect-menu.png — Opción Instalar Generador con una tubería en su casilla. -->
+![Opción Instalar Generador con una tubería en la casilla del generador](../assets/images/25-generator-connect-menu-cropped.png){ .wp-screenshot loading=lazy }
 
 Para desconectarlo sin quitar la tubería, elige **Desinstalar Generador**.
 

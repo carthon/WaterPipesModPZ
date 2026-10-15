@@ -20,13 +20,14 @@ Floor pipes auto-tile into ends, straights, corners, T-junctions, and crosses. O
 
 Concealed variants have the same network behavior but become invisible after construction. Use **Show pipe network** on any visible or concealed pipe to reveal the connected network temporarily; use **Hide pipe network** to clear it early.
 
-<!-- SCREENSHOT: 03-pipe-shapes.png — Ends, straight, corner, T-junction and cross produced by automatic connections. -->
-<!-- SCREENSHOT: 04-vertical-pipe-floors.png — Vertical pipe linking two floors on a north or west wall. -->
-<!-- SCREENSHOT: 05-concealed-pipes-overlay.png — Concealed run hidden normally and revealed by Show pipe network. -->
+!!! tip "Finding a concealed network"
+    If no visible pipe remains to open the network view, select :material-hammer-screwdriver: **Disassemble** from the left-hand action bar. Its selection cursor makes concealed pipes targetable, helping you locate the run. Cancel the action once you have found it unless you actually want to remove that segment.
+
+![Automatic pipe shapes and a vertical connection between floors](../assets/images/03-pipe-shapes-cropped.png){ .wp-screenshot loading=lazy }
 
 ## Dismantling and recovery
 
-Use the game's **Disassemble** action rather than the moveable-object tool.
+Use the game's :material-hammer-screwdriver: **Disassemble** action rather than the moveable-object tool.
 
 - A pipe you built from an Iron Pipe has a 90% chance to return it.
 - A clay pipe returns nothing: the fired segment is spent when laid.
