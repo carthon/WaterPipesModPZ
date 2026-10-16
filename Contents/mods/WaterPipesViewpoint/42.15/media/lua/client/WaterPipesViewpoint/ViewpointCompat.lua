@@ -43,6 +43,8 @@ end
 
 -- Swap a sprinkler's head between idle and watering (the still spray, when the animated one is missing).
 -- Local only, never transmitted: the watering head looks the same in iso.
+local swapped = {}                             -- object -> true while it shows the watering head
+
 function VP.showSpray(object, on)
     if not registered then
         return
@@ -52,7 +54,20 @@ function VP.showSpray(object, on)
     local wanted = name and (on and SPRAY[name] or (not on and HEAD[name])) or nil
     if wanted then
         object:setOverlaySprite(wanted, false)
+        swapped[object] = on or nil
     end
+end
+
+-- Every watering head back to the idle one: a save must not keep the swap.
+local function restoreHeads()
+    for object in pairs(swapped) do
+        local overlay = object.getOverlaySprite and object:getOverlaySprite() or nil
+        local head = overlay and HEAD[overlay:getName()] or nil
+        if head then
+            object:setOverlaySprite(head, false)
+        end
+    end
+    swapped = {}
 end
 
 -- ===== Animated spray (vanilla SpriteModel, 3D view only) =====
@@ -60,8 +75,8 @@ end
 -- RemoveTileObject(obj, false) stay on this client and fire no OnObjectAdded, the server never knows it.
 -- Kept LAST on its square so server-indexed objects keep the server's indices.
 
-local SPRAY_MODEL = "WaterPipes.SprinklerSpray"
-local VARIANTS = 4                             -- turned 0/90/180/270 and phase-shifted
+local SPRAY_MODEL = VP.SPRAY_MODEL
+local VARIANTS = VP.SPRAY_VARIANTS             -- turned 0/90/180/270 and phase-shifted
 local LOOP_FRAMES = 24                         -- keys in the Spray clip, 1 s
 local MS_PER_FRAME = 1000 / LOOP_FRAMES
 
@@ -89,8 +104,10 @@ local function variants()
     return models or nil
 end
 
+-- Single player only. On an MP client a local object on a server tile would sit among the objects the
+-- server counts by index; the still spray only swaps the head and adds nothing.
 function VP.animatedSpray()
-    return registered and variants() ~= nil
+    return registered and not isClient() and variants() ~= nil
 end
 
 local function keyOf(x, y, z)
@@ -213,10 +230,24 @@ local function hookBuildCursor()
     ISBuildIsoEntity.waterPipesNamesGhosts = true
 end
 
+-- A new game starts from nothing: nothing tracked survives from the last one.
+local function resetSession()
+    sprays = {}
+    count = 0
+    swapped = {}
+    lastFrame = -1
+end
+
+-- never saved: out before a save (single player), back on the next rescan
+local function beforeSave()
+    VP.clearSprays()
+    restoreHeads()
+end
+
 Events.OnGameBoot.Add(register)
+Events.OnGameStart.Add(resetSession)
 Events.OnGameStart.Add(register)
 Events.OnGameStart.Add(hookBuildCursor)
 Events.OnTick.Add(onTick)
 Events.OnObjectAdded.Add(onObjectAdded)
--- never saved: out before a save (single player), back on the next rescan
-Events.OnSave.Add(VP.clearSprays)
+Events.OnSave.Add(beforeSave)
