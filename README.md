@@ -11,8 +11,10 @@
 - Plumbing for fixtures and whole buildings.
 - Pressure-aware routers, shut-off valves, and pressure gauges.
 - Electric water purification, drip irrigation, and sprinklers.
+- Soil moisture sensors that open and close valves to water crops automatically.
 - Petrol transport and automatic generator refuelling.
 - Multiplayer support and configurable Sandbox and Mod Options.
+- Optional Project Viewpoint add-on with 3D models, in the same Workshop item.
 
 The player guide is available in **English** and **Spanish**. The mod itself also includes a **Simplified Chinese** translation. Tutorials belong in the guide so this README can remain a concise project entry point.
 
