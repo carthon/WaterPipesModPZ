@@ -639,8 +639,9 @@ Constants.VALVE_SPRITES = {
     [Constants.PIPE_FLOOR_T_NOS_SPRITE]     = { open = "waterpipes_01_56", closed = "waterpipes_01_72" },
     [Constants.PIPE_FLOOR_T_NON_SPRITE]     = { open = "waterpipes_01_57", closed = "waterpipes_01_73" },
     [Constants.PIPE_FLOOR_CROSS_SPRITE]     = { open = "waterpipes_01_58", closed = "waterpipes_01_74" },
-    [Constants.PIPE_FLOOR_END_W_SPRITE]     = { open = "waterpipes_01_53", closed = "waterpipes_01_69" },
-    [Constants.PIPE_FLOOR_END_N_SPRITE]     = { open = "waterpipes_01_53", closed = "waterpipes_01_69" },
+    -- a pipe end (one neighbour) shows the straight body along its arm
+    [Constants.PIPE_FLOOR_END_W_SPRITE]     = { open = "waterpipes_01_48", closed = "waterpipes_01_64" },
+    [Constants.PIPE_FLOOR_END_N_SPRITE]     = { open = "waterpipes_01_49", closed = "waterpipes_01_65" },
     [Constants.PIPE_FLOOR_END_E_SPRITE]     = { open = "waterpipes_01_48", closed = "waterpipes_01_64" },
     [Constants.PIPE_FLOOR_END_S_SPRITE]     = { open = "waterpipes_01_49", closed = "waterpipes_01_65" },
     [Constants.PIPE_FLOOR_SINGLE_SPRITE]    = { open = "waterpipes_01_48", closed = "waterpipes_01_64" },

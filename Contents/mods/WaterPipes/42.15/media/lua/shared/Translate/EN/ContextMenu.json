@@ -15,5 +15,6 @@
     "ContextMenu_WaterPipesPumpTurnOn": "Turn on",
     "ContextMenu_WaterPipesPumpTurnOff": "Turn off",
     "ContextMenu_WaterPipesPumpStatus": "Check pump",
-    "ContextMenu_WaterPipesPlumbBuilding": "Plumb this building"
+    "ContextMenu_WaterPipesPlumbBuilding": "Plumb this building",
+    "ContextMenu_WaterPipesOpenSensor": "Open sensor"
 }

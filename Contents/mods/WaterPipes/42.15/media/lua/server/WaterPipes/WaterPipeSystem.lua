@@ -2253,7 +2253,13 @@ local function onClientCommand(module, command, player, args)
                 .. tostring(args and args.x) .. ":" .. tostring(args and args.y) .. ":" .. tostring(args and args.z))
             return
         end
-        Valve.setOpen(valve, args and args.open)
+        -- A valve linked to a humidity sensor only moves its switch; the sensors decide the rest.
+        local SignalBus = WaterPipes.SignalBus
+        if SignalBus and SignalBus.setValveSwitch then
+            SignalBus.setValveSwitch(valve, args and args.open)
+        else
+            Valve.setOpen(valve, args and args.open)
+        end
         return
     end
 

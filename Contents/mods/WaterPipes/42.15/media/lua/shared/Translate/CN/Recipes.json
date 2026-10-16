@@ -11,5 +11,6 @@
     "WaterPipeDrip": "滴灌头",
     "WaterPipeSprinkler": "喷洒器",
     "WaterPressureGauge": "压力表",
-    "Piping": "管道"
+    "Piping": "管道",
+    "WaterPipeHumiditySensor": "土壤湿度传感器"
 }

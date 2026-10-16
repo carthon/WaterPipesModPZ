@@ -15,5 +15,6 @@
     "ContextMenu_WaterPipesPumpTurnOn": "开启",
     "ContextMenu_WaterPipesPumpTurnOff": "关闭",
     "ContextMenu_WaterPipesPumpStatus": "查看水泵状态",
-    "ContextMenu_WaterPipesPlumbBuilding": "为这栋建筑布管"
+    "ContextMenu_WaterPipesPlumbBuilding": "为这栋建筑布管",
+    "ContextMenu_WaterPipesOpenSensor": "打开传感器"
 }
