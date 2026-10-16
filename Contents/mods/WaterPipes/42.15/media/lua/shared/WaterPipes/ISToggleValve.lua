@@ -2,7 +2,6 @@ require "TimedActions/ISBaseTimedAction"
 require "WaterPipes/Constants"
 require "WaterPipes/Valve"
 require "WaterPipes/Signals"
-require "WaterPipes/SoundOptions"
 
 -- Opening or closing a shut-off valve: walk to it, turn the handwheel by hand, then flip it on the server
 -- (direct in single player). The duration covers the graph rebuild the change costs.
@@ -26,18 +25,12 @@ function ISToggleValve:update()
     self.character:setMetabolicTarget(Metabolics.LightWork)
 end
 
+-- No sound: the base game has none for a handwheel, and the wrench's ratchet no longer fits.
 function ISToggleValve:start()
     self:setActionAnim("VehicleWorkOnMid")
-    self.sound = WaterPipes.SoundOptions.playOnCharacter(self.character, "RepairWithWrench")
-end
-
-function ISToggleValve:stop()
-    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
-    ISBaseTimedAction.stop(self)
 end
 
 function ISToggleValve:perform()
-    WaterPipes.SoundOptions.stopOnCharacter(self.character, self.sound)
 
     local square = self.valve:getSquare()
     local Signals = WaterPipes.Signals
