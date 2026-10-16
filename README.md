@@ -54,6 +54,7 @@ Bug reports, feature requests, documentation corrections, translations, and pull
 ## Credits
 
 - **Tileset and sprite art** — [aariak_einherjer](https://steamcommunity.com/id/aariak_einherjer/) ([ArtStation](https://www.artstation.com/adrianechanizrol))
+- **Sprite art and doc** — [xsleepykoalax](https://steamcommunity.com/id/xsleepykoalax/)
 - **Simplified Chinese translation** — rakkasumi
 - Everything else by Carthon.
 
