@@ -124,6 +124,7 @@
     "IGUI_WaterPipesSignalNameValve": "Name this valve:",
     "IGUI_WaterPipesSignalRefused_outOfRange": "That valve is too far from the sensor",
     "IGUI_WaterPipesSignalRefused_safehouse": "That valve is in a safehouse you are not a member of",
+    "IGUI_WaterPipesSignalRefused_sensorSafehouse": "That sensor is in a safehouse you are not a member of",
     "IGUI_WaterPipesSignalRefused_noValve": "There is no valve there any more",
     "IGUI_WaterPipesSignalRefused_noSensor": "The sensor is gone, or you are too far from it",
     "IGUI_WaterPipesSignalRefused_noBattery": "You have no battery",

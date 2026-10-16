@@ -93,6 +93,40 @@ local function stampValve(valve, receiver)
     transmit(valve)
 end
 
+-- Valves decided while their tile was away (`pending`): the registry already splits the network there, and
+-- the valve itself is turned the moment its tile loads. Counted lazily; nil = count again.
+local pendingCount = nil
+
+local function countPending(registry)
+    local n = 0
+    for _, receiver in pairs(registry.receivers) do
+        if receiver.pending then
+            n = n + 1
+        end
+    end
+    return n
+end
+
+-- What the bus decided for a valve whose tile was away, or nil. The container scan asks it, so a rebuild
+-- that runs before the valve is turned does not read the old state back.
+function Bus.pendingValveOpen(x, y, z)
+    if pendingCount == 0 then
+        return nil
+    end
+    local registry = Signals.registry()
+    if pendingCount == nil then
+        pendingCount = countPending(registry)
+        if pendingCount == 0 then
+            return nil
+        end
+    end
+    local receiver = registry.receivers[Signals.key(x, y, z)]
+    if receiver and receiver.pending then
+        return receiver.applied
+    end
+    return nil
+end
+
 -- Put one valve where its switch and sensors say.
 function Bus.applyReceiver(registry, receiver)
     local want = Bus.effectiveFor(registry, receiver)
@@ -100,9 +134,15 @@ function Bus.applyReceiver(registry, receiver)
     if valve then
         Signals.ValveReceiver:new(valve):apply(want)
         receiver.applied = want
+        if receiver.pending then
+            receiver.pending = nil
+            pendingCount = nil
+        end
     elseif not square and receiver.applied ~= want then
         if Signals.ValveReceiver.applyAt(receiver.x, receiver.y, receiver.z, want) then
             receiver.applied = want
+            receiver.pending = true
+            pendingCount = nil
         end
     end
 end
@@ -114,6 +154,7 @@ local function releaseReceiver(registry, receiverKey)
         return
     end
     registry.receivers[receiverKey] = nil
+    pendingCount = nil
     local valve, square = findValveAt(receiver.x, receiver.y, receiver.z)
     local on = receiver.switchOn ~= false
     if valve then
@@ -122,6 +163,9 @@ local function releaseReceiver(registry, receiverKey)
     elseif not square then
         Signals.ValveReceiver.applyAt(receiver.x, receiver.y, receiver.z, on)
         -- its modData still says what the sensor last made it: the switch rides along for when it loads
+        registry.stale[receiverKey] = { x = receiver.x, y = receiver.y, z = receiver.z, on = on }
+    elseif Signals.squareMayHoldValve(square) then
+        -- loaded, but the valve did not answer: settled by clearStale once it does
         registry.stale[receiverKey] = { x = receiver.x, y = receiver.y, z = receiver.z, on = on }
     end
 end
@@ -175,6 +219,7 @@ local function dropReceiver(registry, receiverKey)
         end
     end
     registry.receivers[receiverKey] = nil
+    pendingCount = nil
 end
 
 -- ===== Reading sensors =====
@@ -245,7 +290,7 @@ local function refreshSensor(sensor)
     local registry = Signals.registry()
     local emitter = emitterEntry(registry, coordsOf(sensor))
     if emitter then
-        applyLinkedReceivers(registry, emitter)
+        Valve.batch(applyLinkedReceivers, registry, emitter)
     end
 end
 
@@ -295,6 +340,9 @@ end
 Bus.retryUnplaced = retryUnplaced
 
 -- Valves released while their chunk was away still carry their link marks; clear them once loaded.
+-- A loaded tile whose valve never answers is given up after STALE_STEPS steps.
+local STALE_STEPS = 6
+
 local function clearStale(registry)
     local done = {}
     for key, entry in pairs(registry.stale) do
@@ -309,7 +357,8 @@ local function clearStale(registry)
                 stampValve(valve, nil)
                 Signals.ValveReceiver:new(valve):apply(on)
             end
-            if valve or not Signals.squareMayHoldValve(square) then
+            entry.steps = (entry.steps or 0) + 1
+            if valve or not Signals.squareMayHoldValve(square) or entry.steps > STALE_STEPS then
                 done[#done + 1] = key
             end
         end
@@ -319,10 +368,7 @@ local function clearStale(registry)
     end
 end
 
-function Bus.tick(dtHours)
-    if not authoritative() then
-        return
-    end
+local function tickNow(dtHours)
     local registry = Signals.registry()
     local gone = {}
     -- a snapshot: reading a sensor may add its own entry, and the table must not grow while it is walked
@@ -363,22 +409,56 @@ function Bus.tick(dtHours)
     clearStale(registry)
 end
 
--- ===== Permissions =====
-
-local function isAdmin(player)
-    local level = player and player.getAccessLevel and player:getAccessLevel() or "None"
-    return level ~= nil and level ~= "None" and level ~= ""
+-- Every valve the step turns rebuilds the network once, together.
+function Bus.tick(dtHours)
+    if not authoritative() then
+        return
+    end
+    Valve.batch(tickNow, dtHours)
 end
 
--- A tile inside a safehouse belongs to its members.
+-- ===== Tiles coming back =====
+-- A pending valve is turned the tick after its tile loads, when its objects are all there.
+
+local loadedPending = {}
+
+local function onLoadGridsquare(square)
+    if pendingCount == 0 or not square or not authoritative() then
+        return
+    end
+    local x, y, z = square:getX(), square:getY(), square:getZ()
+    if Bus.pendingValveOpen(x, y, z) ~= nil then
+        loadedPending[#loadedPending + 1] = Signals.key(x, y, z)
+    end
+end
+
+local function applyLoadedPending()
+    local list = loadedPending
+    loadedPending = {}
+    local registry = Signals.registry()
+    for _, receiverKey in ipairs(list) do
+        local receiver = registry.receivers[receiverKey]
+        if receiver and receiver.pending then
+            Bus.applyReceiver(registry, receiver)
+        end
+    end
+end
+
+local function onTickPending()
+    if #loadedPending > 0 then
+        Valve.batch(applyLoadedPending)
+    end
+end
+
+-- Exposed for tools/conservation.
+Bus.onLoadGridsquare = onLoadGridsquare
+Bus.applyLoadedPending = onTickPending
+
+-- ===== Permissions =====
+
+-- A tile inside a safehouse belongs to its members (Signals.mayTouch, shared with the link cursor).
 function Bus.mayTouch(player, square)
-    if not player or not square or isAdmin(player) then
-        return true
-    end
-    if not SafeHouse or not SafeHouse.isSafeHouse or not player.getUsername then
-        return true
-    end
-    return SafeHouse.isSafeHouse(square, player:getUsername(), true) == nil
+    return Signals.mayTouch(player, square)
 end
 
 local function near(player, x, y, reach)
@@ -388,20 +468,29 @@ local function near(player, x, y, reach)
     return math.abs(player:getX() - x) <= reach + 1 and math.abs(player:getY() - y) <= reach + 1
 end
 
+-- The sensor a request names, or nil and why not.
 local function sensorFor(player, args)
     if type(args) ~= "table" then
-        return nil
+        return nil, "noSensor"
     end
     local square = World.squareAt(args.x, args.y, args.z)
     local sensor = square and Signals.findSensorOnSquare(square) or nil
-    if not sensor or not near(player, args.x, args.y, Signals.CONFIG_REACH) or not Bus.mayTouch(player, square) then
-        return nil
+    if not sensor or not near(player, args.x, args.y, Signals.CONFIG_REACH) then
+        return nil, "noSensor"
+    end
+    if not Bus.mayTouch(player, square) then
+        return nil, "sensorSafehouse"
     end
     return sensor, square
 end
 
 local function refuse(player, reason)
     Signals.notifyPlayer(player, "refused", { reason = reason })
+end
+
+-- Refused at the sensor itself: the client closes that sensor's window too.
+local function refuseSensor(player, args, reason)
+    Signals.notifyPlayer(player, "refused", { reason = reason, x = args.x, y = args.y, z = args.z, sensor = true })
 end
 
 -- ===== What the window shows =====
@@ -431,7 +520,11 @@ function Bus.snapshot(sensor)
     table.sort(links, function(a, b)
         return (a.name or "~") < (b.name or "~")
     end)
-    return { x = x, y = y, z = z, links = links }
+    local lo, hi, invert = Signals.sensorRange(sensor)
+    return {
+        x = x, y = y, z = z, links = links,
+        name = Signals.sensorName(sensor), min = lo, max = hi, invert = invert == true,
+    }
 end
 
 -- ===== Commands =====
@@ -439,8 +532,9 @@ end
 local handlers = {}
 
 function handlers.snapshot(player, args)
-    local sensor = sensorFor(player, args)
+    local sensor, why = sensorFor(player, args)
     if not sensor then
+        refuseSensor(player, args, why)
         return
     end
     refreshSensor(sensor)
@@ -448,8 +542,9 @@ function handlers.snapshot(player, args)
 end
 
 function handlers.configure(player, args)
-    local sensor = sensorFor(player, args)
+    local sensor, why = sensorFor(player, args)
     if not sensor then
+        refuseSensor(player, args, why)
         return
     end
     local modData = Signals.modDataOf(sensor)
@@ -490,8 +585,12 @@ local function findBattery(inventory, itemId)
 end
 
 function handlers.insertBattery(player, args)
-    local sensor = sensorFor(player, args)
-    if not sensor or Signals.batteryCharge(sensor) ~= nil then
+    local sensor, why = sensorFor(player, args)
+    if not sensor then
+        refuseSensor(player, args, why)
+        return
+    end
+    if Signals.batteryCharge(sensor) ~= nil then
         return
     end
     local inventory = player and player.getInventory and player:getInventory() or nil
@@ -514,8 +613,12 @@ function handlers.insertBattery(player, args)
 end
 
 function handlers.removeBattery(player, args)
-    local sensor = sensorFor(player, args)
-    local charge = sensor and Signals.batteryCharge(sensor)
+    local sensor, why = sensorFor(player, args)
+    if not sensor then
+        refuseSensor(player, args, why)
+        return
+    end
+    local charge = Signals.batteryCharge(sensor)
     if not charge then
         return
     end
@@ -539,9 +642,9 @@ function handlers.link(player, args)
     if not isTile(args.vx, args.vy, args.vz) then
         return
     end
-    local sensor = sensorFor(player, args)
+    local sensor, why = sensorFor(player, args)
     if not sensor then
-        refuse(player, "noSensor")
+        refuseSensor(player, args, why)
         return
     end
     local valve, valveSquare = findValveAt(args.vx, args.vy, args.vz)
@@ -592,9 +695,9 @@ function handlers.unlink(player, args)
     if not isTile(args.vx, args.vy, args.vz) then
         return
     end
-    local sensor = sensorFor(player, args)
+    local sensor, why = sensorFor(player, args)
     if not sensor then
-        refuse(player, "noSensor")
+        refuseSensor(player, args, why)
         return
     end
     local receiverKey = Signals.key(args.vx, args.vy, args.vz)
@@ -666,11 +769,35 @@ end
 
 local pending = {}
 local pendingScheduled = false
-local removers = {}     -- sensor object -> { mode = "scrap" | "destroy" | "move", player = ... }
+local removers = {}     -- sensor object -> { mode = "scrap" | "destroy" | "move", player = ..., at = ms }
+local REMOVER_TTL_MS = 10000
+
+local function nowMs()
+    return getTimestampMs and getTimestampMs() or nil
+end
+
+-- A note whose object never left (the action stopped after its hook) is forgotten after a while.
+local function pruneRemovers()
+    local now = nowMs()
+    if not now then
+        return
+    end
+    local old = nil
+    for object, note in pairs(removers) do
+        if note.at and now - note.at > REMOVER_TTL_MS then
+            old = old or {}
+            old[#old + 1] = object
+        end
+    end
+    for _, object in ipairs(old or {}) do
+        removers[object] = nil
+    end
+end
 
 function Bus.noteRemover(object, mode, player)
     if authoritative() and object then
-        removers[object] = { mode = mode, player = player }
+        pruneRemovers()
+        removers[object] = { mode = mode, player = player, at = nowMs() }
     end
 end
 
@@ -730,13 +857,7 @@ local function payOut(square, entry)
     end
 end
 
-local function processPending()
-    pendingScheduled = false
-    if Events and Events.OnTick then
-        Events.OnTick.Remove(processPending)
-    end
-    local list = pending
-    pending = {}
+local function settleRemovals(list)
     local registry = Signals.registry()
     for _, entry in pairs(list) do
         local square = World.squareAt(entry.x, entry.y, entry.z)
@@ -751,6 +872,16 @@ local function processPending()
         end
         removers[entry.object] = nil
     end
+end
+
+local function processPending()
+    pendingScheduled = false
+    if Events and Events.OnTick then
+        Events.OnTick.Remove(processPending)
+    end
+    local list = pending
+    pending = {}
+    Valve.batch(settleRemovals, list)
 end
 
 local function noteRemoval(object, mode, player)
@@ -825,6 +956,12 @@ if Events then
     end
     if Events.OnDestroyIsoThumpable then
         Events.OnDestroyIsoThumpable.Add(function(object, player) noteRemoval(object, "destroy", player) end)
+    end
+    if Events.LoadGridsquare then
+        Events.LoadGridsquare.Add(onLoadGridsquare)
+    end
+    if Events.OnTick then
+        Events.OnTick.Add(onTickPending)
     end
 end
 

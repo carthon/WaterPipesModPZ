@@ -211,7 +211,18 @@ function System.scanContainersAroundPipes()
             -- The valve is not a pipe object, but a pipe carrying our key proves this square's modData has arrived.
             -- A valve whose modData has not landed reads as absent, so the tile conducts.
             if derived then
-                derived.valveClosed = Valve.isClosedOnSquare(square) or nil
+                -- a sensor that turned this valve while its tile was away has the last word until the bus
+                -- turns the valve itself
+                local Bus = WaterPipes.SignalBus
+                local decided = nil
+                if Bus and Bus.pendingValveOpen then
+                    decided = Bus.pendingValveOpen(pipeData.x, pipeData.y, pipeData.z)
+                end
+                if decided ~= nil then
+                    derived.valveClosed = (not decided) or nil
+                else
+                    derived.valveClosed = Valve.isClosedOnSquare(square) or nil
+                end
             end
 
             if derived then

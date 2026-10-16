@@ -578,8 +578,8 @@ function ValveReceiver:apply(on)
     end
 end
 
--- A valve whose chunk is not loaded: the registry decides where the network splits, and the valve
--- itself is brought in line when it loads.
+-- A valve whose chunk is not loaded: the registry decides where the network splits, and the bus brings
+-- the valve itself in line as soon as its tile loads (SignalBus, pending receivers).
 function ValveReceiver.applyAt(x, y, z, on)
     local State = WaterPipes.State
     if not State or not State.setPipeValveClosed then
@@ -588,15 +588,31 @@ function ValveReceiver.applyAt(x, y, z, on)
     if not State.setPipeValveClosed(x, y, z, not on) then
         return false
     end
-    local Invalidate = WaterPipes.Invalidate
-    if Invalidate and Invalidate.layoutChanged then
-        Invalidate.layoutChanged()
-    end
-    local System = WaterPipes.System
-    if System and System.rebuild then
-        System.rebuild()
-    end
+    Valve.layoutChanged()
     return true
+end
+
+-- ===== Permissions =====
+
+-- Admins, moderators and any role allowed into safehouses. getAccessLevel() is "user" for a plain player
+-- on a server, so it cannot answer this.
+function Signals.bypassesSafehouses(player)
+    local role = player and player.getRole and player:getRole() or nil
+    if not role or not role.hasCapability or not Capability or not Capability.CanGoInsideSafehouses then
+        return false
+    end
+    return role:hasCapability(Capability.CanGoInsideSafehouses) == true
+end
+
+-- A tile inside a safehouse belongs to its members.
+function Signals.mayTouch(player, square)
+    if not player or not square or Signals.bypassesSafehouses(player) then
+        return true
+    end
+    if not SafeHouse or not SafeHouse.isSafeHouse or not player.getUsername then
+        return true
+    end
+    return SafeHouse.isSafeHouse(square, player:getUsername(), true) == nil
 end
 
 -- ===== Talking to the other side =====

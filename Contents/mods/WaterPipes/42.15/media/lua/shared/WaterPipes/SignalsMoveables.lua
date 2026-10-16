@@ -3,7 +3,8 @@
 --
 -- Picked up: its battery goes back to the player with its charge, its links go (the bus releases their
 -- valves), and its settings travel on the item. Placed: on plantable soil only, one per tile; settings
--- restored and the bus reads it at once. Rotated in place: the same object, so battery and links stay.
+-- restored and the bus reads it at once. Rotated (R): turned in place, the same object, so battery and
+-- links stay.
 -- Dismantled or destroyed: the action says who did it, so parts and battery reach that player.
 
 require "Moveables/ISMoveableSpriteProps"
@@ -139,7 +140,17 @@ function Moveables.install()
     end
 
     -- ===== Rotate in place =====
-    -- Vanilla only swaps the sprite of the same object: the corner it stands in moves with it.
+    -- Vanilla turns a one-tile moveable by picking it up and placing it again, which would hand the
+    -- battery back and drop the links. The sensor is turned in place instead: the same object with the
+    -- next face's sprite, so the corner it stands in moves with it and everything else stays.
+
+    local rotateMoveable = ISMoveableSpriteProps.rotateMoveable
+    function ISMoveableSpriteProps:rotateMoveable(_character, _square, _origSpriteName)
+        if not self.isMoveable or self.isMultiSprite or not isSensorSprite(_origSpriteName) then
+            return rotateMoveable(self, _character, _square, _origSpriteName)
+        end
+        self:rotateMoveableInternal(_character, _square, _origSpriteName)
+    end
 
     local rotate = ISMoveableSpriteProps.rotateMoveableInternal
     function ISMoveableSpriteProps:rotateMoveableInternal(_character, _square, _origSpriteName)

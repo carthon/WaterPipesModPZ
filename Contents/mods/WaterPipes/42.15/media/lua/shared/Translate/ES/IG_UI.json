@@ -124,6 +124,7 @@
     "IGUI_WaterPipesSignalNameValve": "Nombre de la válvula:",
     "IGUI_WaterPipesSignalRefused_outOfRange": "Esa válvula está demasiado lejos del sensor",
     "IGUI_WaterPipesSignalRefused_safehouse": "Esa válvula está en un refugio del que no eres miembro",
+    "IGUI_WaterPipesSignalRefused_sensorSafehouse": "Ese sensor está en un refugio del que no eres miembro",
     "IGUI_WaterPipesSignalRefused_noValve": "Ahí ya no hay ninguna válvula",
     "IGUI_WaterPipesSignalRefused_noSensor": "El sensor ya no está, o estás demasiado lejos",
     "IGUI_WaterPipesSignalRefused_noBattery": "No llevas ninguna pila",
