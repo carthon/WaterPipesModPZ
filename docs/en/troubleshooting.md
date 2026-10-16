@@ -4,7 +4,7 @@ Use this page to diagnose a network that is already built. For general how-to qu
 
 ## General diagnostic sequence
 
-1. Confirm Project Zomboid 42.15+, Water Pipes v0.10.x, and matching server/client mod versions.
+1. Confirm Project Zomboid 42.15+, Water Pipes v0.11.x, and matching server/client mod versions.
 2. Choose **Show pipe network** and trace the complete route.
 3. Verify a pipe on every endpoint's own tile and a Vertical Fluid Pipe at each floor change.
 4. Check closed valves, Fluid Router direction, and any configured pressure ceiling.
@@ -47,6 +47,14 @@ Use this page to diagnose a network that is already built. For general how-to qu
 **Resolution:** Reduce demand or distance, divide branches with routers, or add a correctly powered pump where the design permits.  
 **Related:** [Pumps and pressure](pumps-and-pressure.md), [Routers and valves](routers-and-valves.md)
 
+## The purifier cannot be placed
+
+**Symptom:** The purifier's build preview stays red.  
+**Possible causes:** The anchor (top/back corner) is not on a Fluid Router; that router already has a purifier; there is floor on the level above the anchor. Game engine checks, on all four tiles: no solid floor; a barrel, rain collector, piece of furniture or tree in the way; a player, zombie, animal or vehicle on a tile; a wall, fence or window crossing the 2×2.  
+**Checks:** Hover the anchor over the router and look at what stands on the other three tiles and on the level above.  
+**Resolution:** Clear the footprint or move the router to an open spot with nothing built above it. Pipes on the footprint are fine.  
+**Related:** [Purification](purification.md#placement-conditions)
+
 ## Purifier does not process water
 
 **Symptom:** No clean water reaches the output.  
@@ -62,6 +70,14 @@ Use this page to diagnose a network that is already built. For general how-to qu
 **Checks:** Use **Check irrigation emitter**.  
 **Resolution:** Follow the reported condition; repair a burst drip emitter with the required materials and limit upstream pressure.  
 **Related:** [Irrigation](irrigation.md)
+
+## A moisture sensor does not open its valve
+
+**Symptom:** The crops dry out but the linked valve stays closed.  
+**Possible causes:** No power (unlit light): no electricity on the tile and no charged Battery; no crop on the sensor's tile; the moisture has not dropped to the minimum yet (it holds between the two ends); **Invert** is on; the valve was closed by hand; the valve is not linked.  
+**Checks:** Right-click the sensor, **Open sensor**: it shows the reading, the signal and why, the power, and the linked valves. The valve's tooltip says whether it was switched off by hand or is waiting for a signal.  
+**Resolution:** Give it power or a Battery, plant on its tile, adjust the range, or **Open valve** by hand to hand it back to the sensors.  
+**Related:** [Soil Moisture Sensor](irrigation.md#moisture-sensor)
 
 ## One connected network contains water and petrol
 

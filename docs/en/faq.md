@@ -6,7 +6,7 @@ This section also covers questions raised by players in the [Steam Workshop comm
 
 ### Which game version is supported?
 
-Water Pipes v0.10.x requires **Project Zomboid Build 42.15 or newer**. See [Compatibility](compatibility.md).
+Water Pipes v0.11.x requires **Project Zomboid Build 42.15 or newer**. See [Compatibility](compatibility.md).
 
 ### Does Water Pipes have dependencies?
 
@@ -66,7 +66,7 @@ It needs power, tainted input water, free output capacity, and a usable filter. 
 
 ### How do I place the purifier on the router?
 
-The purifier occupies a 2 × 2 area. Its top/back corner must sit directly on the Fluid Router tile. The router's green side is the input and its red side is the output.
+The purifier occupies a 2 × 2 area. Its top/back corner must sit directly on the Fluid Router tile, with no floor on the level above that tile. The router's green side is the input and its red side is the output; the purifier does not rotate, so aim the router first. All four tiles also have to pass the game engine's own building checks: solid floor, nothing solid on them, nobody standing there and no wall between them. See [placement conditions](purification.md#placement-conditions).
 
 ### Why is the purifier working but no water reaches my fixtures?
 
@@ -86,6 +86,10 @@ By default it bursts above 15 m of pressure. Put a Fluid Router with an appropri
 
 By default it needs 20 m of pressure, network water, and a living crop that needs watering. Use **Check irrigation emitter**.
 
+### How do I water crops automatically?
+
+Put a Shut-off Valve on the pipe that feeds the drips or sprinklers, place a Soil Moisture Sensor among the crops, and link the valve from the sensor's window. The valve opens when the crop dries to the minimum and closes at the maximum. See [Soil Moisture Sensor](irrigation.md#moisture-sensor).
+
 ## Fuel and generators
 
 ### When does a plumbed generator refuel?
@@ -98,7 +102,7 @@ After placing the pipe on its tile, equip a Pipe Wrench and use **Plumb Generato
 
 ### How do I use a Shut-off Valve?
 
-Build it over an existing plain floor pipe. Use **Close valve** to split both sides into independent networks and **Open valve** to join them again. Never reopen it between petrol and water. See the [control example](practical-examples.md#separate-and-control-branches).
+Build it over an existing plain floor pipe. Right-click it and use **Close valve** to split both sides into independent networks and **Open valve** to join them again; it turns by hand, no tool needed. Linked to a [Soil Moisture Sensor](irrigation.md#moisture-sensor), it opens and closes by itself. Never reopen it between petrol and water. See the [control example](practical-examples.md#separate-and-control-branches).
 
 ### What does “Plumb this building” actually do?
 
@@ -118,4 +122,4 @@ Yes. Important state-changing actions are validated by the server.
 
 ### Which mod integrations are confirmed?
 
-Take A Bath And Shower fixtures and Useful Barrels containers are documented integrations. See [compatibility](compatibility.md).
+Take A Bath And Shower fixtures and Useful Barrels containers are documented integrations, and Project Viewpoint through the optional add-on included in the same Workshop item. See [compatibility](compatibility.md).

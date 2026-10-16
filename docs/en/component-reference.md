@@ -1,6 +1,6 @@
 # Water Pipes pipes and components reference
 
-This catalogue lists every pipe and every [component](glossary.md#component) (anything the mod builds other than pipes) available under the **Building** menu, **Piping** category in Water Pipes v0.10.x. A usable Pipe Wrench is kept by every recipe that names it.
+This catalogue lists every pipe and every [component](glossary.md#component) (anything the mod builds other than pipes) available under the **Building** menu, **Piping** category in Water Pipes v0.11.x. A usable Pipe Wrench is kept by every recipe that names it.
 
 ## Pipes
 
@@ -49,7 +49,7 @@ Each concealed pipe consumes one complete prepared bucket; see [Pipe networks](p
 
 ### Shut-off Valve — Válvula de corte
 
-- **Purpose:** open, it leaves one network; closed, it separates fluid, pressure, and contamination in both directions.
+- **Purpose:** open, it leaves one network; closed, it separates fluid, pressure, and contamination in both directions. It turns by hand, or by itself when linked to a Soil Moisture Sensor.
 - **Recipe:** 1 Iron Pipe and 1 Iron Bar Half; no skill.
 - **Placement:** fits over an existing plain floor pipe. It cannot share the tile with a router, pump, emitter, sprinkler, or gauge.
 - **Details:** [Routers and valves](routers-and-valves.md#shut-off-valve).
@@ -63,7 +63,7 @@ Each concealed pipe consumes one complete prepared bucket; see [Pipe networks](p
 - **Purpose:** converts tainted input water into clean output water.
 - **Skills:** Electrical 4 and Welding 3.
 - **Recipe:** 3 Welding Torch uses, 2 Welding Rods uses, 3 Iron Pipes, 2 Steel Sheets, 1 Scrap Electronics, 1 Wire, 1 Lighter - Improvised Battery, 1 Charcoal, and 2 Rags.
-- **Placement:** 2×2 footprint; its top/back anchor sits on a correctly oriented Fluid Router. Keep the floor above the anchor clear.
+- **Placement:** 2×2 footprint; its top/back anchor sits on a correctly oriented Fluid Router. Keep the floor above the anchor clear; the game engine also needs all four tiles free. See [placement conditions](purification.md#placement-conditions).
 - **Operation:** powered filtering at up to 10 L/min; internal 50 L input and output tanks. Repair a worn filter with 1 Charcoal and 2 Rags.
 - **Details:** [Water purification](purification.md).
 
@@ -88,6 +88,14 @@ Each concealed pipe consumes one complete prepared bucket; see [Pipe networks](p
 
 <!-- SCREENSHOT: 17-sprinkler-coverage.png — Sprinkler operating over its complete 3×3 area. -->
 
+### Soil Moisture Sensor — Sensor de humedad
+
+- **Purpose:** reads the moisture of the crop on its tile and opens the Shut-off Valves linked to it when the crop dries to a minimum, closing them again at a maximum (80 % and 95 % by default).
+- **Recipe:** Electrical 3, Screwdriver (kept), 1 Motion Sensor, 1 Receiver, 1 Electrical Wire, and 2 Scrap Electronics.
+- **Placement:** on plantable soil or a furrow or crop tile, one per tile; rotate with **R** to pick its corner. It shares the tile with any other piece.
+- **Power:** the tile's electricity, or a Battery (30 days by default).
+- **Details:** [Soil Moisture Sensor](irrigation.md#moisture-sensor).
+
 ## Related recipe
 
-**Forge a Metal Pipe — Forjar una tubería de metal** is a Primitive Forge recipe. It produces one Iron Pipe and consumes 1 Charcoal, 1 Iron Bar Half, and 1 Iron Bar Quarter; it keeps a hammer, tongs or Metalworking Pliers, and a Metalworking Punch. It requires Blacksmithing 0 and awards 10 Blacksmithing XP.
+**Forge an Iron Pipe — Forjar un Tubo metálico** is a Primitive Forge recipe. It produces one Iron Pipe and consumes 1 Charcoal, 1 Iron Bar Half, and 1 Iron Bar Quarter; it keeps a hammer, tongs or Metalworking Pliers, and a Metalworking Punch. It requires Blacksmithing 0 and awards 10 Blacksmithing XP.

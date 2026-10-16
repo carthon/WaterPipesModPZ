@@ -6,7 +6,7 @@ Aquí también se responden dudas que han planteado los jugadores en los [coment
 
 ### ¿Con qué versión del juego funciona?
 
-Water Pipes v0.10.x necesita **Project Zomboid Build 42.15 o posterior**. Consulta [Compatibilidad](compatibility.md).
+Water Pipes v0.11.x necesita **Project Zomboid Build 42.15 o posterior**. Consulta [Compatibilidad](compatibility.md).
 
 ### ¿Water Pipes necesita otros mods?
 
@@ -66,7 +66,7 @@ Necesita corriente, agua contaminada en la entrada, sitio en la salida y un filt
 
 ### ¿Cómo coloco el purificador sobre el enrutador?
 
-El purificador ocupa 2 × 2 casillas. Su esquina superior (la del fondo) tiene que quedar justo encima de la casilla del Enrutador de fluidos. El lado verde del enrutador es la entrada y el rojo, la salida.
+El purificador ocupa 2 × 2 casillas. Su esquina superior (la del fondo) tiene que quedar justo encima de la casilla del Enrutador de fluidos, sin suelo en la planta de encima de esa casilla. El lado verde del enrutador es la entrada y el rojo, la salida; el purificador no se gira, así que orienta antes el enrutador. Las cuatro casillas tienen que pasar además las comprobaciones que el motor del juego hace a cualquier construcción: suelo firme, nada sólido encima, nadie de pie y ningún muro entre ellas. Consulta las [condiciones para colocarlo](purification.md#condiciones-para-colocarlo).
 
 ### El purificador funciona, pero no llega agua a los aparatos. ¿Por qué?
 
@@ -86,6 +86,10 @@ Por defecto, revienta si la presión pasa de 15 m. Pon antes de él un Enrutador
 
 Por defecto necesita 20 m de presión, agua en la red y una planta viva que necesite riego. Usa **Comprobar emisor de riego**.
 
+### ¿Cómo riego los cultivos de forma automática?
+
+Pon una Válvula de corte en la tubería que alimenta los goteros o aspersores, clava un Sensor de humedad entre los cultivos y vincula la válvula desde la ventana del sensor. La válvula se abre cuando el cultivo se seca hasta el mínimo y se cierra al llegar al máximo. Consulta [Sensor de humedad](irrigation.md#sensor-de-humedad).
+
 ## Combustible y generadores
 
 ### ¿Cuándo se rellena un generador instalado?
@@ -98,9 +102,9 @@ Además de poner la tubería en su casilla, equípate una Llave para tubos y eli
 
 ### ¿Cómo se usa una Válvula de corte?
 
-Constrúyela sobre una tubería de suelo normal. **Cerrar válvula** separa los dos lados en redes independientes y **Abrir válvula** los vuelve a unir. Nunca la abras si a un lado hay gasolina y al otro agua. Consulta el [ejemplo de control](practical-examples.md#separar-y-controlar-ramales).
+Constrúyela sobre una tubería de suelo normal. Haz clic derecho: **Cerrar válvula** separa los dos lados en redes independientes y **Abrir válvula** los vuelve a unir; se gira a mano, sin herramientas. Si la vinculas a un [Sensor de humedad](irrigation.md#sensor-de-humedad), se abre y se cierra sola. Nunca la abras si a un lado hay gasolina y al otro agua. Consulta el [ejemplo de control](practical-examples.md#separar-y-controlar-ramales).
 
-### ¿Qué hace realmente «Fontanear el edificio»?
+### ¿Qué hace realmente «Conectar la fontanería del edificio»?
 
 En un edificio que ya venía en el mapa, revisa y saca a la luz la fontanería que se considera que ya tenía. El mod solo crea esas tuberías ocultas cuando se lo pides, para no tener que crearlas en todos los edificios del mapa. **No** pone tuberías en edificios construidos por jugadores; en esos se ponen a mano. Consulta el [paso a paso completo](practical-examples.md#inspeccionar-la-fontaneria-de-una-casa-del-mapa).
 
@@ -118,4 +122,4 @@ Sí. Las acciones que cambian algo importante las comprueba el servidor antes de
 
 ### ¿Con qué mods está comprobado que funciona?
 
-Con los aparatos de Take A Bath And Shower y los barriles de Useful Barrels. Consulta [Compatibilidad](compatibility.md).
+Con los aparatos de Take A Bath And Shower, los barriles de Useful Barrels y, con el complemento opcional que viene en el mismo objeto de Workshop, Project Viewpoint. Consulta [Compatibilidad](compatibility.md).

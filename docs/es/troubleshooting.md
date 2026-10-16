@@ -4,14 +4,14 @@ Esta página sirve para averiguar qué falla en una red que ya está construida.
 
 ## Revisión general, paso a paso
 
-1. Comprueba que usas Project Zomboid 42.15 o posterior, Water Pipes v0.10.x y, en multijugador, la misma versión del mod en el servidor y en los jugadores.
+1. Comprueba que usas Project Zomboid 42.15 o posterior, Water Pipes v0.11.x y, en multijugador, la misma versión del mod en el servidor y en los jugadores.
 2. Elige **Mostrar red de tuberías** y sigue todo el recorrido.
 3. Comprueba que hay una tubería en la propia casilla de cada depósito, aparato o generador, y una Tubería vertical de fluidos en cada cambio de planta.
 4. Revisa las válvulas cerradas, hacia dónde mira cada Enrutador de fluidos y los límites de presión que tengan.
 5. Comprueba que los depósitos conectados no están vacíos y tienen el líquido que necesita el consumidor.
 6. Mide la presión con **Ver estado de la bomba**, un Manómetro o **Comprobar emisor de riego**.
 7. Revisa que las bombas y los purificadores tengan electricidad y estén encendidos.
-8. Revisa las opciones de sandbox de **Tuberías de Agua** de esa partida.
+8. Revisa las opciones de sandbox de **Water Pipes** de esa partida.
 9. En multijugador, vuelve a conectarte, repite la acción una vez y confirma que todos tenéis la misma versión.
 10. Si sigue sin funcionar, haz una captura de la red resaltada o de la ventana de estado y guarda las líneas importantes del archivo `console.txt` (el registro del juego).
 
@@ -47,6 +47,14 @@ Esta página sirve para averiguar qué falla en una red que ya está construida.
 **Solución:** reduce el consumo o la distancia, divide la instalación en ramales separados por enrutadores o añade una bomba con corriente donde se pueda.  
 **Más información:** [Bombas y presión](pumps-and-pressure.md), [Enrutadores y válvulas](routers-and-valves.md)
 
+## No me deja colocar el purificador
+
+**Síntoma:** la vista previa del purificador sale en rojo.  
+**Causas posibles:** la esquina de anclaje (la superior) no está sobre un Enrutador de fluidos; ese enrutador ya tiene un purificador; hay suelo en la planta de encima de esa esquina. Comprobaciones del motor del juego, en las cuatro casillas: no hay suelo firme; estorba un barril, un recolector de lluvia, un mueble o un árbol; hay un jugador, un zombi, un animal o un vehículo encima; un muro, una valla o una ventana cruza el 2×2.  
+**Qué revisar:** pon la esquina sobre el enrutador y mira qué hay en las otras tres casillas y en la planta de arriba.  
+**Solución:** despeja las casillas o lleva el enrutador a un sitio abierto sin nada construido encima. Las tuberías en esas casillas no estorban.  
+**Más información:** [Purificación](purification.md#condiciones-para-colocarlo)
+
 ## El purificador no limpia el agua
 
 **Síntoma:** no sale agua limpia.  
@@ -62,6 +70,14 @@ Esta página sirve para averiguar qué falla en una red que ya está construida.
 **Qué revisar:** usa **Comprobar emisor de riego**.  
 **Solución:** haz lo que indique; si el gotero ha reventado, repáralo y limita la presión antes de él con un enrutador.  
 **Más información:** [Riego](irrigation.md)
+
+## El sensor de humedad no abre su válvula
+
+**Síntoma:** los cultivos se secan, pero la válvula vinculada sigue cerrada.  
+**Causas posibles:** sin energía (luz apagada): la casilla no tiene electricidad y no hay pila con carga; no hay cultivo en la casilla del sensor; la humedad aún no ha bajado al mínimo (entre los dos extremos se mantiene como estaba); **Invertir** está activado; la válvula se cerró a mano; la válvula no está vinculada.  
+**Qué revisar:** clic derecho en el sensor, **Abrir sensor**: muestra la lectura, la señal y su motivo, la energía y las válvulas vinculadas. La información de la válvula dice si se apagó a mano o si está esperando señal.  
+**Solución:** dale electricidad o una pila, planta en su casilla, ajusta el rango o usa **Abrir válvula** a mano para devolver el control a los sensores.  
+**Más información:** [Sensor de humedad](irrigation.md#sensor-de-humedad)
 
 ## Una misma red tiene agua y gasolina
 

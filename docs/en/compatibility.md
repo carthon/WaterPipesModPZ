@@ -5,13 +5,22 @@
 | Component | Status |
 |---|---|
 | Project Zomboid | Build 42.15 or newer |
-| Water Pipes | Documentation covers the v0.10.x series |
+| Water Pipes | Documentation covers the v0.11.x series |
 | Single player | Supported |
 | Multiplayer and dedicated servers | Supported; construction and fluid mutations are server-authoritative |
 | Languages in the mod | English, Spanish, Simplified Chinese |
 | Languages in this guide | English, Spanish |
 
 Confirmed integrations are **Take A Bath And Shower** fixtures and **Useful Barrels** containers; that mod turns the map's [barrels](glossary.md#barrel), scenery in the base game, into containers. Container support is capability-based and sends fluid-change notifications so compatible barrel mods can refresh their fill sprites, but an untested mod is not guaranteed compatible.
+
+## Project Viewpoint (optional 3D models)
+
+The same Workshop item includes a second, optional mod, **Water Pipes - Viewpoint** (mod ID `waterpipesviewpoint`). It gives every pipe and component a 3D model, and watering sprinklers an animated spray, in the first- and third-person views of [Project Viewpoint](https://steamcommunity.com/sharedfiles/filedetails/?id=3809306528). Water Pipes does not need it: enable it only if you play with Project Viewpoint, which in turn needs ZombieBuddy.
+
+- Enable `waterpipes`, `Viewpoint` and `waterpipesviewpoint`. Without Project Viewpoint the add-on does nothing.
+- Viewpoint's isometric view keeps the normal sprites.
+- Project Viewpoint loads every model pack into one shared memory budget. On its lowest memory profile some models may not fit and keep their flat sprite; choose a higher profile if pieces are missing.
+- With **Viewpoint Placement Fix**, building previews also show the 3D model.
 
 ## Dedicated-server checklist
 

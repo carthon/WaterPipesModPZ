@@ -5,7 +5,7 @@
 | Elemento | Estado |
 |---|---|
 | Project Zomboid | Build 42.15 o posterior |
-| Water Pipes | Esta guía cubre la serie v0.10.x |
+| Water Pipes | Esta guía cubre la serie v0.11.x |
 | Un jugador | Funciona |
 | [Multijugador](glossary.md#multijugador) y servidores dedicados | Funciona; las construcciones y los movimientos de líquido los decide y comprueba el servidor |
 | Idiomas del mod | Inglés, español y chino simplificado |
@@ -13,11 +13,20 @@
 
 Está comprobado que funciona con los aparatos de **Take A Bath And Shower** y con los barriles de **Useful Barrels**, que convierte en [depósitos](glossary.md#barril) los barriles del mapa (en el juego sin mods son solo decoración). El mod reconoce los depósitos por cómo se comportan, no por una lista de nombres, y avisa cada vez que cambia su nivel para que los mods de barriles puedan actualizar su dibujo. Aun así, un mod que no se ha probado no tiene la compatibilidad garantizada.
 
+## Project Viewpoint (modelos 3D opcionales)
+
+El mismo objeto de Workshop trae un segundo mod opcional, **Water Pipes - Viewpoint** (ID de mod `waterpipesviewpoint`). Da un modelo 3D a cada tubería y componente, y una lluvia animada a los aspersores mientras riegan, en las vistas en primera y tercera persona de [Project Viewpoint](https://steamcommunity.com/sharedfiles/filedetails/?id=3809306528). Water Pipes no lo necesita: actívalo solo si juegas con Project Viewpoint, que a su vez necesita ZombieBuddy.
+
+- Activa `waterpipes`, `Viewpoint` y `waterpipesviewpoint`. Sin Project Viewpoint, el complemento no hace nada.
+- La vista isométrica de Viewpoint sigue usando los sprites normales.
+- Project Viewpoint carga todos los paquetes de modelos en una misma reserva de memoria. Con su perfil de memoria más bajo puede que algunos modelos no quepan y se queden con el sprite plano; si faltan piezas, elige un perfil más alto.
+- Con **Viewpoint Placement Fix**, la vista previa al construir también muestra el modelo 3D.
+
 ## Servidores dedicados: lista de comprobación
 
 1. Instala el mod desde Steam Workshop (ID `3739595559`) en el servidor y en todos los jugadores.
 2. Añade el ID de mod `waterpipes` y usa la misma versión en todos.
-3. Ajusta el grupo de opciones de sandbox **Tuberías de Agua** antes de empezar o reiniciar la partida.
+3. Ajusta el grupo de opciones de sandbox **Water Pipes** antes de empezar o reiniciar la partida.
 4. Haz una copia de seguridad de la partida antes de actualizar, y después de actualizar prueba las redes importantes.
 5. Si un aparato conectado con una versión anterior funciona mal, desinstálalo y vuelve a instalarlo.
 
