@@ -22,7 +22,7 @@ end
 
 function ISOpenHumiditySensor:perform()
     if WaterPipesSensorWindow then
-        WaterPipesSensorWindow.openFor(self.sensor)
+        WaterPipesSensorWindow.openFor(self.sensor, self.character)
     end
     ISBaseTimedAction.perform(self)
 end

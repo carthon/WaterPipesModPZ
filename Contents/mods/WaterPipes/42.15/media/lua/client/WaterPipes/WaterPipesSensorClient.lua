@@ -35,6 +35,7 @@ function handlers.snapshot(args)
 end
 
 function handlers.refused(args)
+    WaterPipesSensorWindow.onRefused(args)
     local playerObj = getPlayer()
     local reason = args and args.reason
     if playerObj and HaloTextHelper and reason then

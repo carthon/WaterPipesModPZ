@@ -21,7 +21,9 @@ local Cursor = WaterPipesSignalLinkCursor
 local methods = {}
 
 local SCAN_RADIUS = Signals.LINK_REACH          -- the server refuses links to valves further off
-local SCAN_EVERY_TICKS = 30
+-- A rescan walks the square around the player a few rows per tick, so it never lands in one frame
+-- (61 x 61 tiles). A full pass takes about half a second.
+local SCAN_ROWS_PER_TICK = 2
 local COLORS = {
     free = { r = 0.20, g = 0.95, b = 0.30 },
     linked = { r = 1.00, g = 0.85, b = 0.10 },
@@ -64,7 +66,7 @@ local function newCursor(playerObj, window)
     o.dragNilAfterPlace = false
     o:setSprite(Signals.SENSOR_GHOST_SPRITE)
     o.valves = {}
-    o.ticks = 0
+    o.naming = {}          -- "x,y,z" -> true while that valve's name box is open
     return o
 end
 
@@ -80,31 +82,66 @@ function methods:classify(valve)
     if range > 0 and (math.abs(x - win.px) > range or math.abs(y - win.py) > range) then
         return "blocked", "outOfRange"
     end
-    local level = self.character:getAccessLevel()
-    local admin = level ~= nil and level ~= "None" and level ~= ""
-    if not admin and SafeHouse and SafeHouse.isSafeHouse(square, self.character:getUsername(), true) then
+    if not Signals.mayTouch(self.character, square) then
         return "blocked", "safehouse"
     end
     return "free"
 end
 
--- Every valve around the player, with what a click on it would do.
-function methods:scan()
-    local valves = {}
-    local cx, cy = math.floor(self.character:getX()), math.floor(self.character:getY())
-    local cz = math.floor(self.character:getZ())
-    for x = cx - SCAN_RADIUS, cx + SCAN_RADIUS do
-        for y = cy - SCAN_RADIUS, cy + SCAN_RADIUS do
-            local square = World.squareAt(x, y, cz)
-            if square and square:getSpecialObjects():size() > 0 then
-                local valve = Valve.findOnSquare(square)
-                if valve then
-                    valves[#valves + 1] = { valve = valve, x = x, y = y, z = cz, kind = self:classify(valve) }
-                end
+local function scanRow(self, pass, x)
+    for y = pass.cy - SCAN_RADIUS, pass.cy + SCAN_RADIUS do
+        local square = World.squareAt(x, y, pass.cz)
+        if square and square:getSpecialObjects():size() > 0 then
+            local valve = Valve.findOnSquare(square)
+            if valve then
+                pass.valves[#pass.valves + 1] = { valve = valve, x = x, y = y, z = pass.cz, kind = self:classify(valve) }
             end
         end
     end
-    self.valves = valves
+end
+
+local function newPass(self)
+    return {
+        cx = math.floor(self.character:getX()), cy = math.floor(self.character:getY()),
+        cz = math.floor(self.character:getZ()), x = nil, valves = {},
+    }
+end
+
+-- Every valve around the player, with what a click on it would do, in one go (when picking starts).
+function methods:scan()
+    local pass = newPass(self)
+    for x = pass.cx - SCAN_RADIUS, pass.cx + SCAN_RADIUS do
+        scanRow(self, pass, x)
+    end
+    self.valves = pass.valves
+    self.pass = nil
+end
+
+-- A few rows of the running rescan; the finished pass replaces the list.
+function methods:stepScan()
+    local pass = self.pass
+    if not pass then
+        pass = newPass(self)
+        pass.x = pass.cx - SCAN_RADIUS
+        self.pass = pass
+    end
+    local rows = 0
+    while pass.x <= pass.cx + SCAN_RADIUS and rows < SCAN_ROWS_PER_TICK do
+        scanRow(self, pass, pass.x)
+        pass.x = pass.x + 1
+        rows = rows + 1
+    end
+    if pass.x > pass.cx + SCAN_RADIUS then
+        self.valves = pass.valves
+        self.pass = nil
+    end
+end
+
+-- The links changed: recolour the valves already found.
+function methods:reclassify()
+    for _, entry in ipairs(self.valves) do
+        entry.kind = self:classify(entry.valve)
+    end
 end
 
 function methods:isValid(square)
@@ -129,17 +166,22 @@ function methods:render(x, y, z, square)
 end
 
 local function sendLink(win, square, name)
-    Signals.request(getPlayer(), "link", {
+    Signals.request(win.playerObj, "link", {
         x = win.px, y = win.py, z = win.pz,
         vx = square:getX(), vy = square:getY(), vz = square:getZ(), name = name,
     })
 end
 
-local function onNamed(target, button, win, square)
+local function keyOfSquare(square)
+    return Signals.key(square:getX(), square:getY(), square:getZ())
+end
+
+local function onNamed(target, button, cursor, square)
+    cursor.naming[keyOfSquare(square)] = nil
     if button.internal ~= "OK" then
         return
     end
-    sendLink(win, square, button.parent.entry:getText())
+    sendLink(cursor.window, square, button.parent.entry:getText())
 end
 
 -- A click: unlink a linked valve, link a free one (asking its name the first time).
@@ -152,13 +194,16 @@ function methods:tryBuild(x, y, z)
     local win = self.window
     local kind = self:classify(valve)
     if kind == "linked" then
-        Signals.request(getPlayer(), "unlink", { x = win.px, y = win.py, z = win.pz, vx = x, vy = y, vz = z })
+        Signals.request(win.playerObj, "unlink", { x = win.px, y = win.py, z = win.pz, vx = x, vy = y, vz = z })
     elseif kind == "free" then
         if Signals.valveName(valve) then
             sendLink(win, square, nil)
-        else
-            local modal = ISTextBox:new(0, 0, 280, 180, getText("IGUI_WaterPipesSignalNameValve"), "", nil,
-                onNamed, self.player, win, square)
+        elseif not self.naming[keyOfSquare(square)] then
+            -- one name box per valve, however often it is clicked before the answer comes back
+            self.naming[keyOfSquare(square)] = true
+            local w, h = 280, 180
+            local modal = ISTextBox:new((getCore():getScreenWidth() - w) / 2, (getCore():getScreenHeight() - h) / 2,
+                w, h, getText("IGUI_WaterPipesSignalNameValve"), "", nil, onNamed, self.player, self, square)
             modal:initialise()
             modal:addToUIManager()
         end
@@ -168,11 +213,15 @@ end
 
 function methods:deactivate()
     self.valves = {}
+    self.pass = nil
     if active[self.player] == self then
         active[self.player] = nil
     end
-    if self.window then
-        self.window.selecting = false
+    -- only the window's own cursor speaks for it: a replaced one must not undo the new one's state
+    local win = self.window
+    if win and win.cursor == self then
+        win.selecting = false
+        win.cursor = nil
     end
 end
 
@@ -181,21 +230,20 @@ local function onTick()
         if getCell():getDrag(playerNum) ~= cursor then
             cursor:deactivate()
         else
-            cursor.ticks = cursor.ticks + 1
-            if cursor.ticks % SCAN_EVERY_TICKS == 0 then
-                cursor:scan()
-            end
+            cursor:stepScan()
         end
     end
 end
 
 function Cursor.start(playerObj, window)
+    Cursor.stop(playerObj)
     local cursor = newCursor(playerObj, window)
     if not cursor then
         return
     end
     active[cursor.player] = cursor
     window.selecting = true
+    window.cursor = cursor
     getCell():setDrag(cursor, cursor.player)
     cursor:scan()
 end
@@ -212,7 +260,7 @@ end
 -- The list changed (a link made or undone): recolour now rather than at the next scan.
 function Cursor.refresh()
     for _, cursor in pairs(active) do
-        cursor:scan()
+        cursor:reclassify()
     end
 end
 

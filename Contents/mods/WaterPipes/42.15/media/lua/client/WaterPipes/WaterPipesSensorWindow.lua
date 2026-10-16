@@ -40,11 +40,13 @@ function WaterPipesSensorWindow:resolveSensor()
     return square and Signals.findSensorOnSquare(square) or nil
 end
 
-function WaterPipesSensorWindow.openFor(sensor)
+-- `playerObj`: who opened it; every request and the reach check go as that player (split screen).
+function WaterPipesSensorWindow.openFor(sensor, playerObj)
     local square = sensor and sensor.getSquare and sensor:getSquare() or nil
     if not square then
         return nil
     end
+    playerObj = playerObj or getPlayer()
     local x, y, z = square:getX(), square:getY(), square:getZ()
     local key = Signals.key(x, y, z)
     local existing = WaterPipesSensorWindow.instances[key]
@@ -57,7 +59,7 @@ function WaterPipesSensorWindow.openFor(sensor)
     end
     local w, h = 380, 470
     local win = WaterPipesSensorWindow:new((getCore():getScreenWidth() - w) / 2,
-        (getCore():getScreenHeight() - h) / 2, w, h, x, y, z)
+        (getCore():getScreenHeight() - h) / 2, w, h, x, y, z, playerObj)
     win:initialise()
     win:addToUIManager()
     WaterPipesSensorWindow.instances[key] = win
@@ -65,11 +67,13 @@ function WaterPipesSensorWindow.openFor(sensor)
     return win
 end
 
-function WaterPipesSensorWindow:new(x, y, width, height, px, py, pz)
+function WaterPipesSensorWindow:new(x, y, width, height, px, py, pz, playerObj)
     local o = ISCollapsableWindow:new(x, y, width, height)
     setmetatable(o, self)
     self.__index = self
     o.px, o.py, o.pz = px, py, pz
+    o.playerObj = playerObj or getPlayer()
+    o.loaded = false            -- no snapshot yet: the list is not known
     o.title = getText("IGUI_WaterPipesSensorTitle")
     o.resizable = false
     o:setWantKeyEvents(true)
@@ -116,6 +120,7 @@ function WaterPipesSensorWindow:createChildren()
     self.invertBox:addOption(getText("IGUI_WaterPipesSensorInvert"))
     self.invertBox:setSelected(1, invert)
     self:addChild(self.invertBox)
+    self.shown = { name = self.nameEntry:getText(), min = lo, max = hi, invert = invert == true }
     y = y + ROW + PAD
 
     local third = (inner - PAD * 2) / 3
@@ -155,7 +160,29 @@ function WaterPipesSensorWindow:createChildren()
 end
 
 function WaterPipesSensorWindow:requestSnapshot()
-    Signals.request(getPlayer(), "snapshot", { x = self.px, y = self.py, z = self.pz })
+    Signals.request(self.playerObj, "snapshot", { x = self.px, y = self.py, z = self.pz })
+end
+
+-- Has the player changed a field since the window last showed the sensor's settings?
+function WaterPipesSensorWindow:isEdited()
+    local shown = self.shown
+    return self.nameEntry:getText() ~= shown.name or self.min ~= shown.min or self.max ~= shown.max
+        or self.invertBox:isSelected(1) ~= shown.invert
+end
+
+-- The sensor's settings into the fields: another player's change, or what the server kept of ours.
+function WaterPipesSensorWindow:showSettings(snapshot)
+    local lo, hi = tonumber(snapshot.min), tonumber(snapshot.max)
+    if not lo or not hi then
+        return
+    end
+    local name = snapshot.name or ""
+    self.nameEntry:setText(name)
+    self.minSlider:setCurrentValue(lo, true)
+    self.maxSlider:setCurrentValue(hi, true)
+    self.min, self.max = lo, hi
+    self.invertBox:setSelected(1, snapshot.invert == true)
+    self.shown = { name = name, min = lo, max = hi, invert = snapshot.invert == true }
 end
 
 function WaterPipesSensorWindow:onMinChange(value)
@@ -167,7 +194,9 @@ function WaterPipesSensorWindow:onMaxChange(value)
 end
 
 function WaterPipesSensorWindow:onApply()
-    Signals.request(getPlayer(), "configure", {
+    -- the answer shows what the server kept (it swaps a minimum above the maximum)
+    self.applying = true
+    Signals.request(self.playerObj, "configure", {
         x = self.px, y = self.py, z = self.pz,
         name = self.nameEntry:getText(),
         min = self.min, max = self.max,
@@ -195,7 +224,7 @@ function WaterPipesSensorWindow:onBattery()
     if not sensor then
         return
     end
-    local playerObj = getPlayer()
+    local playerObj = self.playerObj
     if Signals.batteryCharge(sensor) then
         Signals.request(playerObj, "removeBattery", { x = self.px, y = self.py, z = self.pz })
         return
@@ -208,8 +237,8 @@ function WaterPipesSensorWindow:onBattery()
 end
 
 function WaterPipesSensorWindow:onLink()
-    if WaterPipesSignalLinkCursor then
-        WaterPipesSignalLinkCursor.start(getPlayer(), self)
+    if WaterPipesSignalLinkCursor and not self.selecting then
+        WaterPipesSignalLinkCursor.start(self.playerObj, self)
     end
 end
 
@@ -219,7 +248,7 @@ function WaterPipesSensorWindow:onUnlink()
     if not link then
         return
     end
-    Signals.request(getPlayer(), "unlink",
+    Signals.request(self.playerObj, "unlink",
         { x = self.px, y = self.py, z = self.pz, vx = link.x, vy = link.y, vz = link.z })
 end
 
@@ -238,6 +267,11 @@ function WaterPipesSensorWindow:isLinked(x, y, z)
 end
 
 function WaterPipesSensorWindow:setSnapshot(snapshot)
+    self.loaded = true
+    if self.applying or not self:isEdited() then
+        self:showSettings(snapshot)
+    end
+    self.applying = false
     self.links = snapshot.links or {}
     local selected = self.list.selected
     self.list:clear()
@@ -274,6 +308,26 @@ function WaterPipesSensorWindow.onSensorChanged(args)
     if win then
         win:requestSnapshot()
     end
+end
+
+-- The server will not let this player work the sensor (gone, out of reach, someone else's safehouse).
+function WaterPipesSensorWindow.onRefused(args)
+    local win = args and args.sensor and WaterPipesSensorWindow.instances[Signals.key(args.x, args.y, args.z)]
+    if win then
+        win:close()
+    end
+end
+
+-- Whether the player carries a battery, looked up twice a second rather than every frame.
+local BATTERY_CHECK_MS = 500
+
+function WaterPipesSensorWindow:carriesBattery()
+    local now = getTimestampMs()
+    if not self.batteryCheckedAt or now - self.batteryCheckedAt > BATTERY_CHECK_MS then
+        self.batteryCheckedAt = now
+        self.hasBattery = bestBattery(self.playerObj) ~= nil
+    end
+    return self.hasBattery
 end
 
 local REASONS = { atMin = true, atMax = true, towardMax = true, towardMin = true, noEdge = true, noCrop = true,
@@ -342,21 +396,22 @@ function WaterPipesSensorWindow:prerender()
 
     self.batteryButton:setTitle(getText(charge and "IGUI_WaterPipesSensorRemoveBattery"
         or "IGUI_WaterPipesSensorInsertBattery"))
-    self.batteryButton:setEnable(charge ~= nil or bestBattery(getPlayer()) ~= nil)
+    self.batteryButton:setEnable(charge ~= nil or self:carriesBattery())
 
     local header = getText("IGUI_WaterPipesSensorLinked")
     if self.selecting then
         header = getText("IGUI_WaterPipesSensorSelecting")
-    elseif #self.links == 0 then
+    elseif self.loaded and #self.links == 0 then
         header = getText("IGUI_WaterPipesSensorNoLinks")
     end
+    self.linkButton:setEnable(not self.selecting)
     self:drawText(header, PAD, self.listY, COL_LABEL.r, COL_LABEL.g, COL_LABEL.b, 1, UIFont.Small)
     self.unlinkButton:setEnable(self.list.items[self.list.selected] ~= nil)
 end
 
 function WaterPipesSensorWindow:update()
     ISCollapsableWindow.update(self)
-    local player = getPlayer()
+    local player = self.playerObj
     if not player or not self:resolveSensor() then
         self:close()
         return
@@ -370,8 +425,8 @@ end
 
 function WaterPipesSensorWindow:close()
     WaterPipesSensorWindow.instances[Signals.key(self.px, self.py, self.pz)] = nil
-    if self.selecting and WaterPipesSignalLinkCursor then
-        WaterPipesSignalLinkCursor.stop(getPlayer())
+    if self.cursor and WaterPipesSignalLinkCursor then
+        WaterPipesSignalLinkCursor.stop(self.playerObj)
     end
     self:setVisible(false)
     self:removeFromUIManager()
