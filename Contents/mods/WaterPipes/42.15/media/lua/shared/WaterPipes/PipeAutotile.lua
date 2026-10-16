@@ -189,8 +189,13 @@ local function setOverlayIfChanged(worldObject, sprite)
     sprite = sprite or Constants.PIPE_HIDDEN_SPRITE
     local current = worldObject.getOverlaySprite and worldObject:getOverlaySprite() or nil
     local currentName = current and current.getName and current:getName() or nil
-    -- the watering variant of the same head belongs to the Viewpoint spray, not to us
-    if currentName == sprite or currentName == Constants.SPRINKLER_SPRAY_SPRITES[sprite] then
+    if currentName == sprite then
+        return
+    end
+    -- the watering variant of the same head belongs to the Viewpoint spray while its 3D view is on
+    local VP = WaterPipes.Viewpoint
+    if currentName ~= nil and currentName == Constants.SPRINKLER_SPRAY_SPRITES[sprite]
+        and VP and VP.is3D and VP.is3D() then
         return
     end
     -- false: never transmitted, like the shape; the one-argument form would send it to everyone
