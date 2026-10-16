@@ -1,0 +1,62 @@
+/* Animated sprinkler spray for Project Viewpoint's 3D view (WaterPipesViewpoint.lua). A skinned mesh whose
+   bones carry the droplets along their arcs; built by tools/blender/spray_rig.py. Only ever placed on a
+   client-only object while that view is on. Four spriteModels: the same clip turned a quarter each, so
+   neighbouring sprinklers are not in step (each gets its own animation time). */
+module WaterPipes
+{
+    animationsMesh SprinklerSpray
+    {
+        meshFile = WaterPipes/SprinklerSpray,
+        keepMeshAnimations = true,
+    }
+
+    model SprinklerSpray
+    {
+        mesh = WaterPipes/SprinklerSpray,
+        animationsMesh = SprinklerSpray,
+        texture = WaterPipes/SprinklerSpray,
+        static = false,
+        scale = 1.0,
+        undoCoreScale = true,
+    }
+
+    spriteModel SprinklerSpray0
+    {
+        modelScript = WaterPipes.SprinklerSpray,
+        translate = 0.0 0.0 0.0,
+        rotate = 0.0 0.0 0.0,
+        scale = 1.0,
+        animation = Spray,
+        animationTime = 0.0,
+    }
+
+    spriteModel SprinklerSpray1
+    {
+        modelScript = WaterPipes.SprinklerSpray,
+        translate = 0.0 0.0 0.0,
+        rotate = 0.0 90.0 0.0,
+        scale = 1.0,
+        animation = Spray,
+        animationTime = 0.25,
+    }
+
+    spriteModel SprinklerSpray2
+    {
+        modelScript = WaterPipes.SprinklerSpray,
+        translate = 0.0 0.0 0.0,
+        rotate = 0.0 180.0 0.0,
+        scale = 1.0,
+        animation = Spray,
+        animationTime = 0.5,
+    }
+
+    spriteModel SprinklerSpray3
+    {
+        modelScript = WaterPipes.SprinklerSpray,
+        translate = 0.0 0.0 0.0,
+        rotate = 0.0 270.0 0.0,
+        scale = 1.0,
+        animation = Spray,
+        animationTime = 0.75,
+    }
+}

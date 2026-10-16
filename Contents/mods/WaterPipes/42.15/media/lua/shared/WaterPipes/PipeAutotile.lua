@@ -168,7 +168,10 @@ local function setSpriteIfChanged(worldObject, sprite)
     if not sprite or spriteName(worldObject) == sprite then
         return
     end
-    pcall(worldObject.setSprite, worldObject, sprite)
+    -- setSprite(String) builds an unnamed sprite without tile properties; the shared one keeps both
+    -- (name lookups: dismantle cursor, Viewpoint model packs).
+    local shared = getSprite and getSprite(sprite) or nil
+    pcall(worldObject.setSprite, worldObject, shared or sprite)
     local square = worldObject.getSquare and worldObject:getSquare() or nil
     if square and square.RecalcProperties then
         pcall(square.RecalcProperties, square)
@@ -186,10 +189,12 @@ local function setOverlayIfChanged(worldObject, sprite)
     sprite = sprite or Constants.PIPE_HIDDEN_SPRITE
     local current = worldObject.getOverlaySprite and worldObject:getOverlaySprite() or nil
     local currentName = current and current.getName and current:getName() or nil
-    if currentName == sprite then
+    -- the watering variant of the same head belongs to the Viewpoint spray, not to us
+    if currentName == sprite or currentName == Constants.SPRINKLER_SPRAY_SPRITES[sprite] then
         return
     end
-    pcall(worldObject.setOverlaySprite, worldObject, sprite)
+    -- false: never transmitted, like the shape; the one-argument form would send it to everyone
+    pcall(worldObject.setOverlaySprite, worldObject, sprite, false)
 end
 
 -- The fixed sprite a wall riser should show given its edge (N/W).

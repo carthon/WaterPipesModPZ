@@ -548,6 +548,12 @@ Constants.DRIP_REPAIR_TIME = 80
 Constants.SPRINKLER_MODDATA_KEY = "waterpipesSprinkler"
 Constants.SPRINKLER_SPRITE_EW = "waterpipes_01_42"   -- upright elbow: reads as a spray head
 Constants.SPRINKLER_SPRITE_NS = "waterpipes_01_43"
+-- The same heads while watering: identical art, but Project Viewpoint's model pack draws them with the
+-- spray. Swapped in client-side only, while its 3D view is on (WaterPipesViewpoint).
+Constants.SPRINKLER_SPRAY_SPRITES = {
+    [Constants.SPRINKLER_SPRITE_EW] = "waterpipes_01_105",
+    [Constants.SPRINKLER_SPRITE_NS] = "waterpipes_01_106",
+}
 Constants.SPRINKLER_RADIUS = 1                     -- 1 = the 3x3 around it
 Constants.SPRINKLER_WATER_PER_HOUR = 10            -- waterLvl per in-game hour, per covered tile
 -- A sprinkler sprays the whole 3x3 whether or not there is a crop under it, so it wastes most of what it

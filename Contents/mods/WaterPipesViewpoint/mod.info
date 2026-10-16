@@ -1,0 +1,8 @@
+name=Water Pipes - Viewpoint
+id=waterpipesviewpoint
+author=Carthon
+description=[EN] Optional add-on for Water Pipes: with Project Viewpoint, its first and third person view shows the pipes, valves, sprinklers and purifier as 3D models, with an animated sprinkler spray. Enable it only if you play with Viewpoint; it changes nothing in the isometric view. [ES] Complemento opcional de Water Pipes: con Project Viewpoint, su vista en primera y tercera persona muestra las tuberias, valvulas, aspersores y el purificador como modelos 3D, con el chorro del aspersor animado. Activalo solo si juegas con Viewpoint; no cambia nada en la vista isometrica.
+poster=WaterPipesThumbnail.png
+icon=icon.png
+category=features
+require=\waterpipes,\Viewpoint
