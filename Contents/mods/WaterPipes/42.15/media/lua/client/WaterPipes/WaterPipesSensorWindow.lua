@@ -50,6 +50,11 @@ function WaterPipesSensorWindow.openFor(sensor, playerObj)
     local x, y, z = square:getX(), square:getY(), square:getZ()
     local key = Signals.key(x, y, z)
     local existing = WaterPipesSensorWindow.instances[key]
+    if existing and existing.playerObj ~= playerObj then
+        -- split screen: the other player's window on this sensor gives way to a window of their own
+        existing:close()
+        existing = nil
+    end
     if existing then
         existing:addToUIManager()
         existing:setVisible(true)

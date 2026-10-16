@@ -137,9 +137,12 @@ function methods:stepScan()
     end
 end
 
--- The links changed: recolour the valves already found.
+-- The links changed: recolour the valves already found, and those the running pass has found so far.
 function methods:reclassify()
     for _, entry in ipairs(self.valves) do
+        entry.kind = self:classify(entry.valve)
+    end
+    for _, entry in ipairs(self.pass and self.pass.valves or {}) do
         entry.kind = self:classify(entry.valve)
     end
 end

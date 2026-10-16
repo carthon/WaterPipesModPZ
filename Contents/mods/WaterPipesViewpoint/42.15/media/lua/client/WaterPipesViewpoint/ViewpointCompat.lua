@@ -44,11 +44,34 @@ end
 -- Swap a sprinkler's head between idle and watering (the still spray, when the animated one is missing).
 -- Local only, never transmitted: the watering head looks the same in iso.
 local swapped = {}                             -- object -> true while it shows the watering head
+local PRUNE_MS = 5000
+local prunedAt = 0
+
+-- A tile that unloads is saved with no event (so possibly with the watering head; the next 3D rescan or
+-- autotile in iso puts it back): its object is only let go here.
+local function pruneSwapped()
+    local now = getTimestampMs()
+    if now - prunedAt < PRUNE_MS then
+        return
+    end
+    prunedAt = now
+    local gone = nil
+    for object in pairs(swapped) do
+        if not object:getSquare() then
+            gone = gone or {}
+            gone[#gone + 1] = object
+        end
+    end
+    for _, object in ipairs(gone or {}) do
+        swapped[object] = nil
+    end
+end
 
 function VP.showSpray(object, on)
     if not registered then
         return
     end
+    pruneSwapped()
     local overlay = object and object.getOverlaySprite and object:getOverlaySprite() or nil
     local name = overlay and overlay:getName() or nil
     local wanted = name and (on and SPRAY[name] or (not on and HEAD[name])) or nil
@@ -58,7 +81,7 @@ function VP.showSpray(object, on)
     end
 end
 
--- Every watering head back to the idle one: a save must not keep the swap.
+-- Every watering head back to the idle one before a save.
 local function restoreHeads()
     for object in pairs(swapped) do
         local overlay = object.getOverlaySprite and object:getOverlaySprite() or nil
