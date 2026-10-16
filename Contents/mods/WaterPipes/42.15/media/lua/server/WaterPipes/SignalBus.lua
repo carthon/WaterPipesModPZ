@@ -93,14 +93,20 @@ local function stampValve(valve, receiver)
     transmit(valve)
 end
 
--- Valves decided while their tile was away (`pending`): the registry already splits the network there, and
--- the valve itself is turned the moment its tile loads. Counted lazily; nil = count again.
+-- Valves decided while their tile was away: a linked one (`pending`) or one released then (`stale` with its
+-- switch). The registry already splits the network there, and the valve itself is turned the moment its
+-- tile loads. Counted lazily; nil = count again.
 local pendingCount = nil
 
 local function countPending(registry)
     local n = 0
     for _, receiver in pairs(registry.receivers) do
         if receiver.pending then
+            n = n + 1
+        end
+    end
+    for key, entry in pairs(registry.stale) do
+        if entry.on ~= nil and not registry.receivers[key] then
             n = n + 1
         end
     end
@@ -120,9 +126,17 @@ function Bus.pendingValveOpen(x, y, z)
             return nil
         end
     end
-    local receiver = registry.receivers[Signals.key(x, y, z)]
-    if receiver and receiver.pending then
-        return receiver.applied
+    local key = Signals.key(x, y, z)
+    local receiver = registry.receivers[key]
+    if receiver then
+        if receiver.pending then
+            return receiver.applied
+        end
+        return nil
+    end
+    local entry = registry.stale[key]
+    if entry and entry.on ~= nil then
+        return entry.on
     end
     return nil
 end
@@ -343,28 +357,36 @@ Bus.retryUnplaced = retryUnplaced
 -- A loaded tile whose valve never answers is given up after STALE_STEPS steps.
 local STALE_STEPS = 6
 
+-- One released valve whose tile is loaded: its marks cleared and its switch applied. True when settled.
+local function settleStale(registry, key, entry, square)
+    local valve = Valve.findOnSquare(square)
+    if valve and not registry.receivers[key] then
+        local on = entry.on
+        if on == nil then
+            on = Signals.valveSwitchOn(valve)   -- read before the marks go
+        end
+        stampValve(valve, nil)
+        Signals.ValveReceiver:new(valve):apply(on)
+    end
+    return valve ~= nil or not Signals.squareMayHoldValve(square)
+end
+
 local function clearStale(registry)
     local done = {}
     for key, entry in pairs(registry.stale) do
         local square = World.squareAt(entry.x, entry.y, entry.z)
         if square then
-            local valve = Valve.findOnSquare(square)
-            if valve and not registry.receivers[key] then
-                local on = entry.on
-                if on == nil then
-                    on = Signals.valveSwitchOn(valve)   -- read before the marks go
-                end
-                stampValve(valve, nil)
-                Signals.ValveReceiver:new(valve):apply(on)
-            end
             entry.steps = (entry.steps or 0) + 1
-            if valve or not Signals.squareMayHoldValve(square) or entry.steps > STALE_STEPS then
+            if settleStale(registry, key, entry, square) or entry.steps > STALE_STEPS then
                 done[#done + 1] = key
             end
         end
     end
     for _, key in ipairs(done) do
         registry.stale[key] = nil
+    end
+    if #done > 0 then
+        pendingCount = nil
     end
 end
 
@@ -436,10 +458,17 @@ local function applyLoadedPending()
     local list = loadedPending
     loadedPending = {}
     local registry = Signals.registry()
-    for _, receiverKey in ipairs(list) do
-        local receiver = registry.receivers[receiverKey]
+    for _, key in ipairs(list) do
+        local receiver = registry.receivers[key]
+        local entry = registry.stale[key]
         if receiver and receiver.pending then
             Bus.applyReceiver(registry, receiver)
+        elseif not receiver and entry then
+            local square = World.squareAt(entry.x, entry.y, entry.z)
+            if square and settleStale(registry, key, entry, square) then
+                registry.stale[key] = nil
+                pendingCount = nil
+            end
         end
     end
 end
@@ -680,6 +709,7 @@ function handlers.link(player, args)
         }
         registry.receivers[receiverKey] = receiver
         registry.stale[receiverKey] = nil
+        pendingCount = nil
     end
     receiver.name = Signals.cleanName(args.name) or receiver.name
     receiver.sensors[sensorKey] = true
