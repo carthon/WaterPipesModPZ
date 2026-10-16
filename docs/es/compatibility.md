@@ -19,6 +19,7 @@ El mismo objeto de Workshop trae un segundo mod opcional, **Water Pipes - Viewpo
 
 - Activa `waterpipes`, `Viewpoint` y `waterpipesviewpoint`. Sin Project Viewpoint, el complemento no hace nada.
 - La vista isométrica de Viewpoint sigue usando los sprites normales.
+- La lluvia del aspersor está animada en partidas de un jugador; en multijugador el cabezal muestra una lluvia fija.
 - Project Viewpoint carga todos los paquetes de modelos en una misma reserva de memoria. Con su perfil de memoria más bajo puede que algunos modelos no quepan y se queden con el sprite plano; si faltan piezas, elige un perfil más alto.
 - Con **Viewpoint Placement Fix**, la vista previa al construir también muestra el modelo 3D.
 
