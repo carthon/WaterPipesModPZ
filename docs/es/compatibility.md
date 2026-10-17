@@ -22,6 +22,7 @@ El mismo objeto de Workshop trae un segundo mod opcional, **Water Pipes - Viewpo
 - La lluvia del aspersor está animada en partidas de un jugador; en multijugador el cabezal muestra una lluvia fija.
 - Project Viewpoint carga todos los paquetes de modelos en una misma reserva de memoria. Con su perfil de memoria más bajo puede que algunos modelos no quepan y se queden con el sprite plano; si faltan piezas, elige un perfil más alto.
 - Con **Viewpoint Placement Fix**, la vista previa al construir también muestra el modelo 3D.
+- En las vistas en primera y tercera persona, [Mostrar red de tuberías](glossary.md#mostrar-red) no resalta nada: Project Viewpoint no dibuja ahí los resaltados de objetos del juego. Cambia a la vista isométrica de Viewpoint para ver la red.
 
 ## Servidores dedicados: lista de comprobación
 

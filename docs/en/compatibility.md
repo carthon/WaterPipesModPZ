@@ -22,6 +22,7 @@ The same Workshop item includes a second, optional mod, **Water Pipes - Viewpoin
 - The spray is animated in single player; in multiplayer the sprinkler head shows a still spray.
 - Project Viewpoint loads every model pack into one shared memory budget. On its lowest memory profile some models may not fit and keep their flat sprite; choose a higher profile if pieces are missing.
 - With **Viewpoint Placement Fix**, building previews also show the 3D model.
+- In the first- and third-person views, [Show pipe network](glossary.md#show-pipe-network) does not outline anything: Project Viewpoint does not draw the game's object highlights there. Switch to Viewpoint's isometric view to see the network.
 
 ## Dedicated-server checklist
 
