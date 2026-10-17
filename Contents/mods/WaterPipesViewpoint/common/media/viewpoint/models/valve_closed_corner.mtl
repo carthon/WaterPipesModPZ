@@ -1,0 +1,4 @@
+newmtl valve_closed_corner
+Kd 1 1 1
+d 1
+map_Kd valve_closed_corner.png

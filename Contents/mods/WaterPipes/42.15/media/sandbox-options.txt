@@ -247,3 +247,23 @@ option WaterPipes.BuildingPlumbCostPerFixture
     page = WaterPipes,
     translation = WaterPipes_BuildingPlumbCostPerFixture,
 }
+
+option WaterPipes.SensorBatteryDays
+{
+    type = integer,
+    min = 1,
+    max = 365,
+    default = 30,
+    page = WaterPipes,
+    translation = WaterPipes_SensorBatteryDays,
+}
+
+option WaterPipes.SensorLinkRange
+{
+    type = integer,
+    min = 0,
+    max = 1000,
+    default = 0,
+    page = WaterPipes,
+    translation = WaterPipes_SensorLinkRange,
+}

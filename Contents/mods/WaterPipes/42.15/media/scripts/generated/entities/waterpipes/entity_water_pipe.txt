@@ -11,7 +11,7 @@ module WaterPipes
             {
                 layer
                 {
-                    row = waterpipes_01_18,
+                    row = waterpipes_01_26,
                 }
             }
         }
@@ -409,6 +409,64 @@ module WaterPipes
                 item 1 [Base.PipeWrench] mode:keep flags[Prop1],
                 item 1 [Base.MetalPipe],
                 item 1 tags[base:barstockhalf],
+            }
+        }
+    }
+
+    /* Humidity sensor: a stake pushed into soil that can be planted. Four faces, one per corner it can stand
+       in (W 92, N 96, E 100, S 104: build ghosts, copies of the unlit cell before each). Once placed,
+       Signals swaps in that face's LED state (Signals.SENSOR_FACES). */
+    entity WaterPipeHumiditySensor
+    {
+        component SpriteConfig
+        {
+            isThumpable = false,
+            OnCreate = WaterPipesSignalsBuild.sensorOnCreate,
+            OnIsValid = WaterPipesSignalsBuild.sensorOnIsValid,
+            face W
+            {
+                layer
+                {
+                    row = waterpipes_01_92,
+                }
+            }
+            face N
+            {
+                layer
+                {
+                    row = waterpipes_01_96,
+                }
+            }
+            face E
+            {
+                layer
+                {
+                    row = waterpipes_01_100,
+                }
+            }
+            face S
+            {
+                layer
+                {
+                    row = waterpipes_01_104,
+                }
+            }
+        }
+        component CraftRecipe
+        {
+            timedAction = BuildLowNoTool,
+            time = 120,
+            SkillRequired = Electricity:3,
+            xpAward = Electricity:20,
+            category = Piping,
+            Tooltip = Tooltip_craft_WaterPipeHumiditySensorDesc,
+            inputs
+            {
+                item 1 [Base.Screwdriver] mode:keep flags[Prop1],
+                item 1 [Base.MotionSensor],
+                item 1 [Base.Receiver],
+                item 1 [Base.ElectricWire],
+                item 2 [Base.ElectronicsScrap],
             }
         }
     }

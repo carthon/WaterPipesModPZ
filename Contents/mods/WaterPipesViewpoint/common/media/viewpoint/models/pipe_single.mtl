@@ -1,0 +1,4 @@
+newmtl pipe_single
+Kd 1 1 1
+d 1
+map_Kd pipe_single.png

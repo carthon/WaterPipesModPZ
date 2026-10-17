@@ -19,7 +19,7 @@ Right-click the router and choose **Set pressure limit**. The dialog reports inc
 
 ## Shut-off Valve
 
-A valve is built open and does not alter the network until closed. Closed, its tile stops conducting: both sides cease sharing liquid, pressure, and contamination. Use valves to isolate maintenance areas, separate water from petrol, or stop contamination before changing a layout. A valve cannot share a tile with a gauge, router, pump, drip emitter, or sprinkler.
+A valve is built open and does not alter the network until closed. Right-click it and choose **Close valve** or **Open valve**: it turns by hand, no tool needed. A valve linked to a [Soil Moisture Sensor](irrigation.md#moisture-sensor) opens and closes by itself; closing it by hand keeps it shut whatever the sensor says. Closed, its tile stops conducting: both sides cease sharing liquid, pressure, and contamination. Use valves to isolate maintenance areas, separate water from petrol, or stop contamination before changing a layout. A valve cannot share a tile with a gauge, router, pump, drip emitter, or sprinkler.
 
 <div class="wp-gallery wp-gallery--2" markdown>
 ![Closed Shut-off Valve](../assets/images/12a-valve-closed-cropped.png){ .wp-screenshot loading=lazy }

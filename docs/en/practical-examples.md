@@ -1,6 +1,6 @@
 # Practical Water Pipes installations
 
-These Project Zomboid plumbing examples use the v0.10.x mechanics. Recipe details are in the [pipes and components reference](component-reference.md); use [Troubleshooting](troubleshooting.md) if a final check fails.
+These Project Zomboid plumbing examples use the v0.11.x mechanics. Recipe details are in the [pipes and components reference](component-reference.md); use [Troubleshooting](troubleshooting.md) if a final check fails.
 
 ## First water network
 

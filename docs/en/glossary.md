@@ -64,7 +64,7 @@ A pipe running up or down a north or west wall to join the pipes of two floors.
 A pipe that works like a normal one but becomes invisible once built, as if it were embedded in the floor or wall. **Show pipe network** reveals it.
 
 ### Component { #component }
-Anything the mod builds except pipes: Water Pump, Pressure Gauge, Fluid Router, Shut-off Valve, purifier, Drip Emitter and Sprinkler. See the [reference](component-reference.md).
+Anything the mod builds except pipes: Water Pump, Pressure Gauge, Fluid Router, Shut-off Valve, purifier, Drip Emitter, Sprinkler and Soil Moisture Sensor. See the [reference](component-reference.md).
 
 ### Fixture { #fixture }
 A world object that uses water: sink, washbasin, shower, bathtub, toilet or washing machine. The mod does not build fixtures; they already exist in houses or you build them with the base game. The mod connects them to a network with the **Plumb** action. Some windows call them "Water Fixture".
@@ -109,7 +109,7 @@ How far below itself a pump can draw water from: 7 m (about two floors) by defau
 A component that lets water through in one direction only, from its green side (IN) to its red side (OUT), and can also cap the pressure going out. It has nothing to do with an internet router: in real plumbing it would be a check valve with a pressure reducer.
 
 ### Shut-off Valve { #shut-off-valve }
-A component that, when closed, splits a network into two independent parts. Open, it changes nothing.
+A component that, when closed, splits a network into two independent parts. Open, it changes nothing. It turns by hand, or by itself when linked to a [Soil Moisture Sensor](#moisture-sensor).
 
 ### Pressure Gauge { #pressure-gauge }
 A component that shows the pressure on its tile.
@@ -119,6 +119,9 @@ An electric component that turns tainted water into clean water. It sits on a ro
 
 ### Drip Emitter and Sprinkler { #drip-emitter }
 Irrigation components. The drip emitter waters the crop on its own tile with little pressure. The sprinkler waters a 3×3 square but needs a lot of pressure.
+
+### Soil Moisture Sensor { #moisture-sensor }
+A component pushed into the soil next to a crop. It measures the crop's water and opens or closes the valves linked to it, so watering starts and stops by itself. See [Irrigation](irrigation.md#moisture-sensor).
 
 ### Unit { #unit }
 Some mod windows (purifier, router) show amounts in "u" or "units". One unit is one litre.

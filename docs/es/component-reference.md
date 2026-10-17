@@ -1,6 +1,6 @@
 # Catálogo de tuberías y componentes de Water Pipes
 
-Aquí tienes todo lo que se construye desde el [menú de Construcción](glossary.md#menu-de-construccion) → **Fontanería** en Water Pipes v0.10.x. Primero las tuberías y después los [componentes](glossary.md#componente), que son todo lo demás que construye el mod. En todas las recetas que la piden, la Llave para tubos no se gasta.
+Aquí tienes todo lo que se construye desde el [menú de Construcción](glossary.md#menu-de-construccion) → **Fontanería** en Water Pipes v0.11.x. Primero las tuberías y después los [componentes](glossary.md#componente), que son todo lo demás que construye el mod. En todas las recetas que la piden, la Llave para tubos no se gasta.
 
 Los nombres de habilidades y objetos son los que muestra el juego en español. Al lado de cada pieza aparece su nombre en inglés, útil si juegas con el juego en inglés o buscas ayuda en foros.
 
@@ -13,7 +13,7 @@ Los nombres de habilidades y objetos son los que muestra el juego en español. A
 | **Tubería de fluidos oculta** | Concealed Fluid Pipe | 1 tubo o segmento y 1 cubo lleno de cemento de arcilla o de hormigón; sin habilidad | En el suelo, pero invisible al terminarla; se ve con **Mostrar red de tuberías** |
 | **Tubería vertical de fluidos oculta** | Concealed Vertical Fluid Pipe | Igual que la oculta de suelo; sin habilidad | Tubería vertical invisible en una pared norte u oeste |
 
-Cada tubería oculta gasta un cubo entero; los cubos válidos están en [Redes de tuberías](pipe-networks.md#recetas-de-tuberias). Al desmontar una tubería metálica construida por ti hay un 90 % de probabilidades de recuperar el Tubo metálico. Las de arcilla, y las tuberías ocultas que aparecen al revisar un edificio con **Fontanear el edificio**, no devuelven nada.
+Cada tubería oculta gasta un cubo entero; los cubos válidos están en [Redes de tuberías](pipe-networks.md#recetas-de-tuberias). Al desmontar una tubería metálica construida por ti hay un 90 % de probabilidades de recuperar el Tubo metálico. Las de arcilla, y las tuberías ocultas que aparecen al revisar un edificio con **Conectar la fontanería del edificio**, no devuelven nada.
 
 <!-- SCREENSHOT: 03-pipe-shapes.png — Formas de la Tubería de fluidos y un ejemplo visible y otro oculto. -->
 <!-- SCREENSHOT: 04-vertical-pipe-floors.png — Tubería vertical de fluidos uniendo dos plantas. -->
@@ -51,7 +51,7 @@ Cada tubería oculta gasta un cubo entero; los cubos válidos están en [Redes d
 
 ### Válvula de corte — Shut-off Valve
 
-- **Para qué sirve:** abierta no cambia nada; cerrada divide la red en dos y no deja pasar ni líquido, ni presión, ni contaminación en ningún sentido.
+- **Para qué sirve:** abierta no cambia nada; cerrada divide la red en dos y no deja pasar ni líquido, ni presión, ni contaminación en ningún sentido. Se gira a mano, o sola si está vinculada a un Sensor de humedad.
 - **Receta:** 1 Tubo metálico y 1 Barra de hierro - Media; sin habilidad.
 - **Colocación:** sobre una tubería de suelo normal ya construida. No puede compartir casilla con un enrutador, una bomba, un gotero, un aspersor ni un manómetro.
 - **Más información:** [Enrutadores y válvulas](routers-and-valves.md#valvula-de-corte).
@@ -65,7 +65,7 @@ Cada tubería oculta gasta un cubo entero; los cubos válidos están en [Redes d
 - **Para qué sirve:** convierte el agua contaminada que le entra en agua limpia.
 - **Habilidades:** Electrónica 4 y Metalistería 3.
 - **Receta:** 3 usos de Soplete, 2 usos de Varillas para soldar, 3 Tubos metálicos, 2 Chapas metálicas, 1 Chatarra electrónica, 1 Alambre, 1 Mechero - Batería improvisada, 1 Carbón vegetal y 2 Retales de tela.
-- **Colocación:** ocupa 2×2 casillas; su esquina superior (la del fondo) va sobre un Enrutador de fluidos bien orientado. Deja libre el suelo de la planta de arriba sobre esa esquina.
+- **Colocación:** ocupa 2×2 casillas; su esquina superior (la del fondo) va sobre un Enrutador de fluidos bien orientado. Deja libre el suelo de la planta de arriba sobre esa esquina; el motor del juego exige además las cuatro casillas despejadas. Consulta las [condiciones para colocarlo](purification.md#condiciones-para-colocarlo).
 - **Funcionamiento:** con corriente, filtra hasta 10 L/min; tiene un depósito interno de entrada y otro de salida de 50 L cada uno. Cuando el filtro se gasta, se repara con 1 Carbón vegetal y 2 Retales de tela.
 - **Más información:** [Purificación](purification.md).
 
@@ -90,6 +90,14 @@ Cada tubería oculta gasta un cubo entero; los cubos válidos están en [Redes d
 
 <!-- SCREENSHOT: 17-sprinkler-coverage.png — Aspersor regando toda su zona de 3×3. -->
 
+### Sensor de humedad — Soil Moisture Sensor
+
+- **Para qué sirve:** mide la humedad del cultivo de su casilla y abre las Válvulas de corte vinculadas cuando el cultivo se seca hasta un mínimo; las vuelve a cerrar al llegar a un máximo (80 % y 95 % por defecto).
+- **Receta:** Electrónica 3, Destornillador (no se gasta), 1 Sensor de movimiento, 1 Receptor, 1 Cable Eléctrico y 2 Chatarra electrónica.
+- **Colocación:** en tierra cultivable o en una casilla con surco o cultivo, uno por casilla; gíralo con **R** para elegir su esquina. Comparte casilla con cualquier otra pieza.
+- **Energía:** la electricidad de la casilla o una Pila (30 días por defecto).
+- **Más información:** [Sensor de humedad](irrigation.md#sensor-de-humedad).
+
 ## Receta relacionada
 
-**Forjar una tubería de metal** (en inglés, *Forge a Metal Pipe*) se hace en una Forja Primitiva y produce un Tubo metálico. Gasta 1 Carbón vegetal, 1 Barra de hierro - Media y 1 Barra de hierro - Cuarto, y necesita un martillo, unas tenazas o unos alicates de metalurgia y un punzón para metal, que no se gastan. Requiere Herrería 0 y da 10 XP de Herrería.
+**Forjar un Tubo metálico** (en inglés, *Forge an Iron Pipe*) se hace en una Forja Primitiva y produce un Tubo metálico. Gasta 1 Carbón vegetal, 1 Barra de hierro - Media y 1 Barra de hierro - Cuarto, y necesita un martillo, unas tenazas o unos alicates de metalurgia y un punzón para metal, que no se gastan. Requiere Herrería 0 y da 10 XP de Herrería.

@@ -14,6 +14,7 @@ require "WaterPipes/Profiler"
 require "WaterPipes/Hydrant"
 require "WaterPipes/Irrigation"
 require "WaterPipes/WaterPipesTileRegistry"
+require "WaterPipes/WaterPipesViewpoint"
 
 WaterPipes = WaterPipes or {}
 WaterPipes.SprayFX = WaterPipes.SprayFX or {}
@@ -21,6 +22,7 @@ WaterPipes.SprayFX = WaterPipes.SprayFX or {}
 local Hydrant = WaterPipes.Hydrant
 local Irrigation = WaterPipes.Irrigation
 local Registry = WaterPipes.TileRegistry
+local Viewpoint3D = WaterPipes.Viewpoint
 local FX = WaterPipes.SprayFX
 
 -- ===== Tunables =====
@@ -46,13 +48,13 @@ local MAX_ALPHA = 0.92
 -- Per-kind art anchor. origin (ox, oy) is the emitter/ground point INSIDE the frame and matches the
 -- generator's own origin, so it is structural -- leave it alone. headLift is the one to nudge: it raises
 -- the sprite so the spray leaves the NOZZLE instead of the floor, and is measured off the atlas (ground
--- anchor at y=224 in a 128x256 cell; heads top out at y=189 sprinkler, y=187 drip).
+-- anchor at y=224 in a 128x256 cell; heads top out at y=194 sprinkler, y=195 drip).
 -- cell is the frame's pixel size, matching tools/fx/gen_spray_fx.py. The sprinkler and the hydrant both
 -- blanket a 3x3 and use the bigger canvas; only the drip stays on its own tile.
 local KIND = {
-    sprinkler = { folder = "sprinkler", cell = 224, ox = 112, oy = 168, headLift = 35 },
+    sprinkler = { folder = "sprinkler", cell = 224, ox = 112, oy = 168, headLift = 30 },
     hydrant   = { folder = "hydrant",   cell = 224, ox = 112, oy = 168, headLift = 12 },
-    drip      = { folder = "drip",      cell = 128, ox = 64,  oy = 70,  headLift = 37 },
+    drip      = { folder = "drip",      cell = 128, ox = 64,  oy = 70,  headLift = 29 },
 }
 
 -- ===== Options =====
@@ -98,6 +100,12 @@ local function rescanInner()
         FX.active = {}
         return
     end
+    -- Viewpoint's 3D view has no iso screen to draw on: there the model pack draws the sprinkler spray
+    FX.in3D = Viewpoint3D.is3D()
+    local modelSpray = FX.in3D and effectsEnabled()
+    -- animated spray objects when the SpriteModel resolves, else the still watering heads
+    local animated = modelSpray and Viewpoint3D.animatedSpray()
+    local watering = {}
     local px = math.floor(player:getX())
     local py = math.floor(player:getY())
     local pz = math.floor(player:getZ())
@@ -128,17 +136,33 @@ local function rescanInner()
     for _, found in ipairs(WaterPipes.Profiler.time("sprayfx: near",
         Registry.near, "emitters", px, py, pz, DRAW_RADIUS)) do
         considered = considered + 1
-        if not claimed[found.key] then
+        local sprinkler = Irrigation.isSprinkler(found.object)
+        if claimed[found.key] then
+            if sprinkler then
+                Viewpoint3D.showSpray(found.object, false)
+            end
+        else
             local status = WaterPipes.Profiler.time("sprayfx: status",
                 Registry.statusFor, found, stamp)
-            if status and status.active then
-                local kind = Irrigation.isSprinkler(found.object) and "sprinkler" or "drip"
+            local active = status and status.active or false
+            if sprinkler then
+                Viewpoint3D.showSpray(found.object, modelSpray and active and not animated)
+                local square = animated and active and found.object:getSquare() or nil
+                if square then
+                    watering[#watering + 1] = { square = square, x = found.x, y = found.y, z = found.z }
+                end
+            end
+            if active then
+                local kind = sprinkler and "sprinkler" or "drip"
                 list[#list + 1] = { x = found.x, y = found.y, z = found.z,
                                     kind = kind, phase = phaseFor(found.x, found.y) }
             end
         end
     end
 
+    if animated or Viewpoint3D.animatedSpray() then
+        Viewpoint3D.syncSprays(watering)
+    end
     FX.active = list
     -- Per-rebuild totals are meaningless across sessions without these: a farm with forty emitters in range
     -- and one with eight cost different amounts for the same code. Cost per emitter is what compares.
@@ -192,7 +216,7 @@ function FX.render()
     if not isIngameState or not isIngameState() then
         return
     end
-    if not effectsEnabled() then
+    if not effectsEnabled() or FX.in3D then
         return
     end
     local list = FX.active

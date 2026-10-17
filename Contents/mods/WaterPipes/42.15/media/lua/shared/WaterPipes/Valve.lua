@@ -235,13 +235,45 @@ function Valve.setOpen(worldObject, open)
 
     -- Closing a valve changes the SHAPE of the network, not just what a walk costs, so this is a
     -- layout change: the graph, the walks and the head field all have to be rebuilt.
-    Invalidate.layoutChanged()
+    Valve.layoutChanged()
+end
+
+-- ===== Rebuilding after a turn =====
+-- Several valves turned in one go (a sensor step) rebuild the network once, at the end of the batch.
+
+local batching = 0
+local batchDirty = false
+
+local function rebuildNetwork()
     local System = WaterPipes.System
     if System and System.rebuild then
         System.rebuild()
         if System.refreshPlumbedEndpoints then
             System.refreshPlumbedEndpoints()
         end
+    end
+end
+
+function Valve.layoutChanged()
+    Invalidate.layoutChanged()
+    if batching > 0 then
+        batchDirty = true
+        return
+    end
+    rebuildNetwork()
+end
+
+-- Runs fn(...) with rebuilds held back, then rebuilds once if any valve turned.
+function Valve.batch(fn, ...)
+    batching = batching + 1
+    local ok, err = pcall(fn, ...)
+    batching = batching - 1
+    if batching == 0 and batchDirty then
+        batchDirty = false
+        rebuildNetwork()
+    end
+    if not ok then
+        error(err, 0)
     end
 end
 
