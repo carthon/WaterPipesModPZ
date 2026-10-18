@@ -378,32 +378,7 @@ function Signals.isPlantable(square)
     return shovel ~= nil and shovel(square) == "dirt"
 end
 
--- ===== Valves as receivers =====
-
--- The valve's switch: what was last set by hand. Unlinked valves follow their state; a switch mark left
--- without links (released while unloaded) does not count.
-function Signals.valveSwitchOn(valve)
-    local modData = modDataOf(valve)
-    local linked = modData and (tonumber(modData[Signals.VALVE_LINKS_KEY]) or 0) > 0
-    local v = linked and modData[Signals.VALVE_SWITCH_KEY] or nil
-    if v == "on" then
-        return true
-    elseif v == "off" then
-        return false
-    end
-    return Valve.isOpen(valve)
-end
-
-function Signals.valveLinkCount(valve)
-    local modData = modDataOf(valve)
-    local v = modData and tonumber(modData[Signals.VALVE_LINKS_KEY])
-    return v and v > 0 and v or 0
-end
-
-function Signals.valveName(valve)
-    local modData = modDataOf(valve)
-    return modData and Signals.cleanName(modData[Signals.VALVE_NAME_KEY]) or nil
-end
+-- ===== Valve tiles =====
 
 -- A valve on a square, by modData or by its sprite (modData-missing window).
 local VALVE_SPRITE_SET = {}
@@ -450,6 +425,34 @@ if not Base then
         return o
     end
 end
+
+local unpackArgs = unpack or table.unpack
+
+-- Kinds by name, in the order they were registered. Registering a kind again replaces it. `required`
+-- names the fields a class must set, checked when it registers rather than when a player first meets it.
+local function kindRegistry(required)
+    local byKind, ordered = {}, {}
+    local function register(class)
+        assert(type(class.kind) == "string", "a signal class needs a kind")
+        for _, field in ipairs(required or {}) do
+            assert(class[field] ~= nil, "signal kind " .. class.kind .. " needs " .. field)
+        end
+        if byKind[class.kind] then
+            for i, known in ipairs(ordered) do
+                if known.kind == class.kind then
+                    ordered[i] = class
+                end
+            end
+        else
+            ordered[#ordered + 1] = class
+        end
+        byKind[class.kind] = class
+        return class
+    end
+    return byKind, ordered, register
+end
+
+-- ---- Emitters ----
 
 -- An emitter wraps one world object and turns what it measures into on/off. Subclasses implement
 -- read() and decide(); power and the battery are common to all of them.
@@ -511,8 +514,18 @@ function SignalEmitter:evaluate(dtHours)
              edge = edge }
 end
 
+Signals.DEFAULT_EMITTER = "humidity"   -- registry entries saved without a kind
+
+local emitterKinds, _, registerEmitter = kindRegistry()
+Signals.registerEmitter = registerEmitter
+
+function Signals.emitterClass(kind)
+    return emitterKinds[kind or Signals.DEFAULT_EMITTER]
+end
+
 Signals.HumiditySensor = SignalEmitter:derive("WaterPipesHumiditySensor")
 local HumiditySensor = Signals.HumiditySensor
+HumiditySensor.kind = "humidity"
 
 function HumiditySensor:read(square)
     return Signals.readCrop(square)
@@ -540,9 +553,28 @@ function HumiditySensor:decide(value)
     return active, reason, edge
 end
 
--- A receiver wraps one world object that can be switched on and off.
+registerEmitter(HumiditySensor)
+
+-- ---- Receivers ----
+
+-- A receiver wraps one world object a sensor can switch. Each kind is a subclass registered with
+-- Signals.registerReceiver, and the bus only reaches it through this interface:
+--   kind                         its name in the registry and in requests
+--   SWITCH_KEY, LINKS_KEY,       modData keys for the hand switch ("on" | "off"), how many sensors drive
+--   NAME_KEY                     it and its name
+--   MISSING_REASON               refusal reason when a link names a tile without one
+--   NAME_PROMPT                  getText key of the name box the link cursor opens
+--   :findOnSquare(square)        the object on a loaded square, or nil
+--   :mayStandOn(square)          one may be there even though its modData has not arrived
+--   :isReceiver(object)          is this world object one (removal events)
+--   :applyUnloaded(x, y, z, on)  act on it while its tile is away; false = could not, try again
+--   :batch(fn, ...)              run fn with this kind's side effects settled once at the end
+--   :onSignal(on)                the signal reached it: be on or off
+--   :isOn()                      what it is now
+--   :turnByHand(on)              a hand on it while no sensor drives it
 Signals.SignalReceiver = Base:derive("WaterPipesSignalReceiver")
 local SignalReceiver = Signals.SignalReceiver
+SignalReceiver.MISSING_REASON = "noReceiver"
 
 function SignalReceiver:new(object)
     local o = Base.new(self)
@@ -550,37 +582,197 @@ function SignalReceiver:new(object)
     return o
 end
 
-function SignalReceiver:isSwitchOn()
+function SignalReceiver:findOnSquare(square)
+    return nil
+end
+
+function SignalReceiver:mayStandOn(square)
+    return self:findOnSquare(square) ~= nil
+end
+
+function SignalReceiver:isReceiver(object)
+    return false
+end
+
+-- Nothing to do away from its tile: the bus turns it the tick after the tile loads.
+function SignalReceiver:applyUnloaded(x, y, z, on)
     return true
+end
+
+function SignalReceiver:batch(fn, ...)
+    return fn(...)
+end
+
+function SignalReceiver:onSignal(on)
 end
 
 function SignalReceiver:isOn()
     return false
 end
 
-function SignalReceiver:apply(on)
+function SignalReceiver:turnByHand(on)
+    self:onSignal(on)
 end
+
+-- How many sensors drive it, from its marks.
+function SignalReceiver:linkCount()
+    local modData = modDataOf(self.object)
+    local v = modData and tonumber(modData[self.LINKS_KEY])
+    return v and v > 0 and v or 0
+end
+
+-- The hand switch: what was last set by hand. Unlinked, it follows its own state; a switch mark left
+-- without links (released while unloaded) does not count.
+function SignalReceiver:isSwitchOn()
+    local modData = modDataOf(self.object)
+    local v = self:linkCount() > 0 and modData[self.SWITCH_KEY] or nil
+    if v == "on" then
+        return true
+    elseif v == "off" then
+        return false
+    end
+    return self:isOn()
+end
+
+function SignalReceiver:savedName()
+    local modData = modDataOf(self.object)
+    return modData and Signals.cleanName(modData[self.NAME_KEY]) or nil
+end
+
+function SignalReceiver:hasSwitchMark()
+    local modData = modDataOf(self.object)
+    return modData ~= nil and modData[self.SWITCH_KEY] ~= nil
+end
+
+-- Write what the client draws from: the switch, the name and how many sensors drive it. nil clears the
+-- link marks (the name stays). `quiet` leaves sending to whatever changes the object next.
+function SignalReceiver:mark(record, quiet)
+    local modData = modDataOf(self.object)
+    if not modData then
+        return
+    end
+    if record then
+        modData[self.SWITCH_KEY] = record.switchOn == false and "off" or "on"
+        modData[self.LINKS_KEY] = Signals.count(record.sensors)
+        modData[self.NAME_KEY] = record.name
+    else
+        modData[self.SWITCH_KEY] = nil
+        modData[self.LINKS_KEY] = nil
+    end
+    if not quiet and self.object.transmitModData then
+        self.object:transmitModData()
+    end
+end
+
+Signals.DEFAULT_RECEIVER = "valve"   -- registry entries saved without a kind
+
+local receiverKinds, receiverOrder, registerReceiver =
+    kindRegistry({ "SWITCH_KEY", "LINKS_KEY", "NAME_KEY", "NAME_PROMPT" })
+Signals.registerReceiver = registerReceiver
+
+function Signals.receiverClass(kind)
+    return receiverKinds[kind or Signals.DEFAULT_RECEIVER]
+end
+
+function Signals.receiverClasses()
+    return receiverOrder
+end
+
+-- Registry key of one receiver. The default kind keeps the bare tile key, so saved registries load as
+-- they were; any other kind on the same tile gets its own.
+function Signals.receiverKey(kind, x, y, z)
+    local key = Signals.key(x, y, z)
+    if kind == nil or kind == Signals.DEFAULT_RECEIVER then
+        return key
+    end
+    return key .. "#" .. kind
+end
+
+-- The receiver of `kind` at a tile, wrapped, or nil; with the square when it is loaded, and the class.
+function Signals.receiverAt(kind, x, y, z)
+    local class = Signals.receiverClass(kind)
+    local square = World.squareAt(x, y, z)
+    local object = class and square and class:findOnSquare(square) or nil
+    return object and class:new(object) or nil, square, class
+end
+
+-- Every receiver on a square, one per kind, wrapped.
+function Signals.receiversOnSquare(square)
+    local found = {}
+    for _, class in ipairs(receiverOrder) do
+        local object = square and class:findOnSquare(square) or nil
+        if object then
+            found[#found + 1] = class:new(object)
+        end
+    end
+    return found
+end
+
+-- The class a world object is a receiver of, or nil.
+function Signals.receiverClassOf(object)
+    for _, class in ipairs(receiverOrder) do
+        if class:isReceiver(object) then
+            return class
+        end
+    end
+    return nil
+end
+
+-- Run fn inside every kind's batch: whatever one step switches is settled together.
+function Signals.batchReceivers(fn, ...)
+    local args, n = { ... }, select("#", ...)
+    local function run(i)
+        local class = receiverOrder[i]
+        if not class then
+            return fn(unpackArgs(args, 1, n))
+        end
+        return class:batch(run, i + 1)
+    end
+    return run(1)
+end
+
+-- ===== The valve as a receiver =====
+-- The only reach into the water network.
 
 Signals.ValveReceiver = SignalReceiver:derive("WaterPipesValveReceiver")
 local ValveReceiver = Signals.ValveReceiver
+ValveReceiver.kind = "valve"
+ValveReceiver.SWITCH_KEY = Signals.VALVE_SWITCH_KEY
+ValveReceiver.LINKS_KEY = Signals.VALVE_LINKS_KEY
+ValveReceiver.NAME_KEY = Signals.VALVE_NAME_KEY
+ValveReceiver.MISSING_REASON = "noValve"
+ValveReceiver.NAME_PROMPT = "IGUI_WaterPipesSignalNameValve"
 
-function ValveReceiver:isSwitchOn()
-    return Signals.valveSwitchOn(self.object)
+function ValveReceiver:findOnSquare(square)
+    return Valve.findOnSquare(square)
+end
+
+function ValveReceiver:mayStandOn(square)
+    return Signals.squareMayHoldValve(square)
+end
+
+function ValveReceiver:isReceiver(object)
+    return Valve.isValve(object)
 end
 
 function ValveReceiver:isOn()
     return Valve.isOpen(self.object)
 end
 
-function ValveReceiver:apply(on)
+function ValveReceiver:onSignal(on)
     if Valve.isOpen(self.object) ~= on then
         Valve.setOpen(self.object, on)
     end
 end
 
--- A valve whose chunk is not loaded: the registry decides where the network splits, and the bus brings
--- the valve itself in line as soon as its tile loads (SignalBus, pending receivers).
-function ValveReceiver.applyAt(x, y, z, on)
+-- By hand it always goes through setOpen, which also puts sprite and registry right.
+function ValveReceiver:turnByHand(on)
+    Valve.setOpen(self.object, on)
+end
+
+-- Away from its tile the registry decides where the network splits; the bus turns the valve itself as
+-- soon as its tile loads (SignalBus, pending receivers).
+function ValveReceiver:applyUnloaded(x, y, z, on)
     local State = WaterPipes.State
     if not State or not State.setPipeValveClosed then
         return false
@@ -590,6 +782,25 @@ function ValveReceiver.applyAt(x, y, z, on)
     end
     Valve.layoutChanged()
     return true
+end
+
+-- Every valve turned in one go rebuilds the network once.
+function ValveReceiver:batch(fn, ...)
+    return Valve.batch(fn, ...)
+end
+
+registerReceiver(ValveReceiver)
+
+function Signals.valveSwitchOn(valve)
+    return ValveReceiver:new(valve):isSwitchOn()
+end
+
+function Signals.valveLinkCount(valve)
+    return ValveReceiver:new(valve):linkCount()
+end
+
+function Signals.valveName(valve)
+    return ValveReceiver:new(valve):savedName()
 end
 
 -- ===== Permissions =====

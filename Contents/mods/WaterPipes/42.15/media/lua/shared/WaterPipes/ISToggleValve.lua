@@ -47,8 +47,8 @@ function ISToggleValve:perform()
         else
             Valve.setLocalState(self.valve, self.open)
         end
-    elseif WaterPipes.SignalBus and WaterPipes.SignalBus.setValveSwitch then
-        WaterPipes.SignalBus.setValveSwitch(self.valve, self.open)
+    elseif Signals and WaterPipes.SignalBus and WaterPipes.SignalBus.setReceiverSwitch then
+        WaterPipes.SignalBus.setReceiverSwitch(Signals.ValveReceiver:new(self.valve), self.open)
     else
         Valve.setOpen(self.valve, self.open)
     end

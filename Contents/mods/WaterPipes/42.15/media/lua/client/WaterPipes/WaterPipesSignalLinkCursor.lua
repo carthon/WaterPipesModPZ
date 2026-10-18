@@ -1,17 +1,15 @@
--- Picking the valves a sensor drives, on the map. While it is active the floor under every valve around
--- the player is tinted, as the dismantle cursor does: green can be linked, yellow is linked (click
+-- Picking the receivers a sensor drives, on the map. While it is active the floor under every receiver
+-- around the player is tinted, as the dismantle cursor does: green can be linked, yellow is linked (click
 -- unlinks), red cannot be (too far, or in a safehouse you are not a member of). Esc or right-click ends
--- it, as with any build cursor.
+-- it, as with any build cursor. Every registered receiver kind is offered (Signals.receiversOnSquare).
 
 require "ISUI/ISTextBox"
 require "WaterPipes/Signals"
-require "WaterPipes/Valve"
 require "WaterPipes/World"
 
 WaterPipes = WaterPipes or {}
 
 local Signals = WaterPipes.Signals
-local Valve = WaterPipes.Valve
 local World = WaterPipes.World
 
 -- ISBuildingObject lives in lua/server, which loads after the client: the cursor class is derived on
@@ -20,7 +18,7 @@ WaterPipesSignalLinkCursor = WaterPipesSignalLinkCursor or {}
 local Cursor = WaterPipesSignalLinkCursor
 local methods = {}
 
-local SCAN_RADIUS = Signals.LINK_REACH          -- the server refuses links to valves further off
+local SCAN_RADIUS = Signals.LINK_REACH          -- the server refuses links to receivers further off
 -- A rescan walks the square around the player a few rows per tick, so it never lands in one frame
 -- (61 x 61 tiles). A full pass takes about half a second.
 local SCAN_ROWS_PER_TICK = 2
@@ -65,17 +63,33 @@ local function newCursor(playerObj, window)
     o.noNeedHammer = true
     o.dragNilAfterPlace = false
     o:setSprite(Signals.SENSOR_GHOST_SPRITE)
-    o.valves = {}
-    o.naming = {}          -- "x,y,z" -> true while that valve's name box is open
+    o.receivers = {}
+    o.naming = {}          -- receiver key -> true while that receiver's name box is open
     return o
 end
 
--- "linked", "free" or "blocked" for a valve, with the reason it is blocked.
-function methods:classify(valve)
-    local square = valve:getSquare()
+-- The receiver a click on this square acts on, wrapped, or nil: with several kinds on one tile, the
+-- first one still free, else the first linked, so repeated clicks reach each of them.
+local function receiverOn(cursor, square)
+    local found = square and Signals.receiversOnSquare(square) or {}
+    local linked = nil
+    for _, receiver in ipairs(found) do
+        local state = cursor:classify(receiver)
+        if state == "free" then
+            return receiver
+        elseif state == "linked" and not linked then
+            linked = receiver
+        end
+    end
+    return linked or found[1]
+end
+
+-- "linked", "free" or "blocked" for a receiver, with the reason it is blocked.
+function methods:classify(receiver)
+    local square = receiver.object:getSquare()
     local x, y, z = square:getX(), square:getY(), square:getZ()
     local win = self.window
-    if win:isLinked(x, y, z) then
+    if win:isLinked(x, y, z, receiver.kind) then
         return "linked"
     end
     local range = Signals.linkRange()
@@ -92,9 +106,9 @@ local function scanRow(self, pass, x)
     for y = pass.cy - SCAN_RADIUS, pass.cy + SCAN_RADIUS do
         local square = World.squareAt(x, y, pass.cz)
         if square and square:getSpecialObjects():size() > 0 then
-            local valve = Valve.findOnSquare(square)
-            if valve then
-                pass.valves[#pass.valves + 1] = { valve = valve, x = x, y = y, z = pass.cz, kind = self:classify(valve) }
+            for _, receiver in ipairs(Signals.receiversOnSquare(square)) do
+                pass.receivers[#pass.receivers + 1] = { receiver = receiver, x = x, y = y, z = pass.cz,
+                                                        kind = self:classify(receiver) }
             end
         end
     end
@@ -103,17 +117,17 @@ end
 local function newPass(self)
     return {
         cx = math.floor(self.character:getX()), cy = math.floor(self.character:getY()),
-        cz = math.floor(self.character:getZ()), x = nil, valves = {},
+        cz = math.floor(self.character:getZ()), x = nil, receivers = {},
     }
 end
 
--- Every valve around the player, with what a click on it would do, in one go (when picking starts).
+-- Every receiver around the player, with what a click on it would do, in one go (when picking starts).
 function methods:scan()
     local pass = newPass(self)
     for x = pass.cx - SCAN_RADIUS, pass.cx + SCAN_RADIUS do
         scanRow(self, pass, x)
     end
-    self.valves = pass.valves
+    self.receivers = pass.receivers
     self.pass = nil
 end
 
@@ -132,81 +146,83 @@ function methods:stepScan()
         rows = rows + 1
     end
     if pass.x > pass.cx + SCAN_RADIUS then
-        self.valves = pass.valves
+        self.receivers = pass.receivers
         self.pass = nil
     end
 end
 
--- The links changed: recolour the valves already found, and those the running pass has found so far.
+-- The links changed: recolour the receivers already found, and those the running pass has found so far.
 function methods:reclassify()
-    for _, entry in ipairs(self.valves) do
-        entry.kind = self:classify(entry.valve)
+    for _, entry in ipairs(self.receivers) do
+        entry.kind = self:classify(entry.receiver)
     end
-    for _, entry in ipairs(self.pass and self.pass.valves or {}) do
-        entry.kind = self:classify(entry.valve)
+    for _, entry in ipairs(self.pass and self.pass.receivers or {}) do
+        entry.kind = self:classify(entry.receiver)
     end
 end
 
 function methods:isValid(square)
-    local valve = square and Valve.findOnSquare(square) or nil
-    return valve ~= nil and self:classify(valve) ~= "blocked"
+    local receiver = receiverOn(self, square)
+    return receiver ~= nil and self:classify(receiver) ~= "blocked"
 end
 
 function methods:render(x, y, z, square)
     local floor = self:getFloorCursorSprite()
-    for _, entry in ipairs(self.valves) do
+    for _, entry in ipairs(self.receivers) do
         if entry.x ~= x or entry.y ~= y or entry.z ~= z then
             local c = COLORS[entry.kind]
             floor:RenderGhostTileColor(entry.x, entry.y, entry.z, c.r, c.g, c.b, TILE_ALPHA)
         end
     end
-    local valve = square and Valve.findOnSquare(square) or nil
-    local c = COLORS[valve and self:classify(valve) or "blocked"]
+    local receiver = receiverOn(self, square)
+    local c = COLORS[receiver and self:classify(receiver) or "blocked"]
     floor:RenderGhostTileColor(x, y, z, c.r, c.g, c.b, HOVER_ALPHA)
-    if valve and valve:getSprite() then
-        valve:getSprite():RenderGhostTileColor(x, y, z, c.r, c.g, c.b, HOVER_ALPHA)
+    local sprite = receiver and receiver.object:getSprite() or nil
+    if sprite then
+        sprite:RenderGhostTileColor(x, y, z, c.r, c.g, c.b, HOVER_ALPHA)
     end
 end
 
-local function sendLink(win, square, name)
+local function sendLink(win, square, kind, name)
     Signals.request(win.playerObj, "link", {
         x = win.px, y = win.py, z = win.pz,
-        vx = square:getX(), vy = square:getY(), vz = square:getZ(), name = name,
+        vx = square:getX(), vy = square:getY(), vz = square:getZ(), kind = kind, name = name,
     })
 end
 
-local function keyOfSquare(square)
-    return Signals.key(square:getX(), square:getY(), square:getZ())
+local function keyOf(square, kind)
+    return Signals.receiverKey(kind, square:getX(), square:getY(), square:getZ())
 end
 
-local function onNamed(target, button, cursor, square)
-    cursor.naming[keyOfSquare(square)] = nil
+local function onNamed(target, button, cursor, square, kind)
+    cursor.naming[keyOf(square, kind)] = nil
     if button.internal ~= "OK" then
         return
     end
-    sendLink(cursor.window, square, button.parent.entry:getText())
+    sendLink(cursor.window, square, kind, button.parent.entry:getText())
 end
 
--- A click: unlink a linked valve, link a free one (asking its name the first time).
+-- A click: unlink a linked receiver, link a free one (asking its name the first time).
 function methods:tryBuild(x, y, z)
     local square = World.squareAt(x, y, z)
-    local valve = square and Valve.findOnSquare(square) or nil
-    if not valve then
+    local receiver = receiverOn(self, square)
+    if not receiver then
         return nil
     end
     local win = self.window
-    local kind = self:classify(valve)
-    if kind == "linked" then
-        Signals.request(win.playerObj, "unlink", { x = win.px, y = win.py, z = win.pz, vx = x, vy = y, vz = z })
-    elseif kind == "free" then
-        if Signals.valveName(valve) then
-            sendLink(win, square, nil)
-        elseif not self.naming[keyOfSquare(square)] then
-            -- one name box per valve, however often it is clicked before the answer comes back
-            self.naming[keyOfSquare(square)] = true
+    local state = self:classify(receiver)
+    if state == "linked" then
+        Signals.request(win.playerObj, "unlink",
+            { x = win.px, y = win.py, z = win.pz, vx = x, vy = y, vz = z, kind = receiver.kind })
+    elseif state == "free" then
+        if receiver:savedName() then
+            sendLink(win, square, receiver.kind, nil)
+        elseif not self.naming[keyOf(square, receiver.kind)] then
+            -- one name box per receiver, however often it is clicked before the answer comes back
+            self.naming[keyOf(square, receiver.kind)] = true
             local w, h = 280, 180
             local modal = ISTextBox:new((getCore():getScreenWidth() - w) / 2, (getCore():getScreenHeight() - h) / 2,
-                w, h, getText("IGUI_WaterPipesSignalNameValve"), "", nil, onNamed, self.player, self, square)
+                w, h, getText(receiver.NAME_PROMPT), "", nil, onNamed, self.player, self, square, receiver.kind)
             modal:initialise()
             modal:addToUIManager()
         end
@@ -215,7 +231,7 @@ function methods:tryBuild(x, y, z)
 end
 
 function methods:deactivate()
-    self.valves = {}
+    self.receivers = {}
     self.pass = nil
     if active[self.player] == self then
         active[self.player] = nil

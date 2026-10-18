@@ -254,17 +254,17 @@ function WaterPipesSensorWindow:onUnlink()
         return
     end
     Signals.request(self.playerObj, "unlink",
-        { x = self.px, y = self.py, z = self.pz, vx = link.x, vy = link.y, vz = link.z })
+        { x = self.px, y = self.py, z = self.pz, vx = link.x, vy = link.y, vz = link.z, kind = link.kind })
 end
 
 function WaterPipesSensorWindow:onCloseButton()
     self:close()
 end
 
--- Is this valve linked to the sensor (selection mode asks).
-function WaterPipesSensorWindow:isLinked(x, y, z)
+-- Is this receiver linked to the sensor (selection mode asks).
+function WaterPipesSensorWindow:isLinked(x, y, z, kind)
     for _, link in ipairs(self.links) do
-        if link.x == x and link.y == y and link.z == z then
+        if link.x == x and link.y == y and link.z == z and link.kind == kind then
             return true
         end
     end
@@ -285,7 +285,7 @@ function WaterPipesSensorWindow:setSnapshot(snapshot)
         local state
         if not link.switchOn then
             state = getText("IGUI_WaterPipesSensorValveSwitchOff")
-        elseif link.open then
+        elseif link.on then
             state = getText("IGUI_WaterPipesSensorValveOpen")
         else
             state = getText("IGUI_WaterPipesSensorValveClosed")

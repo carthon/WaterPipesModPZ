@@ -214,9 +214,10 @@ function System.scanContainersAroundPipes()
                 -- a sensor that turned this valve while its tile was away has the last word until the bus
                 -- turns the valve itself
                 local Bus = WaterPipes.SignalBus
+                local Signals = WaterPipes.Signals
                 local decided = nil
-                if Bus and Bus.pendingValveOpen then
-                    decided = Bus.pendingValveOpen(pipeData.x, pipeData.y, pipeData.z)
+                if Bus and Bus.pendingState and Signals then
+                    decided = Bus.pendingState(Signals.ValveReceiver.kind, pipeData.x, pipeData.y, pipeData.z)
                 end
                 if decided ~= nil then
                     derived.valveClosed = (not decided) or nil
@@ -2266,8 +2267,9 @@ local function onClientCommand(module, command, player, args)
         end
         -- A valve linked to a humidity sensor only moves its switch; the sensors decide the rest.
         local SignalBus = WaterPipes.SignalBus
-        if SignalBus and SignalBus.setValveSwitch then
-            SignalBus.setValveSwitch(valve, args and args.open)
+        local Signals = WaterPipes.Signals
+        if SignalBus and SignalBus.setReceiverSwitch and Signals then
+            SignalBus.setReceiverSwitch(Signals.ValveReceiver:new(valve), args and args.open)
         else
             Valve.setOpen(valve, args and args.open)
         end
