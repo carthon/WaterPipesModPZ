@@ -38,12 +38,12 @@ This action materializes the network on demand so the mod does not have to gener
 
 **Materials:** Water Pump recipe, electricity, pipe route, and a finite storage vessel.
 
-1. Build the pump on or next to the well/open-water source within its default 7 m suction limit.
+1. Build the pump on the source tile or on a tile directly north, south, east or west of it (a diagonal tile does not count), no more than 7 m above the water (the default suction limit).
 2. Connect its pipe axis to the storage network and power its tile.
 3. Right-click it and choose **Turn on**.
 4. Use **Check pump** to confirm power and the detected source.
 
-**Check:** the pump reports well water or open water and storage rises at up to 20 L/min by default. **Common errors:** pump switched off, no electricity, source out of reach, full destination, or river/lake intake disabled. Open water is tainted; wells are clean. See [Sources and storage](sources-and-storage.md).
+**Check:** the pump reports well water or open water and storage rises at up to 20 L/min by default. **Common errors:** pump switched off, no electricity, pump on a diagonal tile from the source, a decorative well that holds no water, source too far below, full destination, or river/lake intake disabled. Open water is tainted; wells are clean. See [Sources and storage](sources-and-storage.md).
 
 ## Purify tainted water
 

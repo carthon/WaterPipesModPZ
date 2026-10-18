@@ -34,7 +34,7 @@ Use this page to diagnose a network that is already built. For general how-to qu
 ## Pump is not moving water
 
 **Symptom:** Storage does not fill or pressure is absent.  
-**Possible causes:** Pump off; no electricity; source outside suction range; destination full; no valid natural source.  
+**Possible causes:** Pump off; no electricity; pump on a diagonal tile from the source (it only looks north, south, east and west); a decorative well that is not a working water source; source too far below; destination full; no valid natural source.  
 **Checks:** Use **Check pump** for power, source, input pressure, output pressure, and contribution.  
 **Resolution:** Act on the reported condition. A source-less pump can add pressure to stored water but cannot create water.  
 **Related:** [Pumps and pressure](pumps-and-pressure.md)

@@ -38,12 +38,12 @@ El mod crea esas tuberías solo cuando se lo pides, para no tener que crearlas e
 
 **Materiales:** lo necesario para la Bomba de agua, electricidad, tuberías y un depósito.
 
-1. Construye la bomba sobre el pozo o la orilla, o justo al lado, a no más de 7 m por encima del agua (el límite de [aspiración](glossary.md#aspiracion) por defecto).
+1. Construye la bomba sobre el pozo o la orilla, o en una casilla pegada en línea recta (norte, sur, este u oeste; en diagonal no vale), a no más de 7 m por encima del agua (el límite de [aspiración](glossary.md#aspiracion) por defecto).
 2. Une con tuberías los dos lados por los que conecta la bomba con la red del depósito, y dale electricidad.
 3. Haz clic derecho en la bomba y elige **Encender**.
 4. Usa **Ver estado de la bomba** para confirmar que tiene corriente y que ha encontrado la fuente.
 
-**Comprobación:** la ventana indica que está sacando agua (de un pozo, o de un río o lago), y el depósito se llena a hasta 20 L/min por defecto. **Errores habituales:** bomba apagada, sin electricidad, fuente demasiado lejos o demasiado abajo, depósito lleno, o la opción de sacar agua de ríos y lagos desactivada. El agua de ríos y lagos está contaminada; la de los pozos, limpia. Consulta [Fuentes y almacenamiento](sources-and-storage.md).
+**Comprobación:** la ventana indica que está sacando agua (de un pozo, o de un río o lago), y el depósito se llena a hasta 20 L/min por defecto. **Errores habituales:** bomba apagada, sin electricidad, bomba en diagonal respecto a la fuente, un pozo decorativo que no tiene agua, fuente demasiado abajo, depósito lleno, o la opción de sacar agua de ríos y lagos desactivada. El agua de ríos y lagos está contaminada; la de los pozos, limpia. Consulta [Fuentes y almacenamiento](sources-and-storage.md).
 
 ## Purificar agua contaminada
 
