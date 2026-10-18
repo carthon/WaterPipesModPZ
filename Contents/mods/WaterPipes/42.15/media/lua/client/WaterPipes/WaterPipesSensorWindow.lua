@@ -364,8 +364,8 @@ function WaterPipesSensorWindow.onRefused(args)
     end
 end
 
-local REASONS = { atMin = true, atMax = true, towardMax = true, towardMin = true, noEdge = true, noCrop = true,
-                  noPower = true }
+-- noPower is left out: the battery slot already says it
+local REASONS = { atMin = true, atMax = true, towardMax = true, towardMin = true, noEdge = true, noCrop = true }
 
 function WaterPipesSensorWindow:prerender()
     ISCollapsableWindow.prerender(self)
@@ -402,19 +402,12 @@ function WaterPipesSensorWindow:prerender()
     end
     y = y + step
 
+    -- the battery's charge is on its bar; only the grid, which spares the battery, gets a line
     local charge = Signals.batteryCharge(sensor)
-    local source = modData[Signals.SENSOR_SOURCE_KEY]
-    local power
-    if source == "grid" then
-        power = getText("IGUI_WaterPipesSensorPowerGrid")
-    elseif charge and charge > 0 then
-        power = getText("IGUI_WaterPipesSensorPowerBattery", percent(charge * 100))
-    elseif charge then
-        power = getText("IGUI_WaterPipesSensorPowerFlat")
-    else
-        power = getText("IGUI_WaterPipesSensorPowerNone")
+    if modData[Signals.SENSOR_SOURCE_KEY] == "grid" then
+        self:drawText(getText("IGUI_WaterPipesSensorPowerGrid"), PAD, y, COL_LABEL.r, COL_LABEL.g, COL_LABEL.b, 1,
+            UIFont.Small)
     end
-    self:drawText(power, PAD, y, COL_LABEL.r, COL_LABEL.g, COL_LABEL.b, 1, UIFont.Small)
 
     -- each end says what reaching it does, following the invert box before it is applied
     local invert = self.invertBox:isSelected(1)
@@ -430,6 +423,9 @@ function WaterPipesSensorWindow:prerender()
 
     self.batterySlot:setStoredItemFake(charge and self.batteryTex or nil)
     self.batteryStatus:setPower(charge or 0)
+    if not charge then
+        self.batteryStatus.powerDisp = getText("IGUI_WaterPipesSensorNoBattery")
+    end
 
     local header = getText("IGUI_WaterPipesSensorLinked")
     if self.selecting then
