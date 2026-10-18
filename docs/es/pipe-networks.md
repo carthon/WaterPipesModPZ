@@ -31,7 +31,7 @@ Usa la acción :material-hammer-screwdriver: **Desmontar** del juego, no la herr
 
 - Una tubería metálica construida por ti tiene un 90 % de probabilidades de devolver un Tubo metálico.
 - Una tubería de arcilla no devuelve nada: el segmento se gasta al colocarlo.
-- Las tuberías ocultas que aparecen con **Fontanear el edificio** no devuelven nada, porque esa acción se paga por aparato conectado, no por tubería.
+- Las tuberías ocultas que aparecen con **Conectar la fontanería del edificio** no devuelven nada, porque esa acción se paga por aparato conectado, no por tubería.
 - Si la tubería se destruye (con una Almádena, por el fuego o por daños), no devuelve nada.
 - Si desmontas una tubería que tiene encima una válvula o un manómetro, cada material de ese componente se recupera por separado, con un 90 % de probabilidades cada uno.
 

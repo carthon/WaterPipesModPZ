@@ -5,11 +5,12 @@
     "WaterPipeRiserHidden": "Concealed Vertical Fluid Pipe",
     "WaterPurifierElectric": "Water Purifier (Electric)",
     "WaterPipeRouter": "Fluid Router",
-    "WaterPipes_ForgeMetalPipe": "Forge a Metal Pipe",
+    "WaterPipes_ForgeMetalPipe": "Forge an Iron Pipe",
     "WaterPump": "Water Pump",
     "WaterPipeDrip": "Drip Emitter",
     "WaterPipeSprinkler": "Sprinkler",
     "WaterPipeValve": "Shut-off Valve",
     "WaterPressureGauge": "Pressure Gauge",
-    "Piping": "Piping"
+    "Piping": "Piping",
+    "WaterPipeHumiditySensor": "Soil Moisture Sensor"
 }

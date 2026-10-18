@@ -13,6 +13,7 @@ require "WaterPipes/Pressure"
 require "WaterPipes/Pump"
 require "WaterPipes/Hydrant"
 require "WaterPipes/Valve"
+require "WaterPipes/Signals"
 require "WaterPipes/BuildingPlumbing"
 require "WaterPipes/ISPlumbBuilding"
 require "WaterPipes/ISToggleValve"
@@ -1211,20 +1212,15 @@ function ContextMenu.setHydrantOpen(playerObj, hydrant, open)
     end
 end
 
--- Walk to the valve, equip the wrench, and turn it as a timed action -- the flip itself is
+-- Walk to the valve and turn its handwheel (no tool) as a timed action -- the flip itself is
 -- server-authoritative (ISToggleValve sends the command; direct in SP).
 function ContextMenu.setValveOpen(playerObj, valve, open)
     local square = valve and valve:getSquare()
     if not square or not playerObj then
         return
     end
-    local wrench = getPipeWrench(playerObj)
-    if not wrench then
-        return
-    end
     if luautils.walkAdj(playerObj, square, false) then
-        ISWorldObjectContextMenu.equip(playerObj, playerObj:getPrimaryHandItem(), wrench, true)
-        ISTimedActionQueue.add(ISToggleValve:new(playerObj, valve, wrench, open))
+        ISTimedActionQueue.add(ISToggleValve:new(playerObj, valve, open))
     end
 end
 
@@ -1502,15 +1498,24 @@ end
 
 -- The valve's state is stated here, not left to its sprite: a sprite that fails to resolve makes a shut
 -- valve look open.
-local function buildValveTooltip(valve, hasWrench)
+local function buildValveTooltip(valve)
     local tooltip = ISWorldObjectContextMenu.addToolTip()
     local open = Valve.isOpen(valve)
-    tooltip:setName(getText(open and "IGUI_WaterPipesValveOpenName" or "IGUI_WaterPipesValveClosedName"))
+    local Signals = WaterPipes.Signals
+    local name = Signals.valveName(valve)
+    local title = getText(open and "IGUI_WaterPipesValveOpenName" or "IGUI_WaterPipesValveClosedName")
+    tooltip:setName(name and (name .. " - " .. title) or title)
     local lines = { getText(open and "IGUI_WaterPipesValveOpenDesc" or "IGUI_WaterPipesValveClosedDesc") }
-    if not hasWrench then
+    -- Linked to sensors: the handwheel sets the switch, the sensors decide whether it opens.
+    local sensors = Signals.valveLinkCount(valve)
+    if sensors > 0 then
         lines[#lines + 1] = " "
-        lines[#lines + 1] = getText("Tooltip_WaterPipesRepairNeeds")
-        lines[#lines + 1] = "  1 x " .. (getItemNameFromFullType(Constants.PIPE_TOOL_TYPE) or "Pipe Wrench")
+        lines[#lines + 1] = getText("IGUI_WaterPipesValveLinked", tostring(sensors))
+        if not Signals.valveSwitchOn(valve) then
+            lines[#lines + 1] = getText("IGUI_WaterPipesValveSwitchOff")
+        elseif not open then
+            lines[#lines + 1] = getText("IGUI_WaterPipesValveWaiting")
+        end
     end
     tooltip.description = table.concat(lines, " <LINE> ")
     return tooltip
@@ -1618,8 +1623,7 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     local gaugeObject = findGaugeInWorldObjects(worldobjects)
     local hasGaugeOption = gaugeObject ~= nil
 
-    -- Turning a valve needs the wrench. Without one the option still shows, disabled, saying so: a
-    -- valve that offers nothing reads as broken.
+    -- A valve turns by hand: no tool needed.
     local valveObject = findValveInWorldObjects(worldobjects)
     local hasValveOption = valveObject ~= nil
 
@@ -1736,13 +1740,12 @@ function ContextMenu.doMenu(player, context, worldobjects, test)
     end
 
     if hasValveOption then
-        local open = Valve.isOpen(valveObject)
+        -- The handwheel turns the valve's switch; on a valve no sensor drives that is the valve itself.
+        local open = WaterPipes.Signals.valveSwitchOn(valveObject)
         local label = open and getText("ContextMenu_WaterPipesCloseValve")
             or getText("ContextMenu_WaterPipesOpenValve")
         local option = context:addOption(label, playerObj, ContextMenu.setValveOpen, valveObject, not open)
-        local hasWrench = playerHasPipeWrench(playerObj)
-        option.notAvailable = not hasWrench
-        option.toolTip = buildValveTooltip(valveObject, hasWrench)
+        option.toolTip = buildValveTooltip(valveObject)
     end
 
     if hasGaugeOption then

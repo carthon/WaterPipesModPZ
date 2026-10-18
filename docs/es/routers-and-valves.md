@@ -19,7 +19,7 @@ Haz clic derecho en el enrutador y elige **Fijar límite de presión...**. La ve
 
 ## Válvula de corte
 
-La [válvula](glossary.md#valvula-de-corte) se construye abierta y no cambia nada mientras siga abierta. Al cerrarla, su casilla deja de conducir: los dos lados dejan de compartir líquido, presión y contaminación. Sirve para aislar una zona mientras la reparas, para mantener la gasolina separada del agua o para que una contaminación no se extienda mientras cambias la instalación. No puede compartir casilla con un manómetro, un enrutador, una bomba, un gotero ni un aspersor.
+La [válvula](glossary.md#valvula-de-corte) se construye abierta y no cambia nada mientras siga abierta. Haz clic derecho y elige **Cerrar válvula** o **Abrir válvula**: se gira a mano, sin herramientas. Una válvula vinculada a un [Sensor de humedad](irrigation.md#sensor-de-humedad) se abre y se cierra sola; si la cierras a mano, se queda cerrada diga lo que diga el sensor. Al cerrarla, su casilla deja de conducir: los dos lados dejan de compartir líquido, presión y contaminación. Sirve para aislar una zona mientras la reparas, para mantener la gasolina separada del agua o para que una contaminación no se extienda mientras cambias la instalación. No puede compartir casilla con un manómetro, un enrutador, una bomba, un gotero ni un aspersor.
 
 <div class="wp-gallery wp-gallery--2" markdown>
 ![Válvula de corte cerrada](../assets/images/12a-valve-closed-cropped.png){ .wp-screenshot loading=lazy }

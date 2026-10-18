@@ -1,0 +1,4 @@
+newmtl pipe_tee
+Kd 1 1 1
+d 1
+map_Kd pipe_tee.png

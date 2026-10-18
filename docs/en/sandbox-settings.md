@@ -1,6 +1,6 @@
 # Sandbox settings
 
-Water Pipes v0.10.x exposes 26 per-save options. Values described as **tenths** are divided by ten in play: `250` means 25.0 m of water head.
+Water Pipes v0.11.x exposes 28 per-save options. Values described as **tenths** are divided by ten in play: `250` means 25.0 m of water head.
 
 ## Liquids and generators
 
@@ -32,6 +32,8 @@ Water Pipes v0.10.x exposes 26 per-save options. Values described as **tenths** 
 |---|---:|---:|---|
 | Drip burst pressure | 150 | 0–1000 tenths | Bursts above 15.0 m; 0 prevents bursting |
 | Sprinklers make noise | On | On/Off | Running sprinklers attract zombies |
+| Moisture sensor battery life (days) | 30 | 1–365 | How long a full Battery runs a [Soil Moisture Sensor](irrigation.md#moisture-sensor) on a tile without electricity |
+| Moisture sensor link range (tiles) | 0 | 0–1000 | How far a valve may be from the sensor it is linked to; 0 = no limit |
 | Town water fills the network | On | On/Off | Plumbed fixtures act as mains inlets before shutoff |
 | Town water pressure | 250 | 0–1000 tenths | Default 25.0 m mains head |
 | Town water intake rate | 60 L/min | 0–1000 | Mains fill rate |
@@ -51,7 +53,7 @@ Water Pipes v0.10.x exposes 26 per-save options. Values described as **tenths** 
 
 | Setting | Default | Range | Effect |
 |---|---:|---:|---|
-| Metal pipe per fixture | 1 | 0–10 | Cost per fixture revealed and connected by **Plumb this building** in a world building |
+| Iron Pipes per fixture | 1 | 0–10 | Cost per fixture revealed and connected by **Plumb this building** in a world building |
 
 ## Suggested starting profiles
 

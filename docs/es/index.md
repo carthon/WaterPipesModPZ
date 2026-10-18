@@ -7,7 +7,7 @@
 Construye redes de tuberías que lleven agua, gasolina y otros líquidos compatibles a cualquier punto de tu base en Project Zomboid.
 
 <div class="wp-meta" markdown>
-<span>v0.10.x</span>
+<span>v0.11.x</span>
 </div>
 
 <div class="wp-actions" markdown>
@@ -67,7 +67,7 @@ Da agua a fregaderos y duchas, purifica el agua contaminada, riega cultivos o ll
 </div>
 
 !!! info "Estado de la guía"
-    La guía cubre todas las funciones de la serie v0.10.x, con instrucciones completas de montaje, uso y resolución de problemas. Las capturas del juego están en preparación.
+    La guía cubre todas las funciones de la serie v0.11.x, con instrucciones completas de montaje, uso y resolución de problemas. Las capturas del juego están en preparación.
 
 ## Enlaces del proyecto
 

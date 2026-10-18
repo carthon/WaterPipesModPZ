@@ -14,7 +14,7 @@ La versión del juego que necesita este mod. «Build» es el nombre que usan los
 Una ampliación hecha por la comunidad que añade cosas al juego. Water Pipes es un mod: hay que activarlo antes de empezar o cargar la partida.
 
 ### Partida y opciones de sandbox { #opciones-de-sandbox }
-Al crear una partida personalizada (en el juego, «Mundo abierto») puedes cambiar muchas reglas de la simulación. Esas reglas son las **opciones de sandbox** y se guardan con la partida. Las de este mod están en el grupo **Tuberías de Agua**. Consulta [Opciones de sandbox](sandbox-settings.md).
+Al crear una partida personalizada (en el juego, «Mundo abierto») puedes cambiar muchas reglas de la simulación. Esas reglas son las **opciones de sandbox** y se guardan con la partida. Las de este mod están en el grupo **Water Pipes**. Consulta [Opciones de sandbox](sandbox-settings.md).
 
 ### Casilla { #casilla }
 El mapa del juego está dividido en cuadrados del mismo tamaño, como un tablero. Cada cuadrado es una casilla. En una casilla cabe una tubería de suelo, y la mayoría de objetos ocupan una sola casilla.
@@ -64,10 +64,10 @@ Tubería que sube o baja por una pared (norte u oeste) para unir las tuberías d
 Tubería que funciona igual que una normal, pero queda invisible una vez construida, como si estuviera empotrada en el suelo o la pared. Se ve con **Mostrar red de tuberías**.
 
 ### Componente { #componente }
-Cualquier cosa que construye el mod excepto las tuberías: bomba de agua, manómetro, enrutador de fluidos, válvula de corte, purificador, gotero y aspersor. Consulta el [catálogo](component-reference.md).
+Cualquier cosa que construye el mod excepto las tuberías: bomba de agua, manómetro, enrutador de fluidos, válvula de corte, purificador, gotero, aspersor y sensor de humedad. Consulta el [catálogo](component-reference.md).
 
 ### Aparato { #aparato }
-Un objeto del mundo que usa agua: fregadero, lavabo, ducha, bañera, inodoro o lavadora. Los aparatos no los construye el mod; ya existen en las casas o los construyes con el juego. El mod los conecta a una red con la acción **Instalar**. En algunas ventanas del juego aparecen como «Punto de agua».
+Un objeto del mundo que usa agua: fregadero, lavabo, ducha, bañera, inodoro o lavadora. Los aparatos no los construye el mod; ya existen en las casas o los construyes con el juego. El mod los conecta a una red con la acción **Instalar**.
 
 ### Instalar y Desinstalar { #instalar }
 Acción del juego (no del mod) que conecta un aparato o un generador a la tubería que tiene debajo. En el menú aparece como **Instalar** seguido del nombre del objeto, por ejemplo «Instalar Generador». **Desinstalar** lo desconecta sin quitar la tubería. Hace falta llevar una Llave para tubos.
@@ -109,7 +109,7 @@ La profundidad máxima desde la que una bomba puede sacar agua: por defecto, 7 m
 Componente que deja pasar el agua en un solo sentido, de su lado verde (entrada) a su lado rojo (salida), y que además puede limitar la presión que sale. No tiene nada que ver con el router de internet: en fontanería real sería una válvula antirretorno con reductor de presión.
 
 ### Válvula de corte { #valvula-de-corte }
-Componente que, al cerrarse, divide la red en dos partes independientes. Abierta, no cambia nada.
+Componente que, al cerrarse, divide la red en dos partes independientes. Abierta, no cambia nada. Se gira a mano, o sola si está vinculada a un [sensor de humedad](#sensor-de-humedad).
 
 ### Manómetro { #manometro }
 Componente que muestra la presión que hay en su casilla.
@@ -120,8 +120,11 @@ Componente eléctrico que convierte agua contaminada en agua limpia. Se coloca s
 ### Gotero y aspersor { #gotero }
 Componentes de riego. El gotero riega la planta de su propia casilla con poca presión. El aspersor riega un cuadrado de 3×3 casillas, pero necesita bastante presión.
 
+### Sensor de humedad { #sensor-de-humedad }
+Componente que se clava en la tierra junto a un cultivo. Mide el agua que tiene el cultivo y abre o cierra las válvulas vinculadas, así el riego empieza y para solo. Consulta [Riego](irrigation.md#sensor-de-humedad).
+
 ### Unidad { #unidad }
 Algunas ventanas del mod (purificador, enrutador) indican cantidades en «u» o «unidades». Una unidad equivale a un litro.
 
-### Fontanear el edificio { #fontanear-el-edificio }
+### Conectar la fontanería del edificio { #conectar-la-fontaneria }
 Nombre de la acción del mod que revela la fontanería escondida de un edificio del mapa (no de uno construido por ti). Consulta [Inspeccionar la fontanería de un edificio](building-plumbing.md).

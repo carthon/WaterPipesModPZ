@@ -5,11 +5,12 @@
     "WaterPipeRiserHidden": "Tubería vertical de fluidos oculta",
     "WaterPurifierElectric": "Purificador de agua (eléctrico)",
     "WaterPipeRouter": "Enrutador de fluidos",
-    "WaterPipes_ForgeMetalPipe": "Forjar una tubería de metal",
+    "WaterPipes_ForgeMetalPipe": "Forjar un Tubo metálico",
     "WaterPump": "Bomba de agua",
     "WaterPipeDrip": "Gotero",
     "WaterPipeSprinkler": "Aspersor",
     "WaterPipeValve": "Válvula de corte",
     "WaterPressureGauge": "Manómetro",
-    "Piping": "Fontanería"
+    "Piping": "Fontanería",
+    "WaterPipeHumiditySensor": "Sensor de humedad"
 }

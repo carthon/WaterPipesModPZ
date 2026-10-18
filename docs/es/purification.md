@@ -4,7 +4,24 @@
 
 El **Purificador de agua (eléctrico)** necesita Electrónica 4, Metalistería 3, una Llave para tubos, 3 usos de Soplete, 2 usos de Varillas para soldar, 3 Tubos metálicos, 2 Chapas metálicas, 1 Chatarra electrónica, 1 Alambre, 1 Mechero - Batería improvisada, 1 Carbón vegetal y 2 Retales de tela. Construirlo da 40 XP de Electrónica y 30 XP de Metalistería.
 
-Primero construye y orienta un [Enrutador de fluidos](glossary.md#enrutador): la franja verde es la **entrada** del agua contaminada y la roja la **salida** del agua limpia. El purificador ocupa 2×2 casillas; su esquina superior (la del fondo) va sobre la casilla del enrutador, y el suelo de la planta de arriba sobre esa esquina tiene que estar libre. No se puede colocar sin enrutador ni encima de otro purificador.
+Primero construye y orienta un [Enrutador de fluidos](glossary.md#enrutador): la franja verde es la **entrada** del agua contaminada y la roja la **salida** del agua limpia. El purificador ocupa 2×2 casillas y tiene una sola orientación: gira el enrutador antes de colocarlo.
+
+### Condiciones para colocarlo
+
+El mod comprueba la **esquina de anclaje**, la esquina superior del 2×2 (la casilla más alejada de la cámara):
+
+- Tiene que estar sobre la casilla de un Enrutador de fluidos. Las otras tres casillas no lo necesitan.
+- No puede tener ya un purificador.
+- La planta de justo encima no puede tener suelo: el depósito es alto y lo atravesaría. Solo se comprueba esa esquina; las otras tres casillas pueden tener techo.
+
+Además, el motor del juego aplica a cualquier construcción sus propias comprobaciones en las cuatro casillas; no son cosa del mod:
+
+- Suelo firme debajo de cada casilla.
+- Nada sólido encima: barriles, recolectores de lluvia, muebles, árboles.
+- Nadie encima: ni jugadores, ni zombis, ni animales, ni vehículos.
+- Ningún muro, valla o ventana entre las casillas del 2×2.
+
+Las tuberías en las otras tres casillas no estorban.
 
 ![Recorrido del agua en el purificador](../assets/images/diagram-purifier-flow.svg){ .wp-diagram }
 
@@ -20,7 +37,7 @@ Primero construye y orienta un [Enrutador de fluidos](glossary.md#enrutador): la
 
 Con corriente, toma hasta 20 L/min de agua contaminada y limpia hasta 10 L/min (en su ventana, la cantidad aparece en «u», unidades; una unidad es un litro). Tiene dos depósitos internos de 50 L: uno para el agua que entra y otro para la que sale limpia. No hace nada con el agua que ya está limpia ni con líquidos que no sean agua. Un depósito externo en el lado limpio es opcional, pero recomendable: sin él, el purificador se para en cuanto se llenan sus 50 L de salida.
 
-El filtro empieza al 100 %. Con el desgaste por defecto, limpia unos 5000 L antes de atascarse. Para repararlo, haz clic derecho, elige **Reparar filtro** y gasta 1 Carbón vegetal y 2 Retales de tela; vuelve al 100 %. **Abrir purificador** muestra si tiene corriente, cuánta agua hay en la entrada y en la salida, a qué ritmo filtra y cómo está el filtro. El zumbido de la máquina se puede quitar en **Opciones → Mods → Tuberías de Agua**.
+El filtro empieza al 100 %. Con el desgaste por defecto, limpia unos 5000 L antes de atascarse. Para repararlo, haz clic derecho, elige **Reparar filtro** y gasta 1 Carbón vegetal y 2 Retales de tela; vuelve al 100 %. **Abrir purificador** muestra si tiene corriente, cuánta agua hay en la entrada y en la salida, a qué ritmo filtra y cómo está el filtro. El zumbido de la máquina se puede quitar en **Opciones → Mods → Water Pipes**.
 
 Por defecto, al lado limpio solo le llega el 60 % de la [presión](glossary.md#presion) que entra: 25 m se quedan en 15 m, suficiente para grifos y goteros, pero por debajo de los 20 m que necesita un aspersor. Si hace falta más, pon una bomba después del purificador o cambia ese porcentaje en las opciones de sandbox.
 

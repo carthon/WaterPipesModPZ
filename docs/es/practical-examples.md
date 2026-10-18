@@ -1,6 +1,6 @@
 # Instalaciones prácticas con Water Pipes
 
-Estos ejemplos de fontanería para Project Zomboid funcionan con la serie v0.10.x. Las recetas completas están en el [catálogo de tuberías y componentes](component-reference.md); si la comprobación final falla, consulta [Resolución de problemas](troubleshooting.md).
+Estos ejemplos de fontanería para Project Zomboid funcionan con la serie v0.11.x. Las recetas completas están en el [catálogo de tuberías y componentes](component-reference.md); si la comprobación final falla, consulta [Resolución de problemas](troubleshooting.md).
 
 ## Primera red de agua
 
@@ -25,7 +25,7 @@ El mod crea esas tuberías solo cuando se lo pides, para no tener que crearlas e
 **Materiales:** una Llave para tubos utilizable y, por defecto, un Tubo metálico por cada aparato que se vaya a conectar.
 
 1. Entra en el edificio y elige una casilla con suelo cerca de donde quieras poner el depósito o la fuente; desde ahí saldrán las tuberías.
-2. Haz clic derecho y elige **[Fontanear el edificio](glossary.md#fontanear-el-edificio)**; mira el coste en la descripción.
+2. Haz clic derecho y elige **[Conectar la fontanería del edificio](glossary.md#conectar-la-fontaneria)**; mira el coste en la descripción.
 3. Deja que termine la acción. Si se interrumpe, las tuberías ya creadas se quedan.
 4. Conecta la casilla de partida a un depósito o una fuente y usa **Mostrar red de tuberías** para ver la red.
 5. Si se ha quedado a medias, lee el motivo que indica el juego y repite desde un punto mejor.

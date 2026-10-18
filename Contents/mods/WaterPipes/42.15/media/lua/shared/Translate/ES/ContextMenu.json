@@ -15,5 +15,6 @@
     "ContextMenu_WaterPipesPumpTurnOn": "Encender",
     "ContextMenu_WaterPipesPumpTurnOff": "Apagar",
     "ContextMenu_WaterPipesPumpStatus": "Ver estado de la bomba",
-    "ContextMenu_WaterPipesPlumbBuilding": "Fontanear el edificio"
+    "ContextMenu_WaterPipesPlumbBuilding": "Conectar la fontanería del edificio",
+    "ContextMenu_WaterPipesOpenSensor": "Abrir sensor"
 }

@@ -82,6 +82,8 @@ Constants.PIPE_FLOOR_END_W_SPRITE = "waterpipes_01_19"
 Constants.PIPE_FLOOR_END_N_SPRITE = "waterpipes_01_21"
 Constants.PIPE_FLOOR_END_E_SPRITE = "waterpipes_01_22"
 Constants.PIPE_FLOOR_END_S_SPRITE = "waterpipes_01_23"
+-- A pipe with no connected neighbour: a short E/W stub capped at both ends. Also the build cursor.
+Constants.PIPE_FLOOR_SINGLE_SPRITE = "waterpipes_01_26"
 -- Wall risers: floor stub toward an edge + vertical climb. PZ tiles only have N and W walls
 -- (S/E walls belong to the neighbouring tile), so risers exist only for the North and West walls.
 Constants.PIPE_WALL_RISER_N_SPRITE = "waterpipes_01_24"
@@ -507,6 +509,30 @@ Constants.ROUTER_PRESSURE_STEP = 5          -- granularity of the context-menu o
 Constants.DRIP_MODDATA_KEY = "waterpipesDrip"
 Constants.DRIP_SPRITE_EW = "waterpipes_01_40"   -- short pipe stub, E/W axis
 Constants.DRIP_SPRITE_NS = "waterpipes_01_41"   -- ...and its N/S mirror
+-- Drip head per pipe shape, keyed by the floor sprite under it (as VALVE_SPRITES is): a drip line bends
+-- and branches like any pipe. Straights and dead ends take the axis heads above.
+Constants.DRIP_SPRITES = {
+    [Constants.PIPE_FLOOR_WEST_SPRITE]      = Constants.DRIP_SPRITE_EW,
+    [Constants.PIPE_FLOOR_NORTH_SPRITE]     = Constants.DRIP_SPRITE_NS,
+    [Constants.PIPE_FLOOR_CORNER_NE_SPRITE] = "waterpipes_01_80",
+    [Constants.PIPE_FLOOR_CORNER_ES_SPRITE] = "waterpipes_01_81",
+    [Constants.PIPE_FLOOR_CORNER_SW_SPRITE] = "waterpipes_01_82",
+    [Constants.PIPE_FLOOR_CORNER_WN_SPRITE] = "waterpipes_01_83",
+    [Constants.PIPE_FLOOR_T_NOW_SPRITE]     = "waterpipes_01_84",
+    [Constants.PIPE_FLOOR_T_NOE_SPRITE]     = "waterpipes_01_85",
+    [Constants.PIPE_FLOOR_T_NOS_SPRITE]     = "waterpipes_01_86",
+    [Constants.PIPE_FLOOR_T_NON_SPRITE]     = "waterpipes_01_87",
+    [Constants.PIPE_FLOOR_CROSS_SPRITE]     = "waterpipes_01_88",
+    [Constants.PIPE_FLOOR_END_W_SPRITE]     = Constants.DRIP_SPRITE_EW,
+    [Constants.PIPE_FLOOR_END_E_SPRITE]     = Constants.DRIP_SPRITE_EW,
+    [Constants.PIPE_FLOOR_END_N_SPRITE]     = Constants.DRIP_SPRITE_NS,
+    [Constants.PIPE_FLOOR_END_S_SPRITE]     = Constants.DRIP_SPRITE_NS,
+    [Constants.PIPE_FLOOR_SINGLE_SPRITE]    = Constants.DRIP_SPRITE_EW,
+}
+-- The sprinkler keeps one head per build axis, except on a lone pipe, which is always drawn E/W.
+Constants.SPRINKLER_SPRITES = {
+    [Constants.PIPE_FLOOR_SINGLE_SPRITE] = "waterpipes_01_42",
+}
 Constants.DRIP_WATER_PER_HOUR = 10            -- waterLvl per in-game hour on its own tile
 -- Real drip emitters are built for ~1-1.5 bar and blow out above that, which is why every real drip line
 -- has a pressure regulator ahead of it. Over this head the emitter bursts: it stops watering but still
@@ -522,6 +548,12 @@ Constants.DRIP_REPAIR_TIME = 80
 Constants.SPRINKLER_MODDATA_KEY = "waterpipesSprinkler"
 Constants.SPRINKLER_SPRITE_EW = "waterpipes_01_42"   -- upright elbow: reads as a spray head
 Constants.SPRINKLER_SPRITE_NS = "waterpipes_01_43"
+-- The same heads while watering: identical art, but Project Viewpoint's model pack draws them with the
+-- spray. Swapped in client-side only, while its 3D view is on (WaterPipesViewpoint).
+Constants.SPRINKLER_SPRAY_SPRITES = {
+    [Constants.SPRINKLER_SPRITE_EW] = "waterpipes_01_105",
+    [Constants.SPRINKLER_SPRITE_NS] = "waterpipes_01_106",
+}
 Constants.SPRINKLER_RADIUS = 1                     -- 1 = the 3x3 around it
 Constants.SPRINKLER_WATER_PER_HOUR = 10            -- waterLvl per in-game hour, per covered tile
 -- A sprinkler sprays the whole 3x3 whether or not there is a crop under it, so it wastes most of what it
@@ -613,10 +645,12 @@ Constants.VALVE_SPRITES = {
     [Constants.PIPE_FLOOR_T_NOS_SPRITE]     = { open = "waterpipes_01_56", closed = "waterpipes_01_72" },
     [Constants.PIPE_FLOOR_T_NON_SPRITE]     = { open = "waterpipes_01_57", closed = "waterpipes_01_73" },
     [Constants.PIPE_FLOOR_CROSS_SPRITE]     = { open = "waterpipes_01_58", closed = "waterpipes_01_74" },
-    [Constants.PIPE_FLOOR_END_W_SPRITE]     = { open = "waterpipes_01_53", closed = "waterpipes_01_69" },
-    [Constants.PIPE_FLOOR_END_N_SPRITE]     = { open = "waterpipes_01_53", closed = "waterpipes_01_69" },
+    -- a pipe end (one neighbour) shows the straight body along its arm
+    [Constants.PIPE_FLOOR_END_W_SPRITE]     = { open = "waterpipes_01_48", closed = "waterpipes_01_64" },
+    [Constants.PIPE_FLOOR_END_N_SPRITE]     = { open = "waterpipes_01_49", closed = "waterpipes_01_65" },
     [Constants.PIPE_FLOOR_END_E_SPRITE]     = { open = "waterpipes_01_48", closed = "waterpipes_01_64" },
     [Constants.PIPE_FLOOR_END_S_SPRITE]     = { open = "waterpipes_01_49", closed = "waterpipes_01_65" },
+    [Constants.PIPE_FLOOR_SINGLE_SPRITE]    = { open = "waterpipes_01_48", closed = "waterpipes_01_64" },
 }
 -- No pipe shape to match: the straight E/W body.
 Constants.VALVE_SPRITE_OPEN = "waterpipes_01_48"

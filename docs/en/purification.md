@@ -4,7 +4,24 @@
 
 The **Water Purifier (Electric)** requires Electrical 4, Welding 3, a Pipe Wrench, 3 Welding Torch uses, 2 Welding Rods uses, 3 Iron Pipes, 2 Steel Sheets, 1 Scrap Electronics, 1 Wire, 1 Lighter - Improvised Battery, 1 Charcoal, and 2 Rags. Building it awards 40 Electrical XP and 30 Welding XP.
 
-First build and orient a Fluid Router: green is tainted-water **IN**, red is clean-water **OUT**. The purifier occupies 2×2 tiles; place its top/back corner on the router tile and leave the floor above that anchor clear. It will not place over another purifier or without the router.
+First build and orient a Fluid Router: green is tainted-water **IN**, red is clean-water **OUT**. The purifier occupies 2×2 tiles and only has one orientation: aim the router before placing it.
+
+### Placement conditions
+
+The mod checks the **anchor**, the top/back corner of the 2×2 (the tile furthest from the camera):
+
+- It must be on a Fluid Router tile. The other three tiles do not need one.
+- It must not already hold a purifier.
+- The level directly above it must have no floor: the tank is tall and would clip through it. Only the anchor is checked; the other three tiles may be under a roof.
+
+The game engine applies its own checks to every building on all four tiles; they are not part of the mod:
+
+- Solid floor under each tile.
+- Nothing solid on them: barrels, rain collectors, furniture, trees.
+- No players, zombies, animals or vehicles on them.
+- No wall, fence or window between tiles of the 2×2.
+
+Pipes on the other three tiles do not get in the way.
 
 ![Purifier flow](../assets/images/diagram-purifier-flow.svg){ .wp-diagram }
 

@@ -7,7 +7,7 @@
 Build connected networks that transport and distribute water, petrol, and other compatible liquids throughout your Project Zomboid base.
 
 <div class="wp-meta" markdown>
-<span>v0.10.x</span>
+<span>v0.11.x</span>
 </div>
 
 <div class="wp-actions" markdown>
@@ -67,7 +67,7 @@ Supply fixtures, purify water, irrigate crops, or deliver petrol to generators.
 </div>
 
 !!! info "Guide status"
-    This manual documents the v0.10.x feature series and includes complete setup and troubleshooting instructions. In-game screenshots are being prepared.
+    This manual documents the v0.11.x feature series and includes complete setup and troubleshooting instructions. In-game screenshots are being prepared.
 
 ## Project links
 
