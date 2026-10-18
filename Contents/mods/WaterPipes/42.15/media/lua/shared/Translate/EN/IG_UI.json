@@ -109,8 +109,6 @@
     "IGUI_WaterPipesSensorOff": "off",
     "IGUI_WaterPipesSensorInvert": "Invert: switch on at the maximum and off at the minimum",
     "IGUI_WaterPipesSensorApply": "Apply",
-    "IGUI_WaterPipesSensorInsertBattery": "Insert battery",
-    "IGUI_WaterPipesSensorRemoveBattery": "Remove battery",
     "IGUI_WaterPipesSensorLinked": "Linked valves",
     "IGUI_WaterPipesSensorNoLinks": "No valves linked yet",
     "IGUI_WaterPipesSensorSelecting": "Click a valve to link or unlink it. Esc to finish.",

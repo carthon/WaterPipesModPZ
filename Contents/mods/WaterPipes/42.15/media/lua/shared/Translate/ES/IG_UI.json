@@ -109,8 +109,6 @@
     "IGUI_WaterPipesSensorOff": "desactiva",
     "IGUI_WaterPipesSensorInvert": "Invertir: activar en el máximo y desactivar en el mínimo",
     "IGUI_WaterPipesSensorApply": "Aplicar",
-    "IGUI_WaterPipesSensorInsertBattery": "Poner pila",
-    "IGUI_WaterPipesSensorRemoveBattery": "Quitar pila",
     "IGUI_WaterPipesSensorLinked": "Válvulas vinculadas",
     "IGUI_WaterPipesSensorNoLinks": "Todavía no hay válvulas vinculadas",
     "IGUI_WaterPipesSensorSelecting": "Haz clic en una válvula para vincularla o desvincularla. Esc para terminar.",

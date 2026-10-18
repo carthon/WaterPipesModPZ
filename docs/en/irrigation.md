@@ -53,7 +53,7 @@ A stake you push into the soil next to a crop. It reads how much water the crop 
 
 ### Power
 
-It runs on the tile's electricity (grid or generator). Without it, it uses a Battery: right-click the sensor, **Open sensor**, **Insert battery**. A full battery lasts 30 in-game days by default (see [Sandbox settings](sandbox-settings.md#irrigation-and-town-water)) and only drains while the tile has no electricity. **Remove battery** gives it back with the charge it has left.
+It runs on the tile's electricity (grid or generator). Without it, it uses a Battery: right-click the sensor, **Open sensor**, and drag the battery into the battery slot (or click the slot to put in the fullest one you carry), as on a radio. A full battery lasts 30 in-game days by default (see [Sandbox settings](sandbox-settings.md#irrigation-and-town-water)) and only drains while the tile has no electricity. Right-click the slot to take it back with the charge it has left.
 
 ### Linking valves
 

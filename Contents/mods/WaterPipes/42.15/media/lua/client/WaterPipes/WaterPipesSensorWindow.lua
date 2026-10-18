@@ -6,6 +6,9 @@ require "ISUI/ISCollapsableWindow"
 require "ISUI/ISScrollingListBox"
 require "ISUI/ISTickBox"
 require "RadioCom/ISUIRadio/ISSliderPanel"
+require "RadioCom/ISUIRadio/ISItemDropBox"
+require "RadioCom/ISUIRadio/ISLedLight"
+require "RadioCom/ISUIRadio/ISBatteryStatusDisplay"
 require "WaterPipes/Signals"
 require "WaterPipes/World"
 
@@ -83,6 +86,7 @@ function WaterPipesSensorWindow:new(x, y, width, height, px, py, pz, playerObj)
     o.resizable = false
     o:setWantKeyEvents(true)
     o.links = {}
+    o.batteryTex = getTexture("Item_Battery")
     return o
 end
 
@@ -128,10 +132,26 @@ function WaterPipesSensorWindow:createChildren()
     self.shown = { name = self.nameEntry:getText(), min = lo, max = hi, invert = invert == true }
     y = y + ROW + PAD
 
+    -- the radio's battery slot: drag a battery in (or click it), right-click to take it out
     local third = (inner - PAD * 2) / 3
-    self.batteryButton = ISButton:new(PAD, y, third * 2 + PAD, ROW, "", self, self.onBattery)
-    self.batteryButton:initialise()
-    self:addChild(self.batteryButton)
+    self.batterySlot = ISItemDropBox:new(PAD, y, ROW, ROW, false, self, self.onBatteryDropped,
+        self.onBatteryRemove, self.isBattery, nil)
+    self.batterySlot:initialise()
+    self.batterySlot:setBackDropTex(getTexture("Item_Battery"), 0.4, 1, 1, 1)
+    self.batterySlot:setDoBackDropTex(true)
+    self.batterySlot:setToolTip(true, getText("IGUI_RadioDragBattery"))
+    self.batterySlot.onMouseUp = function(slot, mx, my)
+        if ISMouseDrag.dragging == nil and not slot.boxOccupied then
+            self:onBatteryClicked()
+            return
+        end
+        ISItemDropBox.onMouseUp(slot, mx, my)
+    end
+    self:addChild(self.batterySlot)
+    self.batteryStatus = ISBatteryStatusDisplay:new(self.batterySlot:getRight(), y,
+        third * 2 + PAD - ROW, ROW, true)
+    self.batteryStatus:initialise()
+    self:addChild(self.batteryStatus)
     self.applyButton = ISButton:new(PAD + (third + PAD) * 2, y, third, ROW,
         getText("IGUI_WaterPipesSensorApply"), self, self.onApply)
     self.applyButton:initialise()
@@ -224,20 +244,41 @@ local function bestBattery(playerObj)
     return best
 end
 
-function WaterPipesSensorWindow:onBattery()
+-- Only a battery the player carries: the server takes it from their inventory.
+function WaterPipesSensorWindow:isBattery(item)
+    local container = item:getContainer()
+    return item:getFullType() == Signals.BATTERY_ITEM and container ~= nil
+        and container:isInCharacterInventory(self.playerObj)
+end
+
+function WaterPipesSensorWindow:insertBattery(battery)
     local sensor = self:resolveSensor()
-    if not sensor then
-        return
-    end
-    local playerObj = self.playerObj
-    if Signals.batteryCharge(sensor) then
-        Signals.request(playerObj, "removeBattery", { x = self.px, y = self.py, z = self.pz })
-        return
-    end
-    local battery = bestBattery(playerObj)
-    if battery then
-        Signals.request(playerObj, "insertBattery",
+    if battery and sensor and not Signals.batteryCharge(sensor) then
+        Signals.request(self.playerObj, "insertBattery",
             { x = self.px, y = self.py, z = self.pz, itemId = battery:getID() })
+    end
+end
+
+-- Several batteries dragged at once: the fullest goes in.
+function WaterPipesSensorWindow:onBatteryDropped(items)
+    local best, bestCharge = nil, -1
+    for _, item in ipairs(items) do
+        local charge = item:getCurrentUsesFloat()
+        if charge > bestCharge then
+            best, bestCharge = item, charge
+        end
+    end
+    self:insertBattery(best)
+end
+
+function WaterPipesSensorWindow:onBatteryClicked()
+    self:insertBattery(bestBattery(self.playerObj))
+end
+
+function WaterPipesSensorWindow:onBatteryRemove()
+    local sensor = self:resolveSensor()
+    if sensor and Signals.batteryCharge(sensor) then
+        Signals.request(self.playerObj, "removeBattery", { x = self.px, y = self.py, z = self.pz })
     end
 end
 
@@ -323,18 +364,6 @@ function WaterPipesSensorWindow.onRefused(args)
     end
 end
 
--- Whether the player carries a battery, looked up twice a second rather than every frame.
-local BATTERY_CHECK_MS = 500
-
-function WaterPipesSensorWindow:carriesBattery()
-    local now = getTimestampMs()
-    if not self.batteryCheckedAt or now - self.batteryCheckedAt > BATTERY_CHECK_MS then
-        self.batteryCheckedAt = now
-        self.hasBattery = bestBattery(self.playerObj) ~= nil
-    end
-    return self.hasBattery
-end
-
 local REASONS = { atMin = true, atMax = true, towardMax = true, towardMin = true, noEdge = true, noCrop = true,
                   noPower = true }
 
@@ -399,9 +428,8 @@ function WaterPipesSensorWindow:prerender()
     self:drawText(percent(self.max) .. " - " .. getText(invert and "IGUI_WaterPipesSensorOn"
         or "IGUI_WaterPipesSensorOff"), valueX, self.rangeY + ROW + 8, 1, 1, 1, 1, UIFont.Small)
 
-    self.batteryButton:setTitle(getText(charge and "IGUI_WaterPipesSensorRemoveBattery"
-        or "IGUI_WaterPipesSensorInsertBattery"))
-    self.batteryButton:setEnable(charge ~= nil or self:carriesBattery())
+    self.batterySlot:setStoredItemFake(charge and self.batteryTex or nil)
+    self.batteryStatus:setPower(charge or 0)
 
     local header = getText("IGUI_WaterPipesSensorLinked")
     if self.selecting then

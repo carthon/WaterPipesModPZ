@@ -53,7 +53,7 @@ Una estaca que se clava en la tierra junto a un cultivo. Mide cuánta agua tiene
 
 ### Energía
 
-Funciona con la electricidad de la casilla (la red o un generador). Si no hay, usa una Pila: clic derecho en el sensor, **Abrir sensor**, **Poner pila**. Por defecto una pila llena dura 30 días de juego (consulta las [opciones de sandbox](sandbox-settings.md#riego-y-agua-municipal)) y solo se gasta mientras la casilla no tiene electricidad. **Quitar pila** te la devuelve con la carga que le quede.
+Funciona con la electricidad de la casilla (la red o un generador). Si no hay, usa una Pila: clic derecho en el sensor, **Abrir sensor**, y arrastra la pila a la ranura de la pila (o haz clic en la ranura para poner la más cargada que lleves), como en una radio. Por defecto una pila llena dura 30 días de juego (consulta las [opciones de sandbox](sandbox-settings.md#riego-y-agua-municipal)) y solo se gasta mientras la casilla no tiene electricidad. Clic derecho en la ranura te la devuelve con la carga que le quede.
 
 ### Vincular válvulas
 

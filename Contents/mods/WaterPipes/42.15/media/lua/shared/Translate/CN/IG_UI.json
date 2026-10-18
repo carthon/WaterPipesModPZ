@@ -109,8 +109,6 @@
     "IGUI_WaterPipesSensorOff": "关闭",
     "IGUI_WaterPipesSensorInvert": "反转：在最高值时开启，在最低值时关闭",
     "IGUI_WaterPipesSensorApply": "应用",
-    "IGUI_WaterPipesSensorInsertBattery": "装入电池",
-    "IGUI_WaterPipesSensorRemoveBattery": "取出电池",
     "IGUI_WaterPipesSensorLinked": "已关联的阀门",
     "IGUI_WaterPipesSensorNoLinks": "尚未关联阀门",
     "IGUI_WaterPipesSensorSelecting": "点击阀门以关联或取消关联。按Esc结束。",
