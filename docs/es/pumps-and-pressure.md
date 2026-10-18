@@ -6,6 +6,8 @@ La **Bomba de agua** necesita Electrónica 3, Metalistería 2, una Llave para tu
 
 Para funcionar necesita electricidad y tener su interruptor encendido. En una línea que ya tiene agua, solo aumenta la presión. Junto a un pozo, un río o un lago, además saca agua de ellos y la mete en la red. Colócala abajo: puede [aspirar](glossary.md#aspiracion) agua como mucho 7 m por debajo de ella (unas dos plantas), mientras que empujando hacia arriba suma 25 m. Si pones varias bombas encendidas en la misma línea, sus presiones se suman.
 
+**Colocarla junto a una fuente:** la bomba saca agua de un pozo, un río o un lago que esté en su misma casilla o en una de las cuatro casillas pegadas a ella en línea recta (norte, sur, este u oeste). Si la fuente queda en diagonal, no la encuentra. Solo valen los pozos del juego que funcionan (los que te dejan llenar recipientes); los pozos decorativos de mapas o de otros mods no dan agua. La fuente tiene que estar en la misma planta que la bomba o por debajo, dentro del límite de [aspiración](glossary.md#aspiracion).
+
 <div class="wp-gallery wp-gallery--2" markdown>
 ![Bomba con corriente sacando agua de un río o lago](../assets/images/08-pump-source-placement-river-cropped.png){ .wp-screenshot loading=lazy }
 ![Bomba con corriente sacando agua de un pozo, con la ventana Ver estado de la bomba abierta](../assets/images/08-pump-source-placement-well-cropped.png){ .wp-screenshot loading=lazy }

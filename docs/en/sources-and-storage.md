@@ -14,8 +14,8 @@ Network storage settles every two in-game minutes: lower floors fill first, whil
 | Source | Fluid | Default rate or reserve | Setup |
 |---|---|---:|---|
 | Rain collector, amphora, [Useful Barrels barrel](glossary.md#barrel) | Existing contents | Container capacity | Put a floor pipe on its tile; open a Useful Barrels barrel first, since a closed one holds no liquid |
-| Well | Clean water | Pump: 20 L/min | Put a powered pump within suction reach |
-| River or lake | Tainted water | Pump: 20 L/min, unlimited source | Put a powered pump beside open water; enabled by sandbox setting |
+| Well | Clean water | Pump: 20 L/min | Put a powered pump directly north, south, east or west of it (not diagonally); decorative wells from maps or mods don't count |
+| River or lake | Tainted water | Pump: 20 L/min, unlimited source | Put a powered pump on or directly beside open water (not diagonally); enabled by sandbox setting |
 | Town mains | Clean water | 60 L/min at 25 m head | Plumb an indoor fixture before the water shuts off |
 | Fire hydrant | Clean water | 60 L/min; 1,000 L reserve after shutoff | Put a pipe on its tile and open it with a Pipe Wrench |
 

@@ -14,8 +14,8 @@ Cada dos minutos de juego, el agua de la red se reparte entre los depósitos: pr
 | Fuente | Líquido | Caudal o reserva por defecto | Cómo se prepara |
 |---|---|---:|---|
 | Recolector de lluvia, ánfora o [barril de Useful Barrels](glossary.md#barril) | Lo que contenga | Su capacidad | Pon una tubería en su casilla. Un barril de Useful Barrels hay que abrirlo antes: cerrado no guarda líquido |
-| Pozo | Agua limpia | Bomba: 20 L/min | Pon una bomba con corriente lo bastante cerca para que [aspire](glossary.md#aspiracion) |
-| Río o lago | [Agua contaminada](glossary.md#agua-contaminada) | Bomba: 20 L/min, sin límite | Pon una bomba con corriente en la orilla; la opción de sandbox correspondiente tiene que estar activada |
+| Pozo | Agua limpia | Bomba: 20 L/min | Pon una bomba con corriente pegada al pozo en línea recta (norte, sur, este u oeste; en diagonal no vale). Los pozos decorativos de mapas o de otros mods no sirven |
+| Río o lago | [Agua contaminada](glossary.md#agua-contaminada) | Bomba: 20 L/min, sin límite | Pon una bomba con corriente en la orilla o pegada a ella en línea recta (en diagonal no vale); la opción de sandbox correspondiente tiene que estar activada |
 | [Red municipal](glossary.md#red-municipal) | Agua limpia | 60 L/min a 25 m de presión | [Instala](glossary.md#instalar) un aparato dentro de una casa antes del [corte del agua](glossary.md#corte-de-suministros) |
 | [Boca de incendios](glossary.md#boca-de-incendios) | Agua limpia | 60 L/min; después del corte, una reserva de 1000 L | Pon una tubería en su casilla y ábrela con una Llave para tubos |
 

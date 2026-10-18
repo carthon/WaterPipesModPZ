@@ -34,7 +34,7 @@ Esta página sirve para averiguar qué falla en una red que ya está construida.
 ## La bomba no mueve agua
 
 **Síntoma:** los depósitos no se llenan o no hay presión.  
-**Causas posibles:** bomba apagada; sin electricidad; la fuente está demasiado lejos o demasiado abajo; el depósito de destino está lleno; no hay ningún pozo, río ni lago válido cerca.  
+**Causas posibles:** bomba apagada; sin electricidad; la bomba está en diagonal respecto a la fuente (solo mira al norte, sur, este y oeste); el pozo es decorativo y no da agua; la fuente está demasiado abajo; el depósito de destino está lleno; no hay ningún pozo, río ni lago válido cerca.  
 **Qué revisar:** usa **Ver estado de la bomba**, que muestra la corriente, la fuente, la presión de entrada y de salida y lo que aporta.  
 **Solución:** corrige lo que indique. Sin fuente, una bomba puede dar presión al agua que ya está guardada, pero no puede crear agua.  
 **Más información:** [Bombas y presión](pumps-and-pressure.md)
