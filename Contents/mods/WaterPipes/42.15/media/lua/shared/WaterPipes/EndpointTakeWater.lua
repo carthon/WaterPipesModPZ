@@ -9,7 +9,11 @@ local TakeWater = WaterPipes.EndpointTakeWater
 
 -- A plumbed fixture serves exactly what its network holds. A mod that replaces transferFluid keeps
 -- its behaviour on every other fixture.
-TakeWater.vanillaTransfer = TakeWater.vanillaTransfer or rawget(ISTakeWaterAction, "transferFluid")
+local function currentTransfer()
+    return type(ISTakeWaterAction) == "table" and rawget(ISTakeWaterAction, "transferFluid") or nil
+end
+
+TakeWater.vanillaTransfer = TakeWater.vanillaTransfer or currentTransfer()
 
 local wrappers = {}
 
@@ -25,7 +29,7 @@ local function wrap(current)
 end
 
 function TakeWater.install()
-    local current = rawget(ISTakeWaterAction, "transferFluid")
+    local current = currentTransfer()
     if type(current) ~= "function" or type(TakeWater.vanillaTransfer) ~= "function" or wrappers[current] then
         return
     end
