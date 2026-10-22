@@ -100,6 +100,11 @@ local function isExcludedAppliance(worldObject)
     return false
 end
 
+-- An object without a sprite is what a removed mod leaves behind, never something a player piped.
+local function isSpriteless(worldObject)
+    return getSpriteName(worldObject) == nil
+end
+
 local function addUniqueObject(results, seen, worldObject)
     if not worldObject then
         return
@@ -216,7 +221,7 @@ local function getDirectWorldFluidKind(worldObject)
         return false
     end
 
-    if isExcludedAppliance(worldObject) then
+    if isExcludedAppliance(worldObject) or isSpriteless(worldObject) then
         return false
     end
 
@@ -314,7 +319,7 @@ function Adapter.getWorldFluidKind(worldObject)
         return false
     end
 
-    if isExcludedAppliance(worldObject) then
+    if isExcludedAppliance(worldObject) or isSpriteless(worldObject) then
         return false
     end
 
