@@ -597,6 +597,24 @@ function FluidSource.restoreOriginalState(endpoint)
     return state
 end
 
+-- Takes a tank we attached off the fixture. Picking a fixture up hands its components to the item
+-- before anything else runs, so a tank left on it leaves as a container the size of the network.
+function FluidSource.detachTank(endpoint)
+    if not isAuthoritative() or not hasOurTank(endpoint)
+        or not GameEntityFactory or not GameEntityFactory.RemoveComponentType then
+        return false
+    end
+    local capacity = ownCapacity(endpoint)
+    pcall(GameEntityFactory.RemoveComponentType, endpoint, ComponentType.FluidContainer)
+    local modData = getModData(endpoint)
+    if modData then
+        modData[MIRROR_KEY] = nil
+        modData[RESTORED_KEY] = nil
+    end
+    Logger.log(("EndpointFluidSource: took the %.2f L tank off %s"):format(capacity, describeObject(endpoint)))
+    return getFluidContainer(endpoint) == nil
+end
+
 -- Empties the mirror and unlocks input (used on unplumb / pipe removal).
 function FluidSource.clearForEndpoint(endpoint)
     if not isAuthoritative() or not endpoint then
