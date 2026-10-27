@@ -21,7 +21,7 @@ El mod no usa una lista cerrada de objetos: reconoce cualquier aparato que el ju
 4. Úsalo como siempre. Si no le llega agua, usa **Mostrar red de tuberías** para ver qué falla.
 5. Para desconectarlo, elige **Desinstalar**: el aparato vuelve a quedar como estaba, con su agua y su conexión a la red municipal originales.
 
-Si quitas la tubería de su casilla, el aparato también se desconecta; un corte más lejos en la tubería solo lo deja sin agua. Mientras la ciudad siga teniendo agua corriente y la opción de sandbox correspondiente esté activada, un aparato instalado dentro de una casa mete en tu red agua limpia y la presión de la [red municipal](glossary.md#red-municipal).
+Si quitas la tubería de su casilla, el aparato también se desconecta; un corte más lejos en la tubería solo lo deja sin agua. Si usas **Recoger** en un aparato instalado, primero se desinstala y llega a tu inventario sin el agua de la red. Mientras la ciudad siga teniendo agua corriente y la opción de sandbox correspondiente esté activada, un aparato instalado dentro de una casa mete en tu red agua limpia y la presión de la [red municipal](glossary.md#red-municipal).
 
 !!! note "La lavadora"
     Una lavadora conectada se sigue usando desde su ventana de inventario. Cuando su depósito tiene agua, Build 42 puede quitar del menú de clic derecho la opción **Encender**, que ya está repetida en esa ventana.
