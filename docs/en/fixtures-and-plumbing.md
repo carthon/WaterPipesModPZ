@@ -21,7 +21,7 @@ This is capability-based rather than a fixed sprite list, so compatible modded f
 4. Test the normal fixture action and use **Show pipe network** if it has no supply.
 5. Select **Unplumb** to restore the fixture's original fluid and town-water state.
 
-Removing its own pipe also disconnects it; a break farther along merely cuts its supply. While town water remains live and the related sandbox option is enabled, a plumbed indoor fixture can feed clean water and mains pressure back into the network.
+Removing its own pipe also disconnects it; a break farther along merely cuts its supply. Picking up a plumbed fixture unplumbs it first, so it goes into your inventory without the network's water. While town water remains live and the related sandbox option is enabled, a plumbed indoor fixture can feed clean water and mains pressure back into the network.
 
 !!! note "Washing-machine interface"
     A connected washer remains operable through its inventory window. Build 42 may hide the redundant **Turn On** entry from the tile's right-click menu once the washer's fluid container contains water.
