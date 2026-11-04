@@ -120,13 +120,14 @@ function Compat.register()
     local signals = WaterPipes.Signals
     if not signalsHooked and signals and signals.addPowerSource and signals.addSensorListener then
         signalsHooked = true
-        signals.addPowerSource(Compat.poweredAt)
+        signals.addPowerSource(function(square) return Compat.poweredAt(square, "waterPipesMoistureSensor") end)
         signals.addSensorListener(Compat.refreshAt)
     end
 end
 
--- True while Electric Overhaul's cable feeds a piece on this square (a sensor: current on its IN).
-function Compat.poweredAt(square)
+-- True while Electric Overhaul's cable feeds the piece of `kind` on this square (a sensor: current on its IN).
+-- Each piece asks as itself: the cable powers devices, not the squares around them.
+function Compat.poweredAt(square, kind)
     local found = api()
     if not found then
         return false
@@ -135,7 +136,7 @@ function Compat.poweredAt(square)
     if not x then
         return false
     end
-    local ok, powered = pcall(found.isPoweredAt, x, y, z)
+    local ok, powered = pcall(found.isPoweredAt, x, y, z, kind)
     return ok and powered == true
 end
 

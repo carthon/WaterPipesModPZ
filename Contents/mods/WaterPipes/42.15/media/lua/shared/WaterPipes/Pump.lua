@@ -83,7 +83,7 @@ function Pump.hasPower(worldObject)
         return false
     end
     local square = worldObject.getSquare and worldObject:getSquare() or nil
-    return ElectricOverhaul.poweredAt(square) or squareHasPower(square)
+    return ElectricOverhaul.poweredAt(square, "waterPipesPump") or squareHasPower(square)
 end
 
 -- Absent key means ON -- see PUMP_ENABLED_KEY. Every pump that predates the switch keeps working.

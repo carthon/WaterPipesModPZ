@@ -74,7 +74,7 @@ function Purifier.isWorking(worldObject)
         return false
     end
     local square = worldObject.getSquare and worldObject:getSquare() or nil
-    return ElectricOverhaul.poweredAt(square) or squareHasPower(square)
+    return ElectricOverhaul.poweredAt(square, "waterPipesPurifier") or squareHasPower(square)
 end
 
 -- ===== Filter condition (maintenance) =====
