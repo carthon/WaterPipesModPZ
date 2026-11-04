@@ -35,7 +35,7 @@ Las tuberías en las otras tres casillas no estorban.
 
 ## Funcionamiento y filtro
 
-Con corriente, toma hasta 20 L/min de agua contaminada y limpia hasta 10 L/min (en su ventana, la cantidad aparece en «u», unidades; una unidad es un litro). Tiene dos depósitos internos de 50 L: uno para el agua que entra y otro para la que sale limpia. No hace nada con el agua que ya está limpia ni con líquidos que no sean agua. Un depósito externo en el lado limpio es opcional, pero recomendable: sin él, el purificador se para en cuanto se llenan sus 50 L de salida.
+Con corriente (la electricidad de su casilla o el cable de [Electric Overhaul](compatibility.md#electric-overhaul)), toma hasta 20 L/min de agua contaminada y limpia hasta 10 L/min (en su ventana, la cantidad aparece en «u», unidades; una unidad es un litro). Tiene dos depósitos internos de 50 L: uno para el agua que entra y otro para la que sale limpia. No hace nada con el agua que ya está limpia ni con líquidos que no sean agua. Un depósito externo en el lado limpio es opcional, pero recomendable: sin él, el purificador se para en cuanto se llenan sus 50 L de salida.
 
 El filtro empieza al 100 %. Con el desgaste por defecto, limpia unos 5000 L antes de atascarse. Para repararlo, haz clic derecho, elige **Reparar filtro** y gasta 1 Carbón vegetal y 2 Retales de tela; vuelve al 100 %. **Abrir purificador** muestra si tiene corriente, cuánta agua hay en la entrada y en la salida, a qué ritmo filtra y cómo está el filtro. El zumbido de la máquina se puede quitar en **Opciones → Mods → Water Pipes**.
 

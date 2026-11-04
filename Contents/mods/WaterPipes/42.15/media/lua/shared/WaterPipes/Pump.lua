@@ -10,7 +10,9 @@ require "WaterPipes/State"
 require "WaterPipes/Router"
 require "WaterPipes/Purifier"
 require "WaterPipes/Logger"
+require "WaterPipes/ElectricOverhaulCompat"
 
+local ElectricOverhaul = WaterPipes.ElectricOverhaulCompat
 local Invalidate = WaterPipes.Invalidate
 local Constants = WaterPipes.Constants
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
@@ -81,7 +83,7 @@ function Pump.hasPower(worldObject)
         return false
     end
     local square = worldObject.getSquare and worldObject:getSquare() or nil
-    return squareHasPower(square)
+    return ElectricOverhaul.poweredAt(square) or squareHasPower(square)
 end
 
 -- Absent key means ON -- see PUMP_ENABLED_KEY. Every pump that predates the switch keeps working.
@@ -105,6 +107,7 @@ function Pump.setEnabled(worldObject, enabled)
     -- the WaterPipes table rather than required at the top: Hydraulics already requires this module.
     local Hydraulics = WaterPipes.Hydraulics
     Invalidate.pumpStateChanged()
+    ElectricOverhaul.refresh(worldObject.getSquare and worldObject:getSquare() or nil)
 end
 
 function Pump.isPowered(worldObject)

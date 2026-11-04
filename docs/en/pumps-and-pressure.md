@@ -4,7 +4,7 @@
 
 A **Water Pump** requires Electrical 3, Welding 2, a Pipe Wrench, 2 Welding Torch uses, 1 Welding Rods use, 2 Iron Pipes, 4 Steel Sheets, 2 Scrap Electronics, and 1 Wire. Construction awards 30 Electrical XP and 20 Welding XP. Rotate before placement to choose its north–south or east–west axis.
 
-A pump needs electrical power and its manual switch must be on. On an existing supply line it acts as a booster; beside a well or open water it also draws water into the network. Put it low: the default suction limit is 7 m (about two floors), while it can add 25 m of output pressure. Powered pumps in series add their pressure.
+A pump needs electrical power (the tile's, or [Electric Overhaul](compatibility.md#electric-overhaul)'s cable) and its manual switch must be on. On an existing supply line it acts as a booster; beside a well or open water it also draws water into the network. Put it low: the default suction limit is 7 m (about two floors), while it can add 25 m of output pressure. Powered pumps in series add their pressure.
 
 **Placing it at a source:** the pump draws from a well or open water on its own tile or on one of the four tiles directly north, south, east or west of it. A source on a diagonal tile is not detected. Only the game's own working wells count (the ones you can fill containers from); decorative wells from custom maps or other mods are not water sources. The source must be on the pump's floor or below it, within the suction limit.
 

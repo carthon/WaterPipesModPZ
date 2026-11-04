@@ -7,8 +7,10 @@ require "WaterPipes/Logger"
 require "WaterPipes/PipeObjectUtils"
 require "WaterPipes/Pressure"
 require "WaterPipes/World"
+require "WaterPipes/ElectricOverhaulCompat"
 
 local Constants = WaterPipes.Constants
+local ElectricOverhaul = WaterPipes.ElectricOverhaulCompat
 local Invalidate = WaterPipes.Invalidate
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
@@ -72,7 +74,7 @@ function Purifier.isWorking(worldObject)
         return false
     end
     local square = worldObject.getSquare and worldObject:getSquare() or nil
-    return squareHasPower(square)
+    return ElectricOverhaul.poweredAt(square) or squareHasPower(square)
 end
 
 -- ===== Filter condition (maintenance) =====

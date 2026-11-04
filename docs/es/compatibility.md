@@ -24,6 +24,15 @@ El mismo objeto de Workshop trae un segundo mod opcional, **Water Pipes - Viewpo
 - Con **Viewpoint Placement Fix**, la vista previa al construir también muestra el modelo 3D.
 - En las vistas en primera y tercera persona, [Mostrar red de tuberías](glossary.md#mostrar-red) no resalta nada: Project Viewpoint no dibuja ahí los resaltados de objetos del juego. Cambia a la vista isométrica de Viewpoint para ver la red.
 
+## Electric Overhaul (corriente por cable) { #electric-overhaul }
+
+Con **Electric Overhaul** activado, la Bomba de agua, el Purificador de agua (eléctrico) y el Sensor de humedad también pueden tomar la corriente de su cable. Water Pipes no lo necesita.
+
+- Lleva el cable a la casilla de la pieza: la casilla de tubería de la bomba, la casilla del router del purificador, la casilla de tierra del sensor. La pieza se une sola a la línea de esa casilla, como uno de sus aparatos.
+- Mientras esa línea tiene corriente, la pieza tiene corriente. La electricidad propia de la casilla sigue funcionando como siempre.
+- En el modo completo de Electric Overhaul un generador no da corriente a las casillas de alrededor: el cable es el modo de que llegue a una bomba.
+- En el cable cuentan como cualquier otro aparato: la bomba consume 0,08 mientras está encendida (lo mismo que una nevera), el purificador 0,05 y el sensor 0,005. Una bomba apagada no consume nada.
+
 ## Servidores dedicados: lista de comprobación
 
 1. Instala el mod desde Steam Workshop (ID `3739595559`) en el servidor y en todos los jugadores.

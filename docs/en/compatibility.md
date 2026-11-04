@@ -24,6 +24,15 @@ The same Workshop item includes a second, optional mod, **Water Pipes - Viewpoin
 - With **Viewpoint Placement Fix**, building previews also show the 3D model.
 - In the first- and third-person views, [Show pipe network](glossary.md#show-pipe-network) does not outline anything: Project Viewpoint does not draw the game's object highlights there. Switch to Viewpoint's isometric view to see the network.
 
+## Electric Overhaul (cable power) { #electric-overhaul }
+
+With **Electric Overhaul** enabled, the Water Pump, the Water Purifier (Electric) and the Soil Moisture Sensor can also take their power from its cable. Water Pipes does not need it.
+
+- Lay the cable onto the piece's tile: the pump's pipe tile, the purifier's router tile, the sensor's soil tile. The piece joins that tile's line by itself, as one of its devices.
+- While that line has current, the piece has power. The tile's own electricity still works as before.
+- In Electric Overhaul's full mode a generator powers no tiles around it: the cable is how it reaches a pump.
+- On the cable they count like any other device: the pump draws 0.08 while switched on (as much as a fridge), the purifier 0.05, the sensor 0.005. A pump switched off draws nothing.
+
 ## Dedicated-server checklist
 
 1. Install Workshop item `3739595559` for server and clients.

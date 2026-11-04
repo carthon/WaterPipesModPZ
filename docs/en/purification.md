@@ -35,7 +35,7 @@ Pipes on the other three tiles do not get in the way.
 
 ## Operation and filter
 
-While powered, it draws tainted water at up to 20 L/min and converts up to 10 L/min (its window shows "u", units; one unit is one litre). Its internal input and output tanks hold 50 L each. It does not process clean water or incompatible non-water liquids. External clean-side storage is optional, but recommended: without it, processing pauses when the 50 L output tank fills.
+While powered (by its tile's electricity or [Electric Overhaul](compatibility.md#electric-overhaul)'s cable), it draws tainted water at up to 20 L/min and converts up to 10 L/min (its window shows "u", units; one unit is one litre). Its internal input and output tanks hold 50 L each. It does not process clean water or incompatible non-water liquids. External clean-side storage is optional, but recommended: without it, processing pauses when the 50 L output tank fills.
 
 The filter starts at 100%. At the default wear rate it cleans about 5,000 L before clogging. Right-click **Repair filter** with 1 Charcoal and 2 Rags; repair returns it to 100%. **Open Purifier** reports power, input, output, rate, and filter condition. Ambient machine sound can be disabled under **Options → Mods → Water Pipes**.
 
