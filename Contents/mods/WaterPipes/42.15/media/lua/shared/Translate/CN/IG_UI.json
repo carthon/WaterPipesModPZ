@@ -51,6 +51,7 @@
     "IGUI_WaterPipesHydrantReserve": "干管中剩余的水：%1 升。",
     "IGUI_WaterPipesHydrantNeedsPipe": "在其格子上铺设水管即可接入你的网络。",
     "IGUI_WaterPipesPumpName": "水泵",
+    "IGUI_WaterPipesValveName": "截止阀",
     "IGUI_WaterPipesPumpRunning": "运行中",
     "IGUI_WaterPipesPumpOff": "已关闭",
     "IGUI_WaterPipesPumpNoPower": "没有电力",

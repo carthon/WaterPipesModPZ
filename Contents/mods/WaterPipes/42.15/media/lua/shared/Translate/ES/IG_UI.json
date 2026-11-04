@@ -51,6 +51,7 @@
     "IGUI_WaterPipesHydrantReserve": "Agua restante en la conducción: %1 L.",
     "IGUI_WaterPipesHydrantNeedsPipe": "Pon una tubería en su casilla para conectarla a tu red.",
     "IGUI_WaterPipesPumpName": "Bomba de agua",
+    "IGUI_WaterPipesValveName": "Válvula de corte",
     "IGUI_WaterPipesPumpRunning": "En marcha",
     "IGUI_WaterPipesPumpOff": "Apagada",
     "IGUI_WaterPipesPumpNoPower": "Sin corriente",

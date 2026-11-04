@@ -26,12 +26,13 @@ The same Workshop item includes a second, optional mod, **Water Pipes - Viewpoin
 
 ## Electric Overhaul (cable power) { #electric-overhaul }
 
-With **Electric Overhaul** enabled, the Water Pump, the Water Purifier (Electric) and the Soil Moisture Sensor can also take their power from its cable. Water Pipes does not need it.
+With **Electric Overhaul** enabled, the Water Pump, the Water Purifier (Electric), the Shut-off Valve and the Soil Moisture Sensor join its cable as devices. Water Pipes does not need it, and without it they work as before.
 
-- Lay the cable onto the piece's tile: the pump's pipe tile, the purifier's router tile, the sensor's soil tile. The piece joins that tile's line by itself, as one of its devices.
-- While that line has current, the piece has power. The tile's own electricity still works as before.
-- In Electric Overhaul's full mode a generator powers no tiles around it: the cable is how it reaches a pump.
-- On the cable they count like any other device: the pump draws 0.08 while switched on (as much as a fridge), the purifier 0.05, the sensor 0.005. A pump switched off draws nothing.
+- Lay the cable onto the piece's tile: the pump's or the valve's pipe tile, the purifier's router tile, the sensor's soil tile. The piece joins that tile's line by itself.
+- **Pump and purifier:** one port, **IN**. While its line has current, the piece has power. The tile's own electricity still works as before. In Electric Overhaul's full mode a generator powers no tiles around it: the cable is how it reaches a pump.
+- **Shut-off Valve:** the ports of Electric Overhaul's Door Controller, **IN**, **S**, **R** and **T**. With current on IN, current arriving on S opens it, on R closes it, on T turns it the other way. It counts as a turn by hand: a valve linked to a moisture sensor follows the same rules as when you turn it yourself. An order that arrives while its tile is not loaded is carried out when it loads. You can still turn it by hand, with or without current.
+- **Soil Moisture Sensor:** **IN** and **OUT**, like Electric Overhaul's sensors. While its signal is on, OUT gets current: IN's while IN's line has a source of its own (it then reads on that current), otherwise its own Battery's. It still opens and closes the valves linked to it as before. For now a Battery gives OUT full current; how much it can carry, and how fast that drains it, comes with a later Electric Overhaul update.
+- On the cable they count like any other device: the pump draws 0.08 while switched on (as much as a fridge), the purifier 0.05, the valve and the sensor 0.005 each. A pump switched off draws nothing.
 
 ## Dedicated-server checklist
 

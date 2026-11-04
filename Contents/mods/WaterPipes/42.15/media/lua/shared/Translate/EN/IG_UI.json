@@ -51,6 +51,7 @@
     "IGUI_WaterPipesHydrantReserve": "Water left in the main: %1 L.",
     "IGUI_WaterPipesHydrantNeedsPipe": "Lay a pipe on its tile to connect it to your network.",
     "IGUI_WaterPipesPumpName": "Water Pump",
+    "IGUI_WaterPipesValveName": "Shut-off Valve",
     "IGUI_WaterPipesPumpRunning": "Running",
     "IGUI_WaterPipesPumpOff": "Switched off",
     "IGUI_WaterPipesPumpNoPower": "No power",

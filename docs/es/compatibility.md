@@ -26,12 +26,13 @@ El mismo objeto de Workshop trae un segundo mod opcional, **Water Pipes - Viewpo
 
 ## Electric Overhaul (corriente por cable) { #electric-overhaul }
 
-Con **Electric Overhaul** activado, la Bomba de agua, el Purificador de agua (eléctrico) y el Sensor de humedad también pueden tomar la corriente de su cable. Water Pipes no lo necesita.
+Con **Electric Overhaul** activado, la Bomba de agua, el Purificador de agua (eléctrico), la Válvula de corte y el Sensor de humedad se unen a su cable como aparatos. Water Pipes no lo necesita y, sin él, funcionan como siempre.
 
-- Lleva el cable a la casilla de la pieza: la casilla de tubería de la bomba, la casilla del router del purificador, la casilla de tierra del sensor. La pieza se une sola a la línea de esa casilla, como uno de sus aparatos.
-- Mientras esa línea tiene corriente, la pieza tiene corriente. La electricidad propia de la casilla sigue funcionando como siempre.
-- En el modo completo de Electric Overhaul un generador no da corriente a las casillas de alrededor: el cable es el modo de que llegue a una bomba.
-- En el cable cuentan como cualquier otro aparato: la bomba consume 0,08 mientras está encendida (lo mismo que una nevera), el purificador 0,05 y el sensor 0,005. Una bomba apagada no consume nada.
+- Lleva el cable a la casilla de la pieza: la casilla de tubería de la bomba o de la válvula, la casilla del router del purificador, la casilla de tierra del sensor. La pieza se une sola a la línea de esa casilla.
+- **Bomba y purificador:** un puerto, **IN**. Mientras su línea tiene corriente, la pieza tiene corriente. La electricidad propia de la casilla sigue funcionando como siempre. En el modo completo de Electric Overhaul un generador no da corriente a las casillas de alrededor: el cable es el modo de que llegue a una bomba.
+- **Válvula de corte:** los puertos del Controlador de puertas de Electric Overhaul, **IN**, **S**, **R** y **T**. Con corriente en IN, la corriente que llega a S la abre, la que llega a R la cierra y la que llega a T la gira al contrario. Cuenta como girarla a mano: una válvula vinculada a un sensor de humedad sigue las mismas reglas que cuando la giras tú. Una orden que llega mientras su casilla no está cargada se cumple cuando se carga. Puedes seguir girándola a mano, con o sin corriente.
+- **Sensor de humedad:** **IN** y **OUT**, como los sensores de Electric Overhaul. Mientras su señal está activa, OUT tiene corriente: la de IN mientras la línea de IN tiene una fuente propia (y entonces lee con esa corriente); si no, la de su propia Pila. Sigue abriendo y cerrando como siempre las válvulas vinculadas. De momento una Pila da a OUT corriente completa; cuánta puede dar y cuánto la gasta llegará en una actualización posterior de Electric Overhaul.
+- En el cable cuentan como cualquier otro aparato: la bomba consume 0,08 mientras está encendida (lo mismo que una nevera), el purificador 0,05, y la válvula y el sensor 0,005 cada uno. Una bomba apagada no consume nada.
 
 ## Servidores dedicados: lista de comprobación
 

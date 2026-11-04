@@ -320,6 +320,19 @@ function Signals.addPowerSource(fn)
     powerSources[#powerSources + 1] = fn
 end
 
+-- Told when a sensor's state, or whether its battery holds charge, moves: each fn(x, y, z).
+local sensorListeners = {}
+
+function Signals.addSensorListener(fn)
+    sensorListeners[#sensorListeners + 1] = fn
+end
+
+function Signals.sensorChanged(x, y, z)
+    for _, fn in ipairs(sensorListeners) do
+        fn(x, y, z)
+    end
+end
+
 -- Tile power as vanilla lamps read it: a generator or the grid reaches the tile, or the grid is on and
 -- the tile is indoors. Or a source added above says so.
 function Signals.squareHasPower(square)
