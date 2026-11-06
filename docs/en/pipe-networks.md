@@ -33,6 +33,7 @@ Use the game's :material-hammer-screwdriver: **Disassemble** action rather than 
 - A clay pipe returns nothing: the fired segment is spent when laid.
 - Concealed pipe revealed by **Plumb this building** returns nothing because that inspection is priced per fixture.
 - Destroying a pipe with a sledgehammer, fire, or damage returns nothing.
-- A valve or gauge removed with its underlying pipe returns each of its ingredients independently at 90%.
+- A valve or gauge removed with its underlying pipe returns each of its ingredients independently at 90%, also when a sledgehammer takes the pipe.
+- Disassembling a valve or gauge on its own returns the same. A sledgehammer on the valve or gauge itself returns nothing, and the pipe stays.
 
 Removing the pipe from a plumbed fixture or generator's own tile disconnects it automatically.

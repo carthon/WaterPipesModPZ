@@ -941,7 +941,7 @@ local function noteRemoval(object, mode, player)
     player = (told and told.player) or player
     local existing = pending[key]
     if existing then
-        -- a sledgehammer raises both events: destroyed wins
+        -- something broken raises both events: destroyed wins
         if mode == "destroy" or existing.mode == "destroy" then
             existing.mode = "destroy"
         end
