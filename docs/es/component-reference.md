@@ -95,7 +95,7 @@ Cada tubería oculta gasta un cubo entero; los cubos válidos están en [Redes d
 - **Para qué sirve:** mide la humedad del cultivo de su casilla y abre las Válvulas de corte vinculadas cuando el cultivo se seca hasta un mínimo; las vuelve a cerrar al llegar a un máximo (80 % y 95 % por defecto).
 - **Receta:** Electrónica 3, Destornillador (no se gasta), 1 Sensor de movimiento, 1 Receptor, 1 Cable Eléctrico y 2 Chatarra electrónica.
 - **Colocación:** en tierra cultivable o en una casilla con surco o cultivo, uno por casilla; gíralo con **R** para elegir su esquina. Comparte casilla con cualquier otra pieza.
-- **Energía:** la electricidad de la casilla o una Pila (30 días por defecto).
+- **Energía:** la electricidad de la casilla, el cable de [Electric Overhaul](compatibility.md#electric-overhaul) o una Pila (30 días por defecto).
 - **Más información:** [Sensor de humedad](irrigation.md#sensor-de-humedad).
 
 ## Receta relacionada

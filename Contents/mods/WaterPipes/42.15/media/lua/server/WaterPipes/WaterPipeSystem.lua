@@ -30,6 +30,7 @@ require "WaterPipes/API"
 require "WaterPipes/PipeAutotile"
 require "WaterPipes/World"
 require "WaterPipes/ActionWatch"
+require "WaterPipes/Sledgehammer"
 
 local Invalidate = WaterPipes.Invalidate
 local Adapter = WaterPipes.ContainerAdapter
@@ -41,6 +42,7 @@ local EndpointObjects = WaterPipes.EndpointObjects
 local GeneratorFuel = WaterPipes.GeneratorFuel
 local Logger = WaterPipes.Logger
 local PipeObjectUtils = WaterPipes.PipeObjectUtils
+local Sledgehammer = WaterPipes.Sledgehammer
 local Profiler = WaterPipes.Profiler
 local PipeAutotile = WaterPipes.PipeAutotile
 local Purifier = WaterPipes.Purifier
@@ -1293,12 +1295,13 @@ local function processPendingPipeRemovals()
         -- Only unregister once the square is loaded and no pipe remains there.
         if square and PipeObjectUtils.getPipeOnSquare(square) == nil then
             System.unregisterPipeAt(position.x, position.y, position.z)
-            takeDownFittingsOn(square, position.returnsMaterial)
+            takeDownFittingsOn(square, position.fittingsReturn)
         end
     end
 end
 
-local function schedulePipeRemoval(object, returnsMaterial)
+-- `fittingsReturn`: what stands on the pipe pays for itself, even when the pipe does not (a sledgehammer).
+local function schedulePipeRemoval(object, returnsMaterial, fittingsReturn)
     if not object or not PipeObjectUtils.isPipeObject(object) then
         return
     end
@@ -1314,7 +1317,8 @@ local function schedulePipeRemoval(object, returnsMaterial)
     -- OR-ed: a square whose pipe was DISMANTLED pays for its fittings even if a second event for the
     -- same tile (a destroyed neighbour object) arrives claiming nothing comes back.
     pendingPipeRemovals[key] = { x = x, y = y, z = z,
-        returnsMaterial = (queued and queued.returnsMaterial) or (returnsMaterial and true or false) }
+        returnsMaterial = (queued and queued.returnsMaterial) or (returnsMaterial and true or false),
+        fittingsReturn = (queued and queued.fittingsReturn) or (fittingsReturn and true or false) }
 
     -- The material has to be read NOW: by the time the removal is confirmed next tick the object and its
     -- modData are gone.
@@ -1402,8 +1406,8 @@ end
 
 -- How much of a tank is still standing on the footprint anchored here. Asked at SCHEDULE time, while
 -- the object being removed is still on its square: a second event for a tank that already came down
--- answers 0, and that is what stops a sledgehammered tank from being paid for as a dismantle when the
--- two events it raises land in different ticks.
+-- answers 0, and that is what stops a broken tank from being paid for as a dismantle when the two events
+-- it raises land in different ticks.
 local function tankPartsStandingAt(x, y, z)
     local standing = 0
     for _, offset in ipairs(Purifier.FOOTPRINT_OFFSETS) do
@@ -1471,7 +1475,7 @@ local function processPendingPurifierRemovals()
 end
 
 -- `returnsMaterial` is false for destruction and true for a dismantle, and once one path has said false
--- for a tank the other cannot talk it back up: a sledgehammer raises BOTH events for the same object.
+-- for a tank the other cannot talk it back up: something broken raises BOTH events for the same object.
 local function schedulePurifierRemoval(object, returnsMaterial)
     if not object or not Purifier.isTankPart(object) then
         return
@@ -1543,11 +1547,14 @@ local function scheduleFittingRemoval(object)
         return
     end
 
-    local x, y, z = square:getX(), square:getY(), square:getZ()
-    for _, itemType in ipairs(returns) do
-        pendingMaterialDrops[#pendingMaterialDrops + 1] = {
-            x = x, y = y, z = z, object = object, itemType = itemType,
-        }
+    -- Hit by the sledgehammer itself it gives nothing. The tick below still settles a valve that left.
+    if not Sledgehammer.isSwinging() then
+        local x, y, z = square:getX(), square:getY(), square:getZ()
+        for _, itemType in ipairs(returns) do
+            pendingMaterialDrops[#pendingMaterialDrops + 1] = {
+                x = x, y = y, z = z, object = object, itemType = itemType,
+            }
+        end
     end
 
     if not pendingRemovalScheduled and Events and Events.OnTick then
@@ -1559,8 +1566,8 @@ local function scheduleFittingRemoval(object)
 end
 
 local function onDestroyIsoThumpable(thump, player)
-    -- Sledgehammer: destruction, not dismantling -- nothing comes back, as before.
-    schedulePipeRemoval(thump, false)
+    -- Broken by a zombie or a weapon -- nothing comes back. The sledgehammer never comes this way.
+    schedulePipeRemoval(thump, false, false)
     schedulePurifierRemoval(thump, false)
 end
 
@@ -1700,10 +1707,11 @@ end
 
 -- Fires for moveable "Pick Up" and other lua-driven removals; without it a removed pipe would stay
 -- registered and its endpoints would still read as connected. Dismantling comes through here, so this
--- path hands the build material back.
+-- path hands the build material back. So does the sledgehammer, which gets nothing: only its action tells.
 local function onObjectAboutToBeRemoved(object)
-    schedulePipeRemoval(object, true)
-    schedulePurifierRemoval(object, true)
+    local returnsMaterial = not Sledgehammer.isSwinging()
+    schedulePipeRemoval(object, returnsMaterial, true)
+    schedulePurifierRemoval(object, returnsMaterial)
     scheduleFittingRemoval(object)
     local ok, err = pcall(noteVesselEvent, object)
     if not ok then

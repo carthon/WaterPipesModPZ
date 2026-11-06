@@ -24,6 +24,16 @@ El mismo objeto de Workshop trae un segundo mod opcional, **Water Pipes - Viewpo
 - Con **Viewpoint Placement Fix**, la vista previa al construir también muestra el modelo 3D.
 - En las vistas en primera y tercera persona, [Mostrar red de tuberías](glossary.md#mostrar-red) no resalta nada: Project Viewpoint no dibuja ahí los resaltados de objetos del juego. Cambia a la vista isométrica de Viewpoint para ver la red.
 
+## Electric Overhaul (corriente por cable) { #electric-overhaul }
+
+Con **Electric Overhaul** activado, la Bomba de agua, el Purificador de agua (eléctrico), la Válvula de corte y el Sensor de humedad se unen a su cable como aparatos. Water Pipes no lo necesita y, sin él, funcionan como siempre.
+
+- Lleva el cable a la casilla de la pieza: la casilla de tubería de la bomba o de la válvula, la casilla del router del purificador, la casilla de tierra del sensor. La pieza se une sola a la línea de esa casilla.
+- **Bomba y purificador:** un puerto, **IN**. Mientras su línea tiene corriente, la pieza tiene corriente. La electricidad propia de la casilla sigue funcionando como siempre. En el modo completo de Electric Overhaul un generador no da corriente a las casillas de alrededor: el cable es el modo de que llegue a una bomba.
+- **Válvula de corte:** los puertos del Controlador de puertas de Electric Overhaul, **IN**, **S**, **R** y **T**. Con 120 V en IN, la corriente que llega a S la abre, la que llega a R la cierra y la que llega a T la gira al contrario; esa corriente puede ser de cualquier voltaje. Cuenta como girarla a mano: una válvula vinculada a un sensor de humedad sigue las mismas reglas que cuando la giras tú. Una orden que llega mientras su casilla no está cargada se cumple cuando se carga. Puedes seguir girándola a mano, con o sin corriente.
+- **Sensor de humedad:** **IN** y **OUT**, como los sensores de Electric Overhaul. Mientras su señal está activa, OUT tiene corriente: la de IN mientras la línea de IN tiene una fuente propia (y entonces lee con esa corriente); si no, la de su propia Pila, a 1,5 V. Sigue abriendo y cerrando como siempre las válvulas vinculadas. Con la Pila, la línea es de señal: da órdenes en la S, la R o la T de cualquier válvula o Controlador de puertas y hace funcionar los sensores, transmisores, receptores y Cuadros de control de Electric Overhaul, pero ninguna válvula ni Controlador de puertas con solo eso en su IN, ninguna bomba, purificador, lámpara ni electrodoméstico, no carga ningún banco de baterías y un cargador de baterías de coche ahí no carga nada. Un banco de baterías no se carga detrás del OUT del sensor ni siquiera mientras pasa la corriente de IN.
+- En el cable cuentan como cualquier otro aparato: la bomba consume 0,08 mientras está encendida (lo mismo que una nevera), el purificador 0,05, y la válvula y el sensor 0,005 cada uno. Una bomba apagada no consume nada.
+
 ## Servidores dedicados: lista de comprobación
 
 1. Instala el mod desde Steam Workshop (ID `3739595559`) en el servidor y en todos los jugadores.

@@ -223,8 +223,9 @@ end
 
 -- ===== Reading sensors =====
 
--- Battery percent each sensor last sent to the clients, by tile.
+-- Battery percent each sensor last sent to the clients, by tile; and whether it held charge, last said.
 local sentPercent = {}
+local saidCharged = {}
 
 local function writeResult(sensor, result)
     local modData = Signals.modDataOf(sensor)
@@ -254,9 +255,14 @@ local function writeResult(sensor, result)
         transmit(sensor)
     end
     Signals.applySensorSprite(sensor)
+    local x, y, z = coordsOf(sensor)
     if before ~= result.state then
-        local x, y, z = coordsOf(sensor)
         Signals.notifyClients("sensorState", { x = x, y = y, z = z, state = result.state })
+    end
+    local charged = charge ~= nil and charge > 0
+    if before ~= result.state or saidCharged[key] ~= charged then
+        saidCharged[key] = charged
+        Signals.sensorChanged(x, y, z)
     end
 end
 
@@ -935,7 +941,7 @@ local function noteRemoval(object, mode, player)
     player = (told and told.player) or player
     local existing = pending[key]
     if existing then
-        -- a sledgehammer raises both events: destroyed wins
+        -- something broken raises both events: destroyed wins
         if mode == "destroy" or existing.mode == "destroy" then
             existing.mode = "destroy"
         end

@@ -33,6 +33,7 @@ Usa la acción :material-hammer-screwdriver: **Desmontar** del juego, no la herr
 - Una tubería de arcilla no devuelve nada: el segmento se gasta al colocarlo.
 - Las tuberías ocultas que aparecen con **Conectar la fontanería del edificio** no devuelven nada, porque esa acción se paga por aparato conectado, no por tubería.
 - Si la tubería se destruye (con una Almádena, por el fuego o por daños), no devuelve nada.
-- Si desmontas una tubería que tiene encima una válvula o un manómetro, cada material de ese componente se recupera por separado, con un 90 % de probabilidades cada uno.
+- Si desmontas una tubería que tiene encima una válvula o un manómetro, cada material de ese componente se recupera por separado, con un 90 % de probabilidades cada uno, también si la tubería la rompe una Almádena.
+- Desmontar una válvula o un manómetro por separado devuelve lo mismo. Una Almádena sobre la propia válvula o el propio manómetro no devuelve nada, y la tubería se queda.
 
 Si quitas la tubería de la casilla de un aparato o un generador instalado, se desconecta automáticamente.

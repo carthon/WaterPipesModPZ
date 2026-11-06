@@ -93,7 +93,7 @@ Each concealed pipe consumes one complete prepared bucket; see [Pipe networks](p
 - **Purpose:** reads the moisture of the crop on its tile and opens the Shut-off Valves linked to it when the crop dries to a minimum, closing them again at a maximum (80 % and 95 % by default).
 - **Recipe:** Electrical 3, Screwdriver (kept), 1 Motion Sensor, 1 Receiver, 1 Electrical Wire, and 2 Scrap Electronics.
 - **Placement:** on plantable soil or a furrow or crop tile, one per tile; rotate with **R** to pick its corner. It shares the tile with any other piece.
-- **Power:** the tile's electricity, or a Battery (30 days by default).
+- **Power:** the tile's electricity, [Electric Overhaul](compatibility.md#electric-overhaul)'s cable, or a Battery (30 days by default).
 - **Details:** [Soil Moisture Sensor](irrigation.md#moisture-sensor).
 
 ## Related recipe
