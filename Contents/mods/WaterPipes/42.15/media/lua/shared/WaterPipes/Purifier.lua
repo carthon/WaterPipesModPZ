@@ -57,11 +57,27 @@ end
 -- ===== Working predicate =====
 
 local function squareHasPower(square)
-    if not square or not square.haveElectricity then
+    if not square then
         return false
     end
-    local ok, powered = pcall(square.haveElectricity, square)
-    return ok and powered or false
+
+    -- haveElectricity() only reports a nearby generator.  Indoor fixtures can
+    -- also run from the vanilla electrical grid before the power shutoff.
+    if square.haveElectricity then
+        local ok, powered = pcall(square.haveElectricity, square)
+        if ok and powered then
+            return true
+        end
+    end
+
+    if square.hasGridPower and square.getRoom then
+        local ok, gridPowered = pcall(square.hasGridPower, square)
+        if ok and gridPowered and square:getRoom() ~= nil then
+            return true
+        end
+    end
+
+    return false
 end
 
 -- The purifier works while its tile has power (electric tier only for now). "Working" is about POWER
