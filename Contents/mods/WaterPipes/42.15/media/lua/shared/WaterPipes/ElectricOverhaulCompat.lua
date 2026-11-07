@@ -10,8 +10,8 @@ require "WaterPipes/World"
 local Compat = WaterPipes.ElectricOverhaulCompat
 local World = WaterPipes.World
 
--- The vanilla Battery a sensor runs on. Electric Overhaul keeps it for when its cable carries voltages.
-Compat.SENSOR_BATTERY_VOLTS = 1.5
+-- What the vanilla Battery a sensor runs on gives to the line on its OUT.
+Compat.SENSOR_BATTERY_POWER = 0.005
 
 -- What an order from the cable does to a valve: a hand on its switch (SignalBus.setReceiverSwitch), so its
 -- moisture sensors keep deciding as they do for a hand. False when it cannot be done now (tile away, or a
@@ -49,14 +49,14 @@ Compat.KINDS = {
     },
     {
         as = { "registerReceiver" },
-        kind = "waterPipesValve", name = "IGUI_WaterPipesValveName", draw = 0.005,
+        kind = "waterPipesValve", name = "IGUI_WaterPipesValveName", draw = 0.01,
         classify = function(obj) return WaterPipes.Valve.isValve(obj) end,
         onCommand = function(x, y, z, order) return Compat.orderValve(x, y, z, order) end,
     },
     {
         as = { "registerSensor", "registerLoad" },
-        kind = "waterPipesMoistureSensor", name = "IGUI_WaterPipesSensorTitle", draw = 0.005,
-        voltage = Compat.SENSOR_BATTERY_VOLTS,
+        kind = "waterPipesMoistureSensor", name = "IGUI_WaterPipesSensorTitle", draw = 0.002,
+        power = Compat.SENSOR_BATTERY_POWER,
         classify = function(obj) return WaterPipes.Signals.isSensor(obj) end,
         isActive = function(obj)
             local Signals = WaterPipes.Signals
