@@ -1,0 +1,14 @@
+{
+    "EC_WaterPipes_WaterPipe": "水管",
+    "EC_WaterPipes_WaterPipeRiser": "立管",
+    "EC_WaterPipes_WaterPipeHidden": "暗管",
+    "EC_WaterPipes_WaterPipeRiserHidden": "暗装立管",
+    "EC_WaterPipes_WaterPurifierElectric": "净水器（电动）",
+    "EC_WaterPipes_WaterPump": "水泵",
+    "EC_WaterPipes_WaterPipeDrip": "滴灌头",
+    "EC_WaterPipes_WaterPipeSprinkler": "喷洒器",
+    "EC_WaterPipes_WaterPressureGauge": "压力表",
+    "EC_WaterPipes_WaterPipeRouter": "流体路由器",
+    "EC_WaterPipes_WaterPipeValve": "截止阀",
+    "EC_WaterPipes_WaterPipeHumiditySensor": "土壤湿度传感器"
+}

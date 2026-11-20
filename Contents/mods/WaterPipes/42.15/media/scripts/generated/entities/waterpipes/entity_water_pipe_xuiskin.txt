@@ -1,0 +1,77 @@
+module Base
+{
+    xuiSkin default
+    {
+        entity ES_WaterPipes_WaterPipe
+        {
+            DisplayName = EC_WaterPipes_WaterPipe,
+            Icon = waterpipes_01_26,
+        }
+
+        entity ES_WaterPipes_WaterPipeRiser
+        {
+            DisplayName = EC_WaterPipes_WaterPipeRiser,
+            Icon = waterpipes_01_24,
+        }
+
+        entity ES_WaterPipes_WaterPipeHidden
+        {
+            DisplayName = EC_WaterPipes_WaterPipeHidden,
+            Icon = waterpipes_01_44,
+        }
+
+        entity ES_WaterPipes_WaterPipeRiserHidden
+        {
+            DisplayName = EC_WaterPipes_WaterPipeRiserHidden,
+            Icon = waterpipes_01_45,
+        }
+
+        entity ES_WaterPipes_WaterPurifierElectric
+        {
+            DisplayName = EC_WaterPipes_WaterPurifierElectric,
+            Icon = waterpipes_01_36,
+        }
+
+        entity ES_WaterPipes_WaterPump
+        {
+            DisplayName = EC_WaterPipes_WaterPump,
+            Icon = waterpipes_01_29,
+        }
+
+        entity ES_WaterPipes_WaterPipeDrip
+        {
+            DisplayName = EC_WaterPipes_WaterPipeDrip,
+            Icon = waterpipes_01_41,
+        }
+
+        entity ES_WaterPipes_WaterPipeSprinkler
+        {
+            DisplayName = EC_WaterPipes_WaterPipeSprinkler,
+            Icon = waterpipes_01_43,
+        }
+
+        entity ES_WaterPipes_WaterPressureGauge
+        {
+            DisplayName = EC_WaterPipes_WaterPressureGauge,
+            Icon = waterpipes_01_30,
+        }
+
+        entity ES_WaterPipes_WaterPipeRouter
+        {
+            DisplayName = EC_WaterPipes_WaterPipeRouter,
+            Icon = waterpipes_01_32,
+        }
+
+        entity ES_WaterPipes_WaterPipeValve
+        {
+            DisplayName = EC_WaterPipes_WaterPipeValve,
+            Icon = waterpipes_01_47,
+        }
+
+        entity ES_WaterPipes_WaterPipeHumiditySensor
+        {
+            DisplayName = EC_WaterPipes_WaterPipeHumiditySensor,
+            Icon = waterpipes_01_92,
+        }
+    }
+}

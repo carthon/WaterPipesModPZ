@@ -1,0 +1,14 @@
+{
+    "EC_WaterPipes_WaterPipe": "Fluid Pipe",
+    "EC_WaterPipes_WaterPipeRiser": "Vertical Fluid Pipe",
+    "EC_WaterPipes_WaterPipeHidden": "Concealed Fluid Pipe",
+    "EC_WaterPipes_WaterPipeRiserHidden": "Concealed Vertical Fluid Pipe",
+    "EC_WaterPipes_WaterPurifierElectric": "Water Purifier (Electric)",
+    "EC_WaterPipes_WaterPump": "Water Pump",
+    "EC_WaterPipes_WaterPipeDrip": "Drip Emitter",
+    "EC_WaterPipes_WaterPipeSprinkler": "Sprinkler",
+    "EC_WaterPipes_WaterPressureGauge": "Pressure Gauge",
+    "EC_WaterPipes_WaterPipeRouter": "Fluid Router",
+    "EC_WaterPipes_WaterPipeValve": "Shut-off Valve",
+    "EC_WaterPipes_WaterPipeHumiditySensor": "Soil Moisture Sensor"
+}

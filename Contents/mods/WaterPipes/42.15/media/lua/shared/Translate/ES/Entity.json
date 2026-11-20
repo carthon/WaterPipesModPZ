@@ -1,0 +1,14 @@
+{
+    "EC_WaterPipes_WaterPipe": "Tubería de fluidos",
+    "EC_WaterPipes_WaterPipeRiser": "Tubería vertical de fluidos",
+    "EC_WaterPipes_WaterPipeHidden": "Tubería de fluidos oculta",
+    "EC_WaterPipes_WaterPipeRiserHidden": "Tubería vertical de fluidos oculta",
+    "EC_WaterPipes_WaterPurifierElectric": "Purificador de agua (eléctrico)",
+    "EC_WaterPipes_WaterPump": "Bomba de agua",
+    "EC_WaterPipes_WaterPipeDrip": "Gotero",
+    "EC_WaterPipes_WaterPipeSprinkler": "Aspersor",
+    "EC_WaterPipes_WaterPressureGauge": "Manómetro",
+    "EC_WaterPipes_WaterPipeRouter": "Enrutador de fluidos",
+    "EC_WaterPipes_WaterPipeValve": "Válvula de corte",
+    "EC_WaterPipes_WaterPipeHumiditySensor": "Sensor de humedad"
+}
